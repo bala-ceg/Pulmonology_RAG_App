@@ -3,17 +3,27 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAI
 from langchain.schema import Document
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import CharacterTextSplitter,RecursiveCharacterTextSplitter,TextSplitter
+from langchain_community.vectorstores import Chroma
 from dotenv import load_dotenv
 import os
 import json
+from typing import List
 
 # Load environment variables
 load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+class ParagraphTextSplitter(TextSplitter):
+    """Custom text splitter that splits documents by paragraphs."""
+
+    def split_text(self, text: str) -> List[str]:
+        """Split text into paragraphs using double newline as delimiter."""
+        paragraphs = text.split("\n\n")
+        return [p.strip() for p in paragraphs if p.strip()]
+
 
 # Initialize LLM
 llm = OpenAI(
@@ -22,47 +32,67 @@ llm = OpenAI(
     model_name=os.getenv('llm_model_name')
 )
 
-# Helper function to load metadata
-def load_metadata(file_path):
-    with open(file_path, "r") as file:
-        return json.load(file)
 
-# Helper function to process PDF metadata
-def process_pdf_metadata(pdf_metadata):
-    documents = []
+# Step 1: Load and Process Metadata
+def load_metadata(file_path: str) -> List[dict]:
+    """Load JSON metadata from the given file path."""
+    try:
+        with open(file_path, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print(f"Error: File not found at {file_path}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON: {e}")
+        return []
+
+
+def process_pdf_metadata(pdf_metadata: List[dict], text_splitter: TextSplitter) -> List[Document]:
+    """Chunk the text content from PDF metadata using the provided text splitter."""
+    chunked_documents = []
     for pdf in pdf_metadata:
         file_name = pdf.get("file_name", "Unknown File")
         for page in pdf.get("text", []):
             if isinstance(page, dict) and "text" in page:
                 page_content = page["text"]
-                documents.append(
-                    Document(
-                        page_content=page_content,
-                        metadata={"source": file_name, "type": "pdf", "page": page.get("page", "Unknown Page")}
+                chunks = text_splitter.split_text(page_content)
+                for chunk in chunks:
+                    chunked_documents.append(
+                        Document(
+                            page_content=chunk,
+                            metadata={"source": file_name, "type": "pdf", "page": page.get("page", "Unknown Page")}
+                        )
                     )
-                )
-    return documents
+    return chunked_documents
 
-# Helper function to process URL metadata
-def process_url_metadata(url_metadata):
+
+def process_url_metadata(url_metadata: List[dict]) -> List[Document]:
+    """Process URL metadata with paragraph-based splitting and chunking."""
+    paragraph_splitter = ParagraphTextSplitter()
+    character_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1024, chunk_overlap=128)
+
     documents = []
     for url_data in url_metadata:
         url = url_data.get("url", "Unknown URL")
         text_content = url_data.get("text", "")
-        documents.append(
-            Document(
-                page_content=text_content,
-                metadata={"source": url, "type": "url"}
-            )
-        )
+
+        # Split text into paragraphs
+        paragraphs = paragraph_splitter.split_text(text_content)
+
+        # Further split paragraphs into smaller chunks
+        for paragraph in paragraphs:
+            chunks = character_splitter.split_text(paragraph)
+            for chunk in chunks:
+                documents.append(
+                    Document(page_content=chunk, metadata={"source": url, "type": "url"})
+                )
     return documents
 
 # Load and process metadata
 pdf_metadata = load_metadata("pdf_metadata.json")
 url_metadata = load_metadata("url_metadata.json")
-pdf_documents = process_pdf_metadata(pdf_metadata)
-url_documents = process_url_metadata(url_metadata)
-all_documents = pdf_documents + url_documents
+
 
 # Create embeddings
 embeddings = OpenAIEmbeddings(
@@ -72,9 +102,12 @@ embeddings = OpenAIEmbeddings(
 )
 
 # Split documents and create FAISS vector store
-text_splitter = CharacterTextSplitter(chunk_size=1024, chunk_overlap=0)
-split_docs = text_splitter.split_documents(all_documents)
-vector_store = FAISS.from_documents(split_docs, embeddings)
+text_splitter = CharacterTextSplitter(chunk_size=1024, chunk_overlap=128)
+pdf_documents = process_pdf_metadata(pdf_metadata, text_splitter)
+url_documents = process_url_metadata(url_metadata)
+all_documents = pdf_documents + url_documents
+vector_store = Chroma.from_documents(all_documents, embedding=embeddings)
+
 
 # Create retriever and QA chain
 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
