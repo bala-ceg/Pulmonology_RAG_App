@@ -43,7 +43,7 @@ This repository contains a Flask-based web application that integrates a LangCha
 
 1. Start the Flask application:
    ```bash
-   python app.py
+   python main.py
    ```
 
 2. Open your browser and navigate to:

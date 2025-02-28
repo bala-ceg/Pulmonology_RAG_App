@@ -3,12 +3,18 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAI
 from langchain.schema import Document
-from langchain.text_splitter import CharacterTextSplitter,RecursiveCharacterTextSplitter,TextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
 from dotenv import load_dotenv
 import os
 import json
 from typing import List
+from datetime import datetime
+import whisper
+import tempfile
+
+
+model = whisper.load_model("medium")
 
 # Load environment variables
 load_dotenv()
@@ -16,14 +22,7 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-class ParagraphTextSplitter(TextSplitter):
-    """Custom text splitter that splits documents by paragraphs."""
-
-    def split_text(self, text: str) -> List[str]:
-        """Split text into paragraphs using double newline as delimiter."""
-        paragraphs = text.split("\n\n")
-        return [p.strip() for p in paragraphs if p.strip()]
-
+persist_directory = "./vector_db"
 
 # Initialize LLM
 llm = OpenAI(
@@ -46,48 +45,61 @@ def load_metadata(file_path: str) -> List[dict]:
         print(f"Error decoding JSON: {e}")
         return []
 
-
-def process_pdf_metadata(pdf_metadata: List[dict], text_splitter: TextSplitter) -> List[Document]:
-    """Chunk the text content from PDF metadata using the provided text splitter."""
+def process_pdf_metadata(pdf_metadata: list, text_splitter) -> list:
+    """Chunk the text content from PDF metadata."""
     chunked_documents = []
-    for pdf in pdf_metadata:
-        file_name = pdf.get("file_name", "Unknown File")
-        for page in pdf.get("text", []):
-            if isinstance(page, dict) and "text" in page:
-                page_content = page["text"]
-                chunks = text_splitter.split_text(page_content)
-                for chunk in chunks:
-                    chunked_documents.append(
-                        Document(
-                            page_content=chunk,
-                            metadata={"source": file_name, "type": "pdf", "page": page.get("page", "Unknown Page")}
-                        )
+
+    for doc in pdf_metadata:
+        file_name = doc.get("file_name", "Unknown File")
+        pages = doc.get("text", [])
+        
+        for page in pages:
+            page_number = page.get("page", "Unknown Page")
+            page_text = page.get("text", "").strip()
+
+            # Skip empty pages
+            if not page_text:
+                continue
+
+            # Split text and create chunks
+            chunks = text_splitter.split_text(page_text)
+            for chunk in chunks:
+                chunked_documents.append(
+                    Document(
+                        page_content=chunk,
+                        metadata={"source": file_name, "type": "pdf", "page": page_number}
                     )
+                )
+
     return chunked_documents
 
+import json
 
-def process_url_metadata(url_metadata: List[dict]) -> List[Document]:
-    """Process URL metadata with paragraph-based splitting and chunking."""
-    paragraph_splitter = ParagraphTextSplitter()
-    character_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1024, chunk_overlap=128)
+def process_url_metadata(url_metadata: list, text_splitter) -> list:
+    """Chunk the text content from URL metadata."""
+    chunked_documents = []
 
-    documents = []
-    for url_data in url_metadata:
-        url = url_data.get("url", "Unknown URL")
-        text_content = url_data.get("text", "")
+    for entry in url_metadata:
+        url = entry.get("url", "Unknown URL")
+        text_content = entry.get("text", "").strip()
+        date_info = entry.get("date", "Unknown Date")
 
-        # Split text into paragraphs
-        paragraphs = paragraph_splitter.split_text(text_content)
+        # Skip entries with empty text
+        if not text_content:
+            continue
 
-        # Further split paragraphs into smaller chunks
-        for paragraph in paragraphs:
-            chunks = character_splitter.split_text(paragraph)
-            for chunk in chunks:
-                documents.append(
-                    Document(page_content=chunk, metadata={"source": url, "type": "url"})
+        # Split the content and create document chunks
+        chunks = text_splitter.split_text(text_content)
+        for chunk in chunks:
+            chunked_documents.append(
+                Document(
+                    page_content=chunk,
+                    metadata={"source": url, "type": "url", "date": date_info}
                 )
-    return documents
+            )
+
+    return chunked_documents
+
 
 # Load and process metadata
 pdf_metadata = load_metadata("pdf_metadata.json")
@@ -102,11 +114,24 @@ embeddings = OpenAIEmbeddings(
 )
 
 # Split documents and create FAISS vector store
-text_splitter = CharacterTextSplitter(chunk_size=1024, chunk_overlap=128)
+text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=4096, 
+        chunk_overlap=128,
+        separators=["\n\n", "\n", ".", " "]
+    )
+
 pdf_documents = process_pdf_metadata(pdf_metadata, text_splitter)
-url_documents = process_url_metadata(url_metadata)
+url_documents = process_url_metadata(url_metadata,text_splitter)
 all_documents = pdf_documents + url_documents
-vector_store = Chroma.from_documents(all_documents, embedding=embeddings)
+
+
+if os.path.exists(persist_directory) and os.listdir(persist_directory):
+    print(f"Persist directory '{persist_directory}' found. Skipping embedding.")
+    vector_store = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+else:
+    print("Persist directory not found. Creating embeddings and initializing Chroma...")
+    vector_store = Chroma.from_documents(all_documents, embedding=embeddings, persist_directory=persist_directory)
+    
 
 
 # Create retriever and QA chain
@@ -115,16 +140,46 @@ qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 
 # Helper function to enhance response with citations
 def enhance_with_citations(results):
-    pdf_citations = []
-    url_citations = []
+    pdf_citations = set()  # Track unique PDF citations
+    url_citations = set()  # Track unique URL citations
+
     for doc in results:
         metadata = doc.metadata
         if metadata.get("type") == "pdf":
-            pdf_citations.append(f"PDF: {metadata.get('source', 'Unknown PDF')} (Page {metadata.get('page', 'Unknown')})")
+            pdf_source = metadata.get('source', 'Unknown PDF')
+            page_info = metadata.get('page', 'Unknown')
+            pdf_citations.add(f"PDF: {pdf_source} (Page {page_info})")
         elif metadata.get("type") == "url":
-            url_citations.append(f"URL: {metadata.get('source', 'Unknown URL')}")
-    citations = "\n".join(pdf_citations + url_citations)
+            url_source = metadata.get('source', 'Unknown URL')
+            url_citations.add(f"URL: {url_source}")
+
+    # Join unique citations
+    citations = "\n".join(pdf_citations.union(url_citations))
     return citations
+
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe():
+    audio_file = request.files['audio']
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+        audio_file.save(temp.name)
+        result = model.transcribe(temp.name)
+    return jsonify({"text": result['text']})
+
+@app.route("/plain_english", methods=["POST"])
+def plain_english():
+    user_text = request.json.get("text", "")
+    if not user_text:
+        return jsonify({"refined_text": "", "message": "No input provided."})
+
+    try:
+        prompt = f"Rewrite the following question in plain English for better clarity:\n\n{user_text}"
+        refined_text = llm.invoke(prompt)  
+
+        return jsonify({"refined_text": refined_text})
+    except Exception as e:
+        return jsonify({"refined_text": "", "message": f"Error: {str(e)}"})
+
 
 @app.route("/")
 def index():
@@ -141,7 +196,7 @@ def handle_query():
         response = qa_chain.invoke(user_input)
         search_results = retriever.invoke(user_input)
         citations = enhance_with_citations(search_results)
-        message = f"{response['result']}\n\nCitations:\n{citations}"
+        message = f"{response['result']}\n\nCitations:\n{citations}"     
         return jsonify({"response": True, "message": message})
     except Exception as e:
         return jsonify({"response": False, "message": f"Error: {str(e)}"})

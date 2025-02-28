@@ -1,6 +1,7 @@
 langchain
 langchain_openai
-langchain-pinecone
 langchain_community
 flask
 python-dotenv
+langchain-chroma
+openai-whisper
