@@ -220,6 +220,20 @@
                 <li onclick="alert('New Chat Coming Soon')">New Chat</li>
                 <li onclick="alert('History Coming Soon')">Chat History</li>
                 <li onclick="alert('Settings Coming Soon')">Settings</li>
+                <li>
+                    <input type="file" id="pdf-upload" multiple>
+                    <br>
+                    <br>
+                    <button onclick="uploadFiles('pdf')">Add PDF</button>
+                </li>
+                <li>
+                    <input type="file" id="url-upload" multiple>
+                    <br>
+                    <br>
+                    <button onclick="uploadFiles('url')">Add URL</button>
+                </li>
+                <br>
+                <li><button onclick="createVectorDB()">Generate DB</button></li>
             </ul>
         </div>
 
@@ -594,9 +608,38 @@
             document.getElementById('stop-btn').disabled = true;
         }
 
+        async function uploadFiles(type) {
+        const input = document.getElementById(type + '-upload');
+        const files = input.files;
+
+        if (!files.length) {
+            alert('Please select files to upload.');
+            return;
+        }
+        if (type === 'pdf' && files.length > 10) {
+            alert('Cannot upload more than 10 PDF files');
+            return;
+        }
+
+        let formData = new FormData();
+        for (let file of files) formData.append('files', file);
+
+        let response = await fetch('/upload_' + type, { method: 'POST', body: formData });
+        let data = await response.json();
+        alert(data.message || data.error);
+    }
 
 
+        async function createVectorDB() {
+            let response = await fetch('/create_vector_db', { method: 'POST' });
+            let data = await response.json();
+            alert(data.message || data.error);
+        }
 
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('collapsed');
+        }
     </script>
 </body>
 </html>

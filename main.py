@@ -1,17 +1,33 @@
 from flask import Flask, request, jsonify, render_template
 from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAI
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
 from dotenv import load_dotenv
 import os
 import json
-from typing import List
 from datetime import datetime
 import whisper
 import tempfile
+import fitz  # PyMuPDF
+import pdfplumber
+import re
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from typing import List
+
+
+
+BASE_STORAGE_PATH = './KB/'
+VECTOR_DB_PATH = './vector_dbs/'
+os.makedirs(BASE_STORAGE_PATH, exist_ok=True)
+os.makedirs(VECTOR_DB_PATH, exist_ok=True)
+
 
 
 model = whisper.load_model("medium")
@@ -30,6 +46,10 @@ llm = OpenAI(
     base_url=os.getenv('base_url'),
     model_name=os.getenv('llm_model_name')
 )
+
+
+def get_timestamp():
+    return datetime.now().strftime('%m%d%Y%H%M')
 
 
 # Step 1: Load and Process Metadata
@@ -200,6 +220,149 @@ def handle_query():
         return jsonify({"response": True, "message": message})
     except Exception as e:
         return jsonify({"response": False, "message": f"Error: {str(e)}"})
+    
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    user = request.form.get('user', 'guest')
+    timestamp = get_timestamp()
+    folder_path = os.path.join(BASE_STORAGE_PATH, "PDF", f"{user}_{timestamp}")
+    os.makedirs(folder_path, exist_ok=True)
+    
+    files = request.files.getlist('files')
+    print(f"Received {len(files)} PDF files for user {user} at {folder_path}")
+
+    if not files or len(files) > 10:
+        print("Error: No files uploaded or more than 10 PDFs.")
+        return jsonify({"error": "You can upload up to 10 PDFs."}), 400
+    
+    for file in files:
+        file_path = os.path.join(folder_path, file.filename)
+        file.save(file_path)
+        print(f"Saved PDF: {file_path}")
+    
+    return jsonify({"message": "PDFs uploaded successfully", "folder": folder_path})
+
+
+@app.route('/upload_url', methods=['POST'])
+def upload_url():
+    user = request.form.get('user', 'guest')
+    timestamp = get_timestamp()
+    folder_path = os.path.join(BASE_STORAGE_PATH, "URL", f"{user}_{timestamp}")
+    os.makedirs(folder_path, exist_ok=True)
+    
+    file = request.files.get('file')
+    print(f"Received URL file for user {user} at {folder_path}")
+
+    if not file:
+        print("Error: No URL file uploaded.")
+        return jsonify({"error": "No file uploaded."}), 400
+    
+    file_path = os.path.join(folder_path, file.filename)
+    file.save(file_path)
+    print(f"Saved URL file: {file_path}")
+    
+    return jsonify({"message": "URLs uploaded successfully", "folder": folder_path})
+
+
+def clean_extracted_text(text: str) -> str:
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[^a-zA-Z0-9.,!?\'":;\-\s]', '', text)
+    text = text.strip()
+    text = re.sub(r'\.{2,}', '.', text)
+    text = text.encode('ascii', 'ignore').decode('utf-8')
+    return text
+
+def extract_text_from_pdf(pdf_file):
+    text_content = []
+    with fitz.open(pdf_file) as pdf:
+        for page_num in range(len(pdf)):
+            page = pdf[page_num]
+            clean_text = clean_extracted_text(page.get_text())
+            text_content.append(clean_text)
+    return text_content
+
+def extract_text_from_url(url):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("start-maximized")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+    
+    service = Service(executable_path="/usr/local/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    try:
+        driver.get(url)
+        html_content = driver.page_source
+        soup = BeautifulSoup(html_content, 'html.parser')
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.decompose()
+        text = soup.get_text(separator=" ")
+        text = re.sub(r"[^\x00-\x7F]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    finally:
+        driver.quit()
+
+@app.route('/create_vector_db', methods=['POST'])
+def create_vector_db():
+    global current_db
+    user = request.form.get('user', 'guest')
+    timestamp = get_timestamp()
+    db_name = f"{user}_{timestamp}"
+    persist_dir = os.path.join(VECTOR_DB_PATH, db_name)
+    os.makedirs(persist_dir, exist_ok=True)
+    
+    pdf_folder = os.path.join(BASE_STORAGE_PATH, "PDF", f"{user}_{timestamp}")
+    url_folder = os.path.join(BASE_STORAGE_PATH, "URL", f"{user}_{timestamp}")
+    pdf_files = [os.path.join(pdf_folder, f) for f in os.listdir(pdf_folder)] if os.path.exists(pdf_folder) else []
+    url_files = [os.path.join(url_folder, f) for f in os.listdir(url_folder)] if os.path.exists(url_folder) else []
+    
+    documents = []
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=4096, chunk_overlap=128)
+    
+    for pdf_file in pdf_files:
+        text_content = extract_text_from_pdf(pdf_file)
+        if not text_content:
+            print(f"⚠️ Warning: No text extracted from {pdf_file}")
+        for text in text_content:
+            chunks = text_splitter.split_text(text)
+            for chunk in chunks:
+                documents.append(Document(page_content=chunk, metadata={"source": pdf_file}))
+    
+    for url_file in url_files:
+        with open(url_file, 'r') as file:
+            urls = file.readlines()
+            for url in urls:
+                text = extract_text_from_url(url.strip())
+                if not text:
+                    print(f"⚠️ Warning: No text extracted from {url}")
+                documents.append(Document(page_content=text, metadata={"source": "URL"}))
+    
+    if not documents:
+        print("No valid text chunks found. Cannot create vector DB.")
+        return jsonify({"error": "No valid documents found to create the database"}), 400
+    
+    vector_store = Chroma.from_documents(documents, embedding=embeddings, persist_directory=persist_dir)
+    current_db = persist_dir  
+    
+    return jsonify({"message": "New Vector DB created", "db": db_name})
+
+
+@app.route('/set_active_db', methods=['POST'])
+def set_active_db():
+    global current_db
+    db_name = request.json.get('db_name')
+    new_db_path = os.path.join(VECTOR_DB_PATH, db_name)
+    if os.path.exists(new_db_path):
+        current_db = new_db_path
+        return jsonify({"message": "Active DB set successfully"})
+    return jsonify({"error": "DB not found"}), 400
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

@@ -1,123 +1,87 @@
-# Pulmonology Q&A Bot
+# Pulmonology RAG App
 
-This repository contains a Flask-based web application that integrates a LangChain-powered Q&A system for pulmonology-related queries. The application leverages OpenAI's LLM and FAISS for information retrieval, providing expert-level responses to user questions.
+## Overview
+Pulmonology RAG App is a Retrieval-Augmented Generation (RAG) chatbot designed to enhance patient care services by providing accurate and reliable responses based on medical documents and online resources. The application leverages OpenAI's language models, a Chroma vector store, and a Flask web interface for interaction.
 
 ## Features
 
-- **Pulmonology Expertise**: Offers answers to questions specifically in the domain of pulmonology.
-- **Interactive Web Interface**: Users can interact with the bot using a visually appealing HTML front-end built with Flowbite CSS.
-- **Efficient Information Retrieval**: Uses FAISS vector store for fast and accurate document retrieval.
-- **Dynamic and Scalable**: Supports chunk-based text processing and citation-based enhanced responses.
+### 🔹 Web-based Chat Interface
+- User-friendly chat UI built with HTML, CSS, and JavaScript.
+- Sidebar with options for New Chat, Chat History, and Settings.
+- Editable user messages with options to refine inputs.
+
+### 🔹 Retrieval-Augmented Generation (RAG) System
+- Uses OpenAI's LLM for natural language understanding.
+- Retrieves relevant information from indexed PDF and web data.
+- Enhances AI-generated responses with source citations.
+
+### 🔹 Voice-to-Text Support
+- Integrates Whisper AI for audio transcription.
+- Allows users to input queries via voice recording.
+- Converts transcribed audio into text for further processing.
+
+### 🔹 Document and URL Processing
+- Extracts text content from PDFs and web pages.
+- Splits content into manageable chunks for indexing.
+- Stores indexed data in a Chroma vector database.
+
+### 🔹 Query Handling
+- Processes user input and retrieves contextually relevant responses.
+- Provides citations from source documents to ensure accuracy.
+- Limits conversation history to optimize response quality.
+
+### 🔹 Chat Session Management
+- Allows users to save and download chat history in JSON format.
+- Enforces a conversation limit, prompting users to save sessions before continuing.
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/pulmonology-qna-bot.git
-   cd pulmonology-qna-bot
-   ```
+### Prerequisites
+- Python 3.8+
+- Flask
+- OpenAI API Key
+- ChromaDB
+- Whisper AI
 
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+### Steps
+1. Clone this repository:
+   ```sh
+   git clone https://github.com/your-repo/pulmonology-rag-app.git
+   cd pulmonology-rag-app
    ```
-
-3. Install dependencies:
-   ```bash
+2. Install dependencies:
+   ```sh
    pip install -r requirements.txt
    ```
-
-4. Set up environment variables in a `.env` file:
-   ```env
-   openai_api_key=YOUR_OPENAI_API_KEY
-   base_url=YOUR_OPENAI_BASE_URL
-   llm_model_name=YOUR_LLM_MODEL_NAME
-   embedding_model_name=YOUR_EMBEDDING_MODEL_NAME
+3. Set up environment variables:
+   ```sh
+   export OPENAI_API_KEY='your_openai_api_key'
+   export BASE_URL='your_openai_base_url'
+   export LLM_MODEL_NAME='your_model_name'
+   export EMBEDDING_MODEL_NAME='your_embedding_model'
    ```
-
-5. Prepare your metadata files:
-   - Place your `pdf_metadata.json` and `url_metadata.json` files in the project root.
-
-## Usage
-
-1. Start the Flask application:
-   ```bash
-   python main.py
+4. Run the application:
+   ```sh
+   python Pulmonology_RAG_App/main.py
    ```
-
-2. Open your browser and navigate to:
+5. Access the web interface at:
    ```
    http://localhost:5000
    ```
 
-3. Type your pulmonology-related questions into the chat interface and receive expert responses.
+## Usage
+- Type a query or use voice input to interact with the chatbot.
+- Retrieve AI-generated responses with citations from medical documents.
+- Edit and refine messages before sending.
+- Save chat history for future reference.
 
-## Project Structure
-
-```plaintext
-pulmonology-qna-bot/
-├── static/         # Static assets (CSS, JS)
-├── templates/      # HTML templates
-├── app.py          # Main Flask application
-├── requirements.txt # Python dependencies
-├── pdf_metadata.json # PDF metadata input
-├── url_metadata.json # URL metadata input
-├── .env            # Environment variables
-└── README.md       # Project documentation
-```
-
-## Technical Overview
-
-### Front-End
-- Built using HTML, CSS, and JavaScript.
-- Flowbite CSS library for responsive and modern UI components.
-
-### Back-End
-- Flask for serving the web application.
-- LangChain framework for constructing the Q&A pipeline.
-- FAISS for vector-based document retrieval.
-
-### Data Processing
-- Supports metadata from both PDFs and URLs.
-- Uses LangChain's `CharacterTextSplitter` for text chunking.
-
-## Enhancements with Citations
-The application enriches responses with citations from the underlying documents, helping users verify the source of information.
-
-## Dependencies
-
-- Python 3.10+
-- Flask
-- LangChain
-- FAISS
-- OpenAI API
-
-Refer to `requirements.txt` for the complete list.
-
-## Contributing
-
-1. Fork the repository.
-2. Create a feature branch:
-   ```bash
-   git checkout -b feature-name
-   ```
-3. Commit your changes:
-   ```bash
-   git commit -m "Description of changes"
-   ```
-4. Push to the branch:
-   ```bash
-   git push origin feature-name
-   ```
-5. Submit a pull request.
+## Future Enhancements
+- Integrating more document types (e.g., medical journals, databases).
+- Improving UI with advanced chat features.
+- Deploying as a cloud-based service.
 
 ## License
-
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-## Acknowledgments
-
-- OpenAI for their robust APIs.
-- Flowbite for the excellent UI components.
-- LangChain for enabling advanced document processing.
+## Contributing
+Feel free to submit issues and pull requests to improve the app!
