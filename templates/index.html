@@ -608,28 +608,45 @@
             document.getElementById('stop-btn').disabled = true;
         }
 
-        async function uploadFiles(type) {
-        const input = document.getElementById(type + '-upload');
-        const files = input.files;
+        async function uploadFiles(type) {     
+            const inputElement = type === 'pdf' ? document.getElementById('pdf-upload') : document.getElementById('url-upload');
+            const files = inputElement.files;
 
-        if (!files.length) {
-            alert('Please select files to upload.');
-            return;
+            if (!files.length) {
+                alert('No file uploaded');
+                return;
+            }
+
+            let formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                if (files[i].size === 0) {  // Ensure file is not empty
+                    alert(`${files[i].name} is empty. Please upload a valid file.`);
+                    return;
+                }
+                formData.append('file', files[i]);
+            }
+            console.log(formData)
+            formData.append('user', 'guest');
+
+            const endpoint = type === 'pdf' ? '/upload_pdf' : '/upload_url';
+            
+            fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || "Upload successful");
+                console.log("Response:", data);
+            })
+            .catch(error => {
+                alert("Upload failed");
+                console.error("Error:", error);
+            });
         }
-        if (type === 'pdf' && files.length > 10) {
-            alert('Cannot upload more than 10 PDF files');
-            return;
-        }
-
-        let formData = new FormData();
-        for (let file of files) formData.append('files', file);
-
-        let response = await fetch('/upload_' + type, { method: 'POST', body: formData });
-        let data = await response.json();
-        alert(data.message || data.error);
-    }
 
 
+        
         async function createVectorDB() {
             let response = await fetch('/create_vector_db', { method: 'POST' });
             let data = await response.json();
@@ -641,5 +658,5 @@
             sidebar.classList.toggle('collapsed');
         }
     </script>
-</body>
+</body
 </html>
