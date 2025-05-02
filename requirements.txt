@@ -1,7 +1,29 @@
+# Flask web server
+flask
+
+# LangChain core
 langchain
 langchain_openai
 langchain_community
-flask
-python-dotenv
 langchain-chroma
+
+# Environment variable support
+python-dotenv
+
+# Whisper model
 openai-whisper
+
+# PDF parsing
+PyMuPDF==1.23.4
+pdfplumber
+
+# Web scraping
+beautifulsoup4
+requests
+selenium
+
+# ChromeDriver manager (optional, for easier handling in Docker)
+webdriver-manager
+
+# Utilities
+glob2

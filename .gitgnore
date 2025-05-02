@@ -1,3 +1,4 @@
 vector_db/
 vector_dbs/
 KB/
+.env

@@ -210,9 +210,35 @@
             width: 50px;
             height: 50px;
         }
+        .toast {
+            position: fixed;
+            bottom: 50%;
+            left: 50%;
+            transform: translate(-50%, 50%);
+            background-color: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 9999;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .group-box {
+            border: 1px solid #131313;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #000000;
+        }
+
     </style>
 </head>
-<body>
+<body> 
+    <div id="toast" class="toast"></div>
+
     <div class="container">
         <div class="sidebar" id="sidebar">
             <button class="toggle-btn" onclick="toggleSidebar()">&#9776; Menu</button>
@@ -221,6 +247,11 @@
                 <li onclick="alert('History Coming Soon')">Chat History</li>
                 <li onclick="alert('Settings Coming Soon')">Settings</li>
                 <li>
+                    <!-- <div class="group-box">
+                        <input type="file" id="pdf-upload" multiple>
+                        <br><br>
+                        <button onclick="uploadFiles('pdf')">Add PDF</button>
+                    </div>                     -->
                     <input type="file" id="pdf-upload" multiple>
                     <br>
                     <br>
@@ -231,9 +262,15 @@
                     <br>
                     <br>
                     <button onclick="uploadFiles('url')">Add URL</button>
+                    <!-- <div class="group-box">
+                        <input type="file" id="url-upload" multiple>
+                        <br><br>
+                        <button onclick="uploadFiles('url')">Add URL</button>
+                    </div> -->
+                    
                 </li>
                 <br>
-                <li><button onclick="createVectorDB()">Generate DB</button></li>
+                <li><button onclick="createVectorDB()">Update KB</button></li>
             </ul>
         </div>
 
@@ -257,6 +294,19 @@
     </div>
 
     <script>
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 2000);
+        }
+
+        function hideToast() {
+            const toast = document.getElementById("toast");
+            toast.classList.remove("show");
+        }
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -603,6 +653,7 @@
 
 
         function stopRecording() {
+            showToast("🎙️ Generating text... please wait.");
             mediaRecorder.stop();
             document.getElementById('voice-btn').disabled = false;
             document.getElementById('stop-btn').disabled = true;
@@ -613,14 +664,16 @@
             const files = inputElement.files;
 
             if (!files.length) {
-                alert('No file uploaded');
+                showToast('No file uploaded');
+                setTimeout(() => hideToast(), 1000);
                 return;
             }
 
             let formData = new FormData();
             for (let i = 0; i < files.length; i++) {
                 if (files[i].size === 0) {  // Ensure file is not empty
-                    alert(`${files[i].name} is empty. Please upload a valid file.`);
+                    showToast(`${files[i].name} is empty. Please upload a valid file.`);
+                    setTimeout(() => hideToast(), 1000);
                     return;
                 }
                 formData.append('file', files[i]);
@@ -636,11 +689,13 @@
             })
             .then(response => response.json())
             .then(data => {
-                alert(data.message || "Upload successful");
+                showToast(data.message || "Upload successful");
+                setTimeout(() => hideToast(), 1000);
                 console.log("Response:", data);
             })
             .catch(error => {
-                alert("Upload failed");
+                showToast("Upload failed");
+                setTimeout(() => hideToast(), 1000);
                 console.error("Error:", error);
             });
         }
@@ -648,15 +703,28 @@
 
         
         async function createVectorDB() {
+            showToast("Knowledge Bank is updating... please wait.");
             let response = await fetch('/create_vector_db', { method: 'POST' });
             let data = await response.json();
-            alert(data.message || data.error);
+            showToast("✅ Knowledge Bank updated.");
+            setTimeout(() => hideToast(), 1000);
+
         }
 
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('collapsed');
         }
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.classList.add("show");
+        }
+        function hideToast() {
+            const toast = document.getElementById("toast");
+            toast.classList.remove("show");
+        }
+
     </script>
 </body
 </html>
