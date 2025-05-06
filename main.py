@@ -25,8 +25,7 @@ from typing import List
 import os
 import glob
 import traceback
-from apify_client import ApifyClient
-client = ApifyClient("apify_api_RWPyKRtyfDXn2M1BL22Z2sAsgdrxeP1PfRiY")
+
 
 BASE_STORAGE_PATH = './KB/'
 VECTOR_DB_PATH = './vector_dbs/'
