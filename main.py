@@ -215,67 +215,67 @@ def extract_text_from_pdf(pdf_file):
             text_content.append(clean_text)
     return text_content
 
-# def extract_text_from_url(url):
-#     chrome_options = Options()
-#     chrome_options.add_argument("--headless")
-#     chrome_options.add_argument("--disable-gpu")
-#     chrome_options.add_argument("--no-sandbox")
-#     chrome_options.add_argument("start-maximized")
-#     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-#     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-    
-#     service = Service(executable_path="/usr/local/bin/chromedriver")
-#     driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-#     try:
-#         driver.get(url)
-#         html_content = driver.page_source
-#         soup = BeautifulSoup(html_content, 'html.parser')
-#         for script_or_style in soup(["script", "style"]):
-#             script_or_style.decompose()
-#         text = soup.get_text(separator=" ")
-#         text = re.sub(r"[^\x00-\x7F]+", " ", text)
-#         text = re.sub(r"\s+", " ", text).strip()
-#         return text
-#     finally:
-#         driver.quit()
-
-
-
 def extract_text_from_url(url):
-    # Define run input with Playwright crawler and filtering
-    run_input = {
-        "startUrls": [{"url": url}],
-        "useSitemaps": False,
-        "respectRobotsTxtFile": True,
-        "crawlerType": "playwright:adaptive",
-        "includeUrlGlobs": [],
-        "excludeUrlGlobs": [],
-        "initialCookies": [],
-        "proxyConfiguration": {"useApifyProxy": True},
-        "keepElementsCssSelector": "",
-        "removeElementsCssSelector": """nav, footer, script, style, noscript, svg, img[src^='data:'],
-        [role=\"alert\"],
-        [role=\"banner\"],
-        [role=\"dialog\"],
-        [role=\"alertdialog\"],
-        [role=\"region\"][aria-label*=\"skip\" i],
-        [aria-modal=\"true\"]""",
-        "clickElementsCssSelector": "[aria-expanded=\"false\"]",
-            }
-
-    # Run the Apify actor
-    run = client.actor("apify/website-content-crawler").call(run_input=run_input)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("start-maximized")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
     
-    # Collect and clean text content
-    full_text = ""
-    for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-        page_text = item.get("text", "")
-        page_text = re.sub(r"[^\x00-\x7F]+", " ", page_text)  # Remove non-ASCII
-        page_text = re.sub(r"\s+", " ", page_text).strip()    # Normalize whitespace
-        full_text += page_text + "\n"
-    print(full_text)
-    return full_text.strip()
+    service = Service(executable_path="/usr/local/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    try:
+        driver.get(url)
+        html_content = driver.page_source
+        soup = BeautifulSoup(html_content, 'html.parser')
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.decompose()
+        text = soup.get_text(separator=" ")
+        text = re.sub(r"[^\x00-\x7F]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+    finally:
+        driver.quit()
+
+
+
+# def extract_text_from_url(url):
+#     # Define run input with Playwright crawler and filtering
+#     run_input = {
+#         "startUrls": [{"url": url}],
+#         "useSitemaps": False,
+#         "respectRobotsTxtFile": True,
+#         "crawlerType": "playwright:adaptive",
+#         "includeUrlGlobs": [],
+#         "excludeUrlGlobs": [],
+#         "initialCookies": [],
+#         "proxyConfiguration": {"useApifyProxy": True},
+#         "keepElementsCssSelector": "",
+#         "removeElementsCssSelector": """nav, footer, script, style, noscript, svg, img[src^='data:'],
+#         [role=\"alert\"],
+#         [role=\"banner\"],
+#         [role=\"dialog\"],
+#         [role=\"alertdialog\"],
+#         [role=\"region\"][aria-label*=\"skip\" i],
+#         [aria-modal=\"true\"]""",
+#         "clickElementsCssSelector": "[aria-expanded=\"false\"]",
+#             }
+
+#     # Run the Apify actor
+#     run = client.actor("apify/website-content-crawler").call(run_input=run_input)
+    
+#     # Collect and clean text content
+#     full_text = ""
+#     for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+#         page_text = item.get("text", "")
+#         page_text = re.sub(r"[^\x00-\x7F]+", " ", page_text)  # Remove non-ASCII
+#         page_text = re.sub(r"\s+", " ", page_text).strip()    # Normalize whitespace
+#         full_text += page_text + "\n"
+#     print(full_text)
+#     return full_text.strip()
 
 
 
@@ -320,6 +320,7 @@ def handle_query():
 
         # Run the query through the QA chain
         response = qa_chain.invoke(user_input)
+        print(response)
         search_results = retriever.invoke(user_input)
         print(search_results)
         citations = enhance_with_citations(search_results)
