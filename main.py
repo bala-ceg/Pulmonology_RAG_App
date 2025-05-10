@@ -25,6 +25,7 @@ from typing import List
 import os
 import glob
 import traceback
+from apify_client import ApifyClient
 
 
 BASE_STORAGE_PATH = './KB/'
@@ -70,6 +71,7 @@ llm = ChatOpenAI(
     model_name=os.getenv("llm_model_name")  # gpt-3.5-turbo
 )
 
+client = ApifyClient(os.getenv("apify_api_key"))  # Initialize Apify client
 
 # Step 1: Load and Process Metadata
 def load_metadata(file_path: str) -> List[dict]:
@@ -215,67 +217,67 @@ def extract_text_from_pdf(pdf_file):
             text_content.append(clean_text)
     return text_content
 
-def extract_text_from_url(url):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("start-maximized")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-    
-    service = Service(executable_path="/usr/local/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-    try:
-        driver.get(url)
-        html_content = driver.page_source
-        soup = BeautifulSoup(html_content, 'html.parser')
-        for script_or_style in soup(["script", "style"]):
-            script_or_style.decompose()
-        text = soup.get_text(separator=" ")
-        text = re.sub(r"[^\x00-\x7F]+", " ", text)
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
-    finally:
-        driver.quit()
-
-
-
 # def extract_text_from_url(url):
-#     # Define run input with Playwright crawler and filtering
-#     run_input = {
-#         "startUrls": [{"url": url}],
-#         "useSitemaps": False,
-#         "respectRobotsTxtFile": True,
-#         "crawlerType": "playwright:adaptive",
-#         "includeUrlGlobs": [],
-#         "excludeUrlGlobs": [],
-#         "initialCookies": [],
-#         "proxyConfiguration": {"useApifyProxy": True},
-#         "keepElementsCssSelector": "",
-#         "removeElementsCssSelector": """nav, footer, script, style, noscript, svg, img[src^='data:'],
-#         [role=\"alert\"],
-#         [role=\"banner\"],
-#         [role=\"dialog\"],
-#         [role=\"alertdialog\"],
-#         [role=\"region\"][aria-label*=\"skip\" i],
-#         [aria-modal=\"true\"]""",
-#         "clickElementsCssSelector": "[aria-expanded=\"false\"]",
-#             }
-
-#     # Run the Apify actor
-#     run = client.actor("apify/website-content-crawler").call(run_input=run_input)
+#     chrome_options = Options()
+#     chrome_options.add_argument("--headless")
+#     chrome_options.add_argument("--disable-gpu")
+#     chrome_options.add_argument("--no-sandbox")
+#     chrome_options.add_argument("start-maximized")
+#     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+#     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
     
-#     # Collect and clean text content
-#     full_text = ""
-#     for item in client.dataset(run["defaultDatasetId"]).iterate_items():
-#         page_text = item.get("text", "")
-#         page_text = re.sub(r"[^\x00-\x7F]+", " ", page_text)  # Remove non-ASCII
-#         page_text = re.sub(r"\s+", " ", page_text).strip()    # Normalize whitespace
-#         full_text += page_text + "\n"
-#     print(full_text)
-#     return full_text.strip()
+#     service = Service(executable_path="/usr/local/bin/chromedriver")
+#     driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+#     try:
+#         driver.get(url)
+#         html_content = driver.page_source
+#         soup = BeautifulSoup(html_content, 'html.parser')
+#         for script_or_style in soup(["script", "style"]):
+#             script_or_style.decompose()
+#         text = soup.get_text(separator=" ")
+#         text = re.sub(r"[^\x00-\x7F]+", " ", text)
+#         text = re.sub(r"\s+", " ", text).strip()
+#         return text
+#     finally:
+#         driver.quit()
+
+
+
+def extract_text_from_url(url):
+    # Define run input with Playwright crawler and filtering
+    run_input = {
+        "startUrls": [{"url": url}],
+        "useSitemaps": False,
+        "respectRobotsTxtFile": True,
+        "crawlerType": "playwright:adaptive",
+        "includeUrlGlobs": [],
+        "excludeUrlGlobs": [],
+        "initialCookies": [],
+        "proxyConfiguration": {"useApifyProxy": True},
+        "keepElementsCssSelector": "",
+        "removeElementsCssSelector": """nav, footer, script, style, noscript, svg, img[src^='data:'],
+        [role=\"alert\"],
+        [role=\"banner\"],
+        [role=\"dialog\"],
+        [role=\"alertdialog\"],
+        [role=\"region\"][aria-label*=\"skip\" i],
+        [aria-modal=\"true\"]""",
+        "clickElementsCssSelector": "[aria-expanded=\"false\"]",
+            }
+
+    # Run the Apify actor
+    run = client.actor("apify/website-content-crawler").call(run_input=run_input)
+    
+    # Collect and clean text content
+    full_text = ""
+    for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+        page_text = item.get("text", "")
+        page_text = re.sub(r"[^\x00-\x7F]+", " ", page_text)  # Remove non-ASCII
+        page_text = re.sub(r"\s+", " ", page_text).strip()    # Normalize whitespace
+        full_text += page_text + "\n"
+    print(full_text)
+    return full_text.strip()
 
 
 
@@ -295,7 +297,11 @@ def plain_english():
 
     try:
         prompt = f"Rewrite the following question in plain English for better clarity:\n\n{user_text}"
-        refined_text = llm.invoke(prompt)  
+        response = llm.invoke(prompt)
+        if hasattr(response, 'content'):
+            refined_text = response.content.strip()
+        else:
+            refined_text = str(response).strip()
 
         return jsonify({"refined_text": refined_text})
     except Exception as e:
