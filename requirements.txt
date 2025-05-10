@@ -27,3 +27,5 @@ webdriver-manager
 
 # Utilities
 glob2
+
+apify-client
