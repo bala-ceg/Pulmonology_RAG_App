@@ -2,27 +2,17 @@ from flask import Flask, request, jsonify, render_template
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
-from langchain_openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 import os
 import json
-from datetime import datetime
-import whisper
 import tempfile
 import fitz  # PyMuPDF
-import pdfplumber
 import re
 import time
-import requests
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from typing import List
-import os
 import glob
 import traceback
 from apify_client import ApifyClient
@@ -117,8 +107,6 @@ def process_pdf_metadata(pdf_metadata: list, text_splitter) -> list:
                 )
 
     return chunked_documents
-
-import json
 
 def process_url_metadata(url_metadata: list, text_splitter) -> list:
     """Chunk the text content from URL metadata."""
