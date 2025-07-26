@@ -26,6 +26,9 @@ import os
 import glob
 import traceback
 from apify_client import ApifyClient
+import whisper, torch
+
+
 
 
 BASE_STORAGE_PATH = './KB/'
@@ -53,7 +56,8 @@ def get_latest_vector_db():
     print(f"Using latest vector DB: {latest_db}")
     return latest_db
 
-model = whisper.load_model("medium")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = whisper.load_model("base").to(device)
 
 # Load environment variables
 load_dotenv()
@@ -438,8 +442,8 @@ def upload_url():
 
         if not urls:
             return jsonify({"error": "Uploaded file contains no valid URLs"}), 400
-        if len(urls) > 10:
-            return jsonify({"message": "Cannot process: Maximum of 10 URLs exceeded."})
+        if len(urls) > 3:
+            return jsonify({"message": "Cannot process: Maximum of 3 URLs exceeded."})
 
         return jsonify({"message": "URLs uploaded successfully", "file": file_path, "url_count": len(urls)})
 
@@ -538,4 +542,4 @@ def create_vector_db():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=3000)
+    app.run(debug=True, host="0.0.0.0", port=3000, use_reloader=False)

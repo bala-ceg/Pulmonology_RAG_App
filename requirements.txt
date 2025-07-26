@@ -14,7 +14,7 @@ python-dotenv
 openai-whisper
 
 # PDF parsing
-PyMuPDF==1.23.4
+PyMuPDF
 pdfplumber
 
 # Web scraping

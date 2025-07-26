@@ -80,6 +80,39 @@
             width: 100%;
             height: 100vh;
         }
+
+        .sidebar .light-btn {
+            background-color: #a3c2f2;  /* Light blue */
+            color: black;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .sidebar .dark-btn {
+            background-color: #1f4e79;  /* Dark blue */
+            color: white;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .sidebar .light-btn:hover {
+            background-color: #8ab1eb;
+        }
+
+        .sidebar .dark-btn:hover {
+            background-color: #163d5d;
+        }
+
         .sidebar {
             background-color: #333;
             color: white;
@@ -246,31 +279,25 @@
                 <li onclick="alert('New Chat Coming Soon')">New Chat</li>
                 <li onclick="alert('History Coming Soon')">Chat History</li>
                 <li onclick="alert('Settings Coming Soon')">Settings</li>
+                
                 <li>
-                    <!-- <div class="group-box">
-                        <input type="file" id="pdf-upload" multiple>
-                        <br><br>
-                        <button onclick="uploadFiles('pdf')">Add PDF</button>
-                    </div>                     -->
-                    <input type="file" id="pdf-upload" multiple>
-                    <br>
-                    <br>
-                    <button onclick="uploadFiles('pdf')">Add PDF</button>
+                    <button class="light-btn" onclick="document.getElementById('pdf-upload').click()">Choose Files</button>
+                    <input type="file" id="pdf-upload" multiple style="display: none;">
                 </li>
                 <li>
-                    <input type="file" id="url-upload" multiple>
-                    <br>
-                    <br>
-                    <button onclick="uploadFiles('url')">Add URL</button>
-                    <!-- <div class="group-box">
-                        <input type="file" id="url-upload" multiple>
-                        <br><br>
-                        <button onclick="uploadFiles('url')">Add URL</button>
-                    </div> -->
-                    
+                    <button class="dark-btn" onclick="uploadFiles('pdf')">Add PDF</button>
                 </li>
-                <br>
-                <li><button onclick="createVectorDB()">Update KB</button></li>
+                <li>
+                    <button class="light-btn" onclick="document.getElementById('url-upload').click()">Choose URL</button>
+                    <input type="file" id="url-upload" multiple style="display: none;">
+                </li>
+                <li>
+                    <button class="dark-btn" onclick="uploadFiles('url')">Add URL</button>
+                </li>
+                <li>
+                    <button class="dark-btn" onclick="createVectorDB()">Update KB</button>
+                </li>
+                
             </ul>
         </div>
 
@@ -626,24 +653,29 @@
                         audioChunks.push(event.data);
                     });
                     mediaRecorder.addEventListener('stop', () => {
-                        const audioBlob = new Blob(audioChunks);
-                        const formData = new FormData();
-                        formData.append('audio', audioBlob, 'recording.wav');
+                    const audioBlob = new Blob(audioChunks);
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'recording.wav');
 
-                        fetch('/transcribe', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => response.json())
+                    fetch('/transcribe', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(r => r.json())
                         .then(data => {
-                            console.log('Transcription:', data.text);
-                            document.getElementById('user-input').value = data.text; // Set transcribed text to input box
+                        console.log('Transcription:', data.text);
+                        document.getElementById('user-input').value = data.text;
                         })
-                        .catch(error => console.error('Error:', error));
+                        .catch(err => console.error('Error:', err))
+                        .finally(() => {
+                        // now that the fetch is done (success or failure), hide the toast:
+                        hideToast();
+                        });
 
-                        audioChunks = [];
-                        mediaStream.getTracks().forEach(track => track.stop());
+                    audioChunks = [];
+                    mediaStream.getTracks().forEach(track => track.stop());
                     });
+
                     mediaRecorder.start();
                     document.getElementById('voice-btn').disabled = true;
                     document.getElementById('stop-btn').disabled = false;
