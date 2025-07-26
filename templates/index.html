@@ -612,38 +612,6 @@
         let audioChunks = [];
         let mediaStream;
 
-        async function sendTranscription(transcription) {
-            if (!transcription.trim()) return;
-
-            addMessage('user', transcription);
-            userInput.value = '';
-            sendBtn.disabled = true;
-            saveBtn.disabled = true;
-
-            try {
-                const response = await fetch('/data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: transcription })
-                });
-
-                const data = await response.json();
-                if (data.response) {
-                    const aiMessage = data.message;
-                    addMessage('ai', aiMessage);
-                    sendBtn.disabled = false;
-                    saveBtn.disabled = false;
-                } else {
-                    console.error('Error:', data.message);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-            } finally {
-                sendBtn.disabled = false;
-            }
-            updateButtonsState();
-        }
-
         function startRecording() {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
@@ -743,10 +711,6 @@
 
         }
 
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('collapsed');
-        }
         function showToast(message) {
             const toast = document.getElementById("toast");
             toast.textContent = message;
