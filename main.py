@@ -33,11 +33,16 @@ import whisper, torch
 
 BASE_STORAGE_PATH = './KB/'
 VECTOR_DB_PATH = './vector_dbs/'
-# os.makedirs(BASE_STORAGE_PATH, exist_ok=True)
+ORGANIZATION_KB_PATH = './Organization_KB/'
+ORGANIZATION_VECTOR_DB_PATH = './vector_dbs/organization/'
+
+# Create required directories
+os.makedirs(BASE_STORAGE_PATH, exist_ok=True)
 os.makedirs(VECTOR_DB_PATH, exist_ok=True)
+os.makedirs(ORGANIZATION_KB_PATH, exist_ok=True)
+os.makedirs(ORGANIZATION_VECTOR_DB_PATH, exist_ok=True)
+
 last_created_folder = None 
-
-
 VECTOR_DBS_FOLDER = "./vector_dbs"
 
 def get_timestamp():
@@ -76,6 +81,194 @@ llm = ChatOpenAI(
 )
 
 client = ApifyClient(os.getenv("apify_api_key"))  # Initialize Apify client
+
+# Load disciplines configuration
+def load_disciplines_config():
+    """Load disciplines configuration from JSON file."""
+    try:
+        with open("config/disciplines.json", "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print("Warning: disciplines.json not found. Using default configuration.")
+        return {
+            "disciplines": [
+                {
+                    "id": "family_medicine",
+                    "name": "Family Medicine", 
+                    "description": "Comprehensive primary healthcare",
+                    "is_default": True,
+                    "kb_path": "Organization_KB/Family_Medicine",
+                    "vector_db_path": "vector_dbs/organization/family_medicine"
+                }
+            ],
+            "selection_rules": {
+                "min_selections": 1,
+                "max_selections": 3,
+                "default_discipline": "family_medicine"
+            }
+        }
+
+# Load configuration
+disciplines_config = load_disciplines_config()
+
+class MedicalQueryRouter:
+    """Intelligent router that determines which medical disciplines are relevant for a query."""
+    
+    def __init__(self, llm, disciplines_config):
+        self.llm = llm
+        self.disciplines = disciplines_config.get("disciplines", [])
+        self.discipline_keywords = self._build_keyword_map()
+    
+    def _build_keyword_map(self):
+        """Build a map of keywords for each discipline."""
+        keyword_map = {}
+        
+        # Medical specialty keywords
+        specialty_keywords = {
+            "family_medicine": [
+                "primary care", "general practice", "family doctor", "annual checkup", "preventive care",
+                "common cold", "flu", "hypertension", "diabetes", "vaccination", "routine care",
+                "wellness exam", "physical exam", "blood pressure", "cholesterol", "general health"
+            ],
+            "cardiology": [
+                "heart", "cardiac", "cardiovascular", "chest pain", "heart attack", "myocardial infarction",
+                "heart failure", "arrhythmia", "atrial fibrillation", "coronary", "angina", "pacemaker",
+                "cardiologist", "EKG", "ECG", "echocardiogram", "blood pressure", "hypertension",
+                "heart rate", "cardiac arrest", "valve", "aorta", "coronary artery"
+            ],
+            "neurology": [
+                "brain", "neurological", "nervous system", "stroke", "seizure", "epilepsy", "migraine",
+                "headache", "Parkinson's", "Alzheimer's", "dementia", "multiple sclerosis", "MS",
+                "neurologist", "MRI brain", "CT brain", "memory loss", "confusion", "dizziness",
+                "numbness", "tingling", "weakness", "paralysis", "spinal cord", "nerve"
+            ]
+        }
+        
+        return specialty_keywords
+    
+    def analyze_query(self, query):
+        """Analyze query and determine relevant disciplines using AI + keywords."""
+        query_lower = query.lower()
+        
+        # First, use keyword matching for quick routing
+        relevant_disciplines = []
+        confidence_scores = {}
+        
+        for discipline_id, keywords in self.discipline_keywords.items():
+            keyword_matches = sum(1 for keyword in keywords if keyword in query_lower)
+            if keyword_matches > 0:
+                confidence = min(keyword_matches / len(keywords) * 100, 95)  # Cap at 95%
+                relevant_disciplines.append(discipline_id)
+                confidence_scores[discipline_id] = confidence
+        
+        # If no keyword matches, use AI to analyze
+        if not relevant_disciplines:
+            relevant_disciplines = self._ai_analyze_query(query)
+            for discipline in relevant_disciplines:
+                confidence_scores[discipline] = 70  # Default AI confidence
+        
+        # Ensure we have at least one discipline (default to family medicine)
+        if not relevant_disciplines:
+            relevant_disciplines = ["family_medicine"]
+            confidence_scores["family_medicine"] = 60
+        
+        # Sort by confidence
+        relevant_disciplines.sort(key=lambda d: confidence_scores.get(d, 0), reverse=True)
+        
+        return {
+            "disciplines": relevant_disciplines[:3],  # Limit to top 3
+            "confidence_scores": confidence_scores,
+            "routing_method": "hybrid" if len(relevant_disciplines) > 0 else "default"
+        }
+    
+    def _ai_analyze_query(self, query):
+        """Use AI to analyze query when keyword matching fails."""
+        try:
+            discipline_names = [d["name"] for d in self.disciplines]
+            
+            prompt = f"""
+            Analyze this medical query and determine which medical specialties are most relevant:
+            
+            Query: "{query}"
+            
+            Available specialties: {', '.join(discipline_names)}
+            
+            Return only the specialty names that are relevant, separated by commas.
+            If the query is general or could apply to multiple specialties, include Family Medicine.
+            If unclear, default to Family Medicine.
+            
+            Response format: Specialty1, Specialty2 (max 3)
+            """
+            
+            response = self.llm.invoke(prompt)
+            content = response.content if hasattr(response, 'content') else str(response)
+            
+            # Parse AI response and map to discipline IDs
+            ai_specialties = [s.strip() for s in content.split(',')]
+            relevant_disciplines = []
+            
+            for specialty in ai_specialties:
+                for discipline in self.disciplines:
+                    if discipline["name"].lower() in specialty.lower():
+                        relevant_disciplines.append(discipline["id"])
+                        break
+            
+            return relevant_disciplines
+            
+        except Exception as e:
+            print(f"AI analysis failed: {e}")
+            return ["family_medicine"]  # Fallback
+
+# Initialize the router
+medical_router = MedicalQueryRouter(llm, disciplines_config)
+
+def get_available_disciplines():
+    """Return list of available disciplines for UI dropdown."""
+    return disciplines_config.get("disciplines", [])
+
+def validate_discipline_selection(selected_disciplines):
+    """Validate user's discipline selection against rules."""
+    rules = disciplines_config.get("selection_rules", {})
+    min_sel = rules.get("min_selections", 1)
+    max_sel = rules.get("max_selections", 3)
+    
+    if len(selected_disciplines) < min_sel:
+        return False, f"Please select at least {min_sel} discipline(s)"
+    if len(selected_disciplines) > max_sel:
+        return False, f"Please select no more than {max_sel} discipline(s)"
+    
+    # Validate discipline IDs exist
+    valid_ids = [d["id"] for d in disciplines_config.get("disciplines", [])]
+    invalid_ids = [d for d in selected_disciplines if d not in valid_ids]
+    if invalid_ids:
+        return False, f"Invalid discipline(s): {', '.join(invalid_ids)}"
+    
+    return True, "Valid selection"
+
+def get_discipline_vector_db_path(discipline_id):
+    """Get vector database path for a specific discipline."""
+    for discipline in disciplines_config.get("disciplines", []):
+        if discipline["id"] == discipline_id:
+            return discipline.get("vector_db_path", "")
+    return None
+
+def create_organization_vector_db(discipline_id, documents):
+    """Create or update organization vector database for a specific discipline."""
+    vector_db_path = get_discipline_vector_db_path(discipline_id)
+    if not vector_db_path:
+        raise ValueError(f"Unknown discipline: {discipline_id}")
+    
+    persist_dir = os.path.join(".", vector_db_path)
+    os.makedirs(persist_dir, exist_ok=True)
+    
+    # Create or update the vector store
+    vector_store = Chroma.from_documents(
+        documents,
+        embedding=embeddings,
+        persist_directory=persist_dir
+    )
+    
+    return vector_store
 
 # Step 1: Load and Process Metadata
 def load_metadata(file_path: str) -> List[dict]:
@@ -187,6 +380,7 @@ all_documents = pdf_documents + url_documents
 def enhance_with_citations(results):
     pdf_citations = set()  # Track unique PDF citations
     url_citations = set()  # Track unique URL citations
+    org_citations = set()  # Track unique Organization KB citations
 
     for doc in results:
         metadata = getattr(doc, "metadata", {})  # Ensure metadata exists
@@ -200,9 +394,16 @@ def enhance_with_citations(results):
         elif doc_type == "url":
             url_source = metadata.get("source", "Unknown URL")
             url_citations.add(f"URL: {url_source}")
+            
+        elif doc_type == "organization_pdf":
+            org_source = metadata.get("source", "Unknown Document")
+            discipline = metadata.get("discipline", "Unknown Discipline")
+            page_info = metadata.get("page", "Unknown Page")
+            org_citations.add(f"Organization KB - {discipline.replace('_', ' ').title()}: {org_source} (Page {page_info})")
 
     # Combine citations
-    return "\n".join(pdf_citations.union(url_citations)) or "No citations available"
+    all_citations = pdf_citations.union(url_citations).union(org_citations)
+    return "\n".join(all_citations) or "No citations available"
 
 def clean_extracted_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)
@@ -313,6 +514,31 @@ def plain_english():
 
 
 
+def clean_response_text(text):
+    """Remove emojis and clean up response text while preserving line breaks."""
+    import re
+    # Remove emojis
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002600-\U000026FF"  # miscellaneous symbols
+        u"\U00002700-\U000027BF"  # dingbats
+        "]+", flags=re.UNICODE)
+    
+    text = emoji_pattern.sub('', text)
+    
+    # Clean up extra spaces but preserve line breaks
+    # First, handle multiple spaces within lines
+    text = re.sub(r'[ \t]+', ' ', text)
+    # Then clean up excessive line breaks (more than 2 consecutive)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Remove trailing spaces at the end of lines
+    text = re.sub(r' +\n', '\n', text)
+    
+    return text.strip()
+
 @app.route("/data", methods=["POST"])
 def handle_query():
     user_input = request.json.get("data", "")
@@ -320,25 +546,148 @@ def handle_query():
         return jsonify({"response": False, "message": "Please provide a valid input."})
 
     try:
-        # Dynamically load the latest vector DB
-        latest_vector_db = get_latest_vector_db() or "./vector_db"
+        # 🧠 INTELLIGENT ROUTING: Analyze query to determine relevant disciplines
+        routing_result = medical_router.analyze_query(user_input)
+        relevant_disciplines = routing_result["disciplines"]
+        confidence_scores = routing_result["confidence_scores"]
         
-        # Reinitialize vector store and retriever
-        vector_store = Chroma(persist_directory=latest_vector_db, embedding_function=embeddings)
-        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
-        qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
-
-        # Run the query through the QA chain
-        response = qa_chain.invoke(user_input)
-        print(response)
-        search_results = retriever.invoke(user_input)
-        print(search_results)
-        citations = enhance_with_citations(search_results)
-
-        message = f"{response['result']}\n\nCitations:\n{citations}"     
-        return jsonify({"response": True, "message": message})
+        print(f"🧠 Query: '{user_input}'")
+        print(f"🎯 Routed to disciplines: {relevant_disciplines}")
+        print(f"📊 Confidence scores: {confidence_scores}")
+        
+        # Collect responses from multiple sources
+        all_responses = []
+        all_citations = []
+        
+        # 1. Query Organization KB (discipline-specific)
+        for discipline_id in relevant_disciplines:
+            try:
+                vector_db_path = get_discipline_vector_db_path(discipline_id)
+                if vector_db_path and os.path.exists(vector_db_path):
+                    print(f"🏥 Querying Organization KB: {discipline_id}")
+                    
+                    vector_store = Chroma(persist_directory=vector_db_path, embedding_function=embeddings)
+                    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
+                    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+                    
+                    org_response = qa_chain.invoke(user_input)
+                    search_results = retriever.invoke(user_input)
+                    
+                    if org_response['result'].strip():
+                        all_responses.append({
+                            "source": f"Organization KB - {discipline_id.replace('_', ' ').title()}",
+                            "content": org_response['result'],
+                            "confidence": confidence_scores.get(discipline_id, 70)
+                        })
+                        
+                        org_citations = enhance_with_citations(search_results)
+                        if org_citations != "No citations available":
+                            clean_citations = clean_response_text(org_citations)
+                            # Split individual citations and format each one
+                            citation_lines = [line.strip() for line in clean_citations.split('\n') if line.strip()]
+                            for citation_line in citation_lines:
+                                all_citations.append(f"**{discipline_id.replace('_', ' ').title()}: {citation_line}**")
+                            
+            except Exception as e:
+                print(f"Error querying {discipline_id}: {e}")
+        
+        # 2. Query Adhoc KB (user-uploaded content)
+        try:
+            latest_vector_db = get_latest_vector_db()
+            if latest_vector_db and os.path.exists(latest_vector_db):
+                print("📄 Querying Adhoc KB (user uploads)")
+                
+                vector_store = Chroma(persist_directory=latest_vector_db, embedding_function=embeddings)
+                retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
+                qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+                
+                adhoc_response = qa_chain.invoke(user_input)
+                search_results = retriever.invoke(user_input)
+                
+                if adhoc_response['result'].strip():
+                    all_responses.append({
+                        "source": "User Uploaded Documents",
+                        "content": adhoc_response['result'],
+                        "confidence": 85
+                    })
+                    
+                    adhoc_citations = enhance_with_citations(search_results)
+                    if adhoc_citations != "No citations available":
+                        clean_citations = clean_response_text(adhoc_citations)
+                        # Split individual citations and format each one
+                        citation_lines = [line.strip() for line in clean_citations.split('\n') if line.strip()]
+                        for citation_line in citation_lines:
+                            all_citations.append(f"**User Documents: {citation_line}**")
+                        
+        except Exception as e:
+            print(f"Error querying adhoc KB: {e}")
+        
+        # 3. Synthesize final response
+        if all_responses:
+            # Sort responses by confidence
+            all_responses.sort(key=lambda x: x["confidence"], reverse=True)
+            
+            # Create comprehensive response - just the content without headers
+            final_response = ""
+            
+            for i, resp in enumerate(all_responses[:2], 1):  # Limit to top 2 responses
+                if i > 1:
+                    final_response += "\n\n"  # Add spacing between multiple responses
+                final_response += clean_response_text(resp['content'])
+            
+            # Add citations in bold
+            if all_citations:
+                final_response += "\n\n**Citations:**\n"
+                for citation in all_citations:
+                    final_response += f"{citation}\n"
+            
+            # Add routing information on a new line
+            routing_info = f"\n**Query Routing:** Analyzed and routed to {', '.join([d.replace('_', ' ').title() for d in relevant_disciplines])}"
+            final_response += routing_info
+            
+            # Don't apply clean_response_text to the final response as it breaks formatting
+            
+            # Return response with routing details
+            return jsonify({
+                "response": True, 
+                "message": final_response,
+                "routing_details": {
+                    "disciplines": [d.replace('_', ' ').title() for d in relevant_disciplines],
+                    "confidence_scores": confidence_scores,
+                    "sources": f"{len(all_responses)} sources found",
+                    "method": routing_result.get("routing_method", "hybrid")
+                }
+            })
+        else:
+            # Fallback to general response
+            fallback_response = f"""
+            I understand you're asking about: "{user_input}"
+            
+            However, I couldn't find specific information in the available medical knowledge bases for the disciplines I identified: {', '.join([d.replace('_', ' ').title() for d in relevant_disciplines])}.
+            
+            This could be because:
+            1. The Organization KB doesn't have information on this specific topic yet
+            2. No user documents have been uploaded that relate to this query
+            3. The query might need to be more specific
+            
+            **Query was routed to:** {', '.join([d.replace('_', ' ').title() for d in relevant_disciplines])}
+            
+            Consider uploading relevant medical documents or rephrasing your question for better results.
+            """
+            
+            return jsonify({
+                "response": True, 
+                "message": clean_response_text(fallback_response),
+                "routing_details": {
+                    "disciplines": [d.replace('_', ' ').title() for d in relevant_disciplines],
+                    "confidence_scores": confidence_scores,
+                    "sources": "No relevant sources found",
+                    "method": routing_result.get("routing_method", "hybrid")
+                }
+            })
 
     except Exception as e:
+        print(f"Error in handle_query: {e}")
         return jsonify({"response": False, "message": f"Error: {str(e)}"})
 
 
@@ -362,6 +711,33 @@ def index():
     user = request.args.get('user', 'guest')
     initialize_session(user)
     return render_template("index.html")
+
+@app.route('/api/disciplines', methods=['GET'])
+def get_disciplines():
+    """Return available disciplines for UI dropdown."""
+    try:
+        disciplines = get_available_disciplines()
+        return jsonify({
+            "success": True,
+            "disciplines": disciplines,
+            "selection_rules": disciplines_config.get("selection_rules", {})
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/validate_disciplines', methods=['POST'])
+def validate_disciplines():
+    """Validate selected disciplines."""
+    try:
+        selected = request.json.get("selected_disciplines", [])
+        is_valid, message = validate_discipline_selection(selected)
+        return jsonify({
+            "success": True,
+            "is_valid": is_valid,
+            "message": message
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def count_files_in_folder(folder):
@@ -450,6 +826,78 @@ def upload_url():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/upload_organization_kb', methods=['POST'])
+def upload_organization_kb():
+    """Upload documents to Organization KB for specific disciplines."""
+    try:
+        if 'files' not in request.files:
+            return jsonify({"error": "No files provided"}), 400
+        
+        discipline_id = request.form.get('discipline_id')
+        if not discipline_id:
+            return jsonify({"error": "No discipline specified"}), 400
+        
+        # Validate discipline
+        discipline_path = None
+        for discipline in disciplines_config.get("disciplines", []):
+            if discipline["id"] == discipline_id:
+                discipline_path = discipline.get("kb_path")
+                break
+        
+        if not discipline_path:
+            return jsonify({"error": f"Invalid discipline: {discipline_id}"}), 400
+        
+        files = request.files.getlist('files')
+        if not files or all(f.filename == '' for f in files):
+            return jsonify({"error": "No valid files uploaded"}), 400
+        
+        # Create discipline directory
+        discipline_dir = os.path.join(".", discipline_path)
+        os.makedirs(discipline_dir, exist_ok=True)
+        
+        saved_files = []
+        documents = []
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=4096, chunk_overlap=128)
+        
+        for file in files:
+            if file.filename.endswith('.pdf'):
+                file_path = os.path.join(discipline_dir, file.filename)
+                file.save(file_path)
+                saved_files.append(file.filename)
+                
+                # Extract text and create documents
+                text_content = extract_text_from_pdf(file_path)
+                if text_content:
+                    if isinstance(text_content, str):
+                        text_content = [text_content]
+                    
+                    for page_num, text in enumerate(text_content, start=1):
+                        chunks = text_splitter.split_text(text)
+                        for chunk in chunks:
+                            documents.append(Document(
+                                page_content=chunk,
+                                metadata={
+                                    "source": file.filename,
+                                    "type": "organization_pdf",
+                                    "discipline": discipline_id,
+                                    "page": page_num
+                                }
+                            ))
+        
+        # Create/update vector database for this discipline
+        if documents:
+            create_organization_vector_db(discipline_id, documents)
+            
+        return jsonify({
+            "message": f"Successfully uploaded {len(saved_files)} files to {discipline_id}",
+            "files": saved_files,
+            "documents_created": len(documents)
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/create_vector_db', methods=['POST'])
 def create_vector_db():

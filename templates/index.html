@@ -45,6 +45,19 @@
             margin-top: 5px;
         }
 
+        .citations-section {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-left: 3px solid #007bff;
+            border-radius: 4px;
+        }
+
+        .citations-section strong {
+            color: #007bff;
+            font-weight: bold;
+        }
+
         .save-btn, .cancel-btn {
             margin-top: 5px;
             padding: 5px 10px;
@@ -111,6 +124,103 @@
 
         .sidebar .dark-btn:hover {
             background-color: #163d5d;
+        }
+
+        .discipline-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .discipline-checkbox {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .discipline-checkbox input[type="checkbox"] {
+            margin-right: 8px;
+            transform: scale(1.1);
+        }
+
+        .discipline-checkbox label {
+            cursor: pointer;
+            color: #ddd;
+            flex: 1;
+        }
+
+        .discipline-description {
+            font-size: 10px;
+            color: #999;
+            margin-left: 20px;
+            font-style: italic;
+        }
+
+        .discipline-validation {
+            font-size: 11px;
+            margin-top: 5px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+
+        .discipline-validation.success {
+            background-color: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+
+        .discipline-validation.error {
+            background-color: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        /* Markdown styling for AI responses */
+        .ai-message .message-content h1 {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0 8px 0;
+            color: #333;
+        }
+
+        .ai-message .message-content h2 {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 8px 0 6px 0;
+            color: #444;
+        }
+
+        .ai-message .message-content h3 {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 6px 0 4px 0;
+            color: #555;
+        }
+
+        .ai-message .message-content strong {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .ai-message .message-content br {
+            line-height: 1.6;
+        }
+
+        /* Citation styling */
+        .ai-message .message-content strong {
+            font-weight: 600;
+        }
+
+        /* Special styling for citations section */
+        .citations-section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .citations-section strong {
+            color: #2c3e50;
+            font-weight: 600;
         }
 
         .sidebar {
@@ -343,46 +453,49 @@
         const MAX_MESSAGES = 20;
 
         function addMessage(role, content) {
-            const [responseText, citationsText] = content.split("Citations:");
             const messageDiv = document.createElement("div");
             messageDiv.className = `message ${role === 'user' ? 'user-message' : 'ai-message'}`;
 
             const messageContentDiv = document.createElement("div");
             messageContentDiv.className = "message-content";
-            messageContentDiv.textContent = responseText.trim();
-            messageDiv.appendChild(messageContentDiv);
+            
+            // For AI responses, check if there are citations and handle them separately
+            if (role === 'ai') {
+                // Split content into main response and citations
+                const citationsIndex = content.indexOf('**Citations:**');
+                let mainContent = content;
+                let citationsContent = '';
+                
+                if (citationsIndex !== -1) {
+                    mainContent = content.substring(0, citationsIndex).trim();
+                    citationsContent = content.substring(citationsIndex).trim();
+                }
+                
+                // Render main content as markdown
+                messageContentDiv.innerHTML = renderMarkdown(mainContent);
+                
+                // If there are citations, create a separate citations div
+                if (citationsContent) {
+                    const citationsDiv = document.createElement("div");
+                    citationsDiv.className = "citations-section";
+                    citationsDiv.innerHTML = renderMarkdown(citationsContent);
+                    messageDiv.appendChild(messageContentDiv);
+                    messageDiv.appendChild(citationsDiv);
+                } else {
+                    messageDiv.appendChild(messageContentDiv);
+                }
+            } else {
+                // For user messages, just use text content
+                messageContentDiv.textContent = content.trim();
+                messageDiv.appendChild(messageContentDiv);
+            }
 
             if (role === "user") {
                 const editButton = document.createElement("button");
                 editButton.className = "edit-btn";
                 editButton.textContent = "✎";
-                editButton.onclick = () => editMessage(messageDiv, responseText);
+                editButton.onclick = () => editMessage(messageDiv, content);
                 messageContentDiv.appendChild(editButton);
-            }
-
-            if (citationsText) {
-                const citationsDiv = document.createElement('div');
-                citationsDiv.classList.add('citations');
-
-                const citationLabel = document.createElement('span');
-                citationLabel.style.fontWeight = 'bold';
-                citationLabel.style.color = "black";
-                citationLabel.textContent = "Citations: ";
-                citationsDiv.appendChild(citationLabel);
-
-                const citations = citationsText.trim().split(/\n/).filter(citation => citation);
-                citations.forEach(citation => {
-                    const citationElement = document.createElement('div');
-                    if (citation.startsWith("URL:")) {
-                        citationElement.style.color = "red";
-                    } else if (citation.startsWith("PDF:")) {
-                        citationElement.style.color = "green";
-                    }
-                    citationElement.innerHTML = citation;
-                    citationsDiv.appendChild(citationElement);
-                });
-
-                messageDiv.appendChild(citationsDiv);
             }
 
             chatMessages.appendChild(messageDiv);
@@ -469,6 +582,9 @@
             userInput.value = '';
             sendBtn.disabled = true;
             saveBtn.disabled = true;
+            
+            // Update routing status
+            updateRoutingStatus('Analyzing query and routing to relevant medical disciplines...');
 
             try {
                 const response = await fetch('/data', {
@@ -481,13 +597,30 @@
                 if (data.response) {
                     const aiMessage = data.message;
                     addMessage('ai', aiMessage);
+                    
+                    // Update routing status with details
+                    if (data.routing_details) {
+                        updateRoutingStatus(
+                            `Query processed successfully`, 
+                            {
+                                disciplines: data.routing_details.disciplines,
+                                sources: data.routing_details.sources,
+                                confidence: `${data.routing_details.method} routing`
+                            }
+                        );
+                    } else {
+                        updateRoutingStatus('Query processed successfully');
+                    }
+                    
                     sendBtn.disabled = false;
                     saveBtn.disabled = false;
                 } else {
                     console.error('Error:', data.message);
+                    updateRoutingStatus('Error processing query');
                 }
             } catch (error) {
                 console.error('Error:', error);
+                updateRoutingStatus('Network error');
             } finally {
                 sendBtn.disabled = false;
             }
@@ -756,6 +889,40 @@
             const toast = document.getElementById("toast");
             toast.classList.remove("show");
         }
+
+        // Simplified routing functions (no UI updates)
+        function updateRoutingStatus(status, details = null) {
+            // Routing happens silently in the background
+            console.log('Routing:', status, details);
+        }
+
+        // Markdown rendering function
+        function renderMarkdown(text) {
+            // Remove emojis first
+            text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+            
+            // Convert markdown to HTML
+            text = text
+                // Headers (process first)
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                
+                // Bold text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                
+                // Convert line breaks
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, '<br>');
+                
+            return text;
+        }
+
+        // Load page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Page loaded - routing ready
+            console.log('AI Router Ready');
+        });
 
     </script>
 </body
