@@ -141,10 +141,36 @@ class MedicalQueryRouter:
                 "headache", "Parkinson's", "Alzheimer's", "dementia", "multiple sclerosis", "MS",
                 "neurologist", "MRI brain", "CT brain", "memory loss", "confusion", "dizziness",
                 "numbness", "tingling", "weakness", "paralysis", "spinal cord", "nerve"
+            ],
+            "doctors_files": [
+                "my files", "my documents", "uploaded", "document", "file", "PDF", "article",
+                "my upload", "personal documents", "doctor's files", "my records", "uploaded content",
+                "session files", "my PDFs", "document I uploaded", "file I shared", "my data"
             ]
         }
         
         return specialty_keywords
+    
+    def _has_session_files(self):
+        """Check if the current session has uploaded files."""
+        global last_created_folder
+        if not last_created_folder:
+            return False
+        
+        # Check for PDFs in session
+        pdf_path = os.path.join(BASE_STORAGE_PATH, "PDF", last_created_folder)
+        url_path = os.path.join(BASE_STORAGE_PATH, "URL", last_created_folder)
+        
+        pdf_files = []
+        url_files = []
+        
+        if os.path.exists(pdf_path):
+            pdf_files = [f for f in os.listdir(pdf_path) if f.endswith('.pdf')]
+        
+        if os.path.exists(url_path):
+            url_files = [f for f in os.listdir(url_path) if f.endswith('.txt')]
+        
+        return len(pdf_files) > 0 or len(url_files) > 0
     
     def analyze_query(self, query):
         """Analyze query and determine relevant disciplines using AI + keywords."""
@@ -161,11 +187,25 @@ class MedicalQueryRouter:
                 relevant_disciplines.append(discipline_id)
                 confidence_scores[discipline_id] = confidence
         
+        # Special handling for doctors_files - include if user has uploaded files and query might be relevant
+        has_files = self._has_session_files()
+        if has_files and "doctors_files" not in relevant_disciplines:
+            # Check if query could be asking about user's files (more lenient keywords)
+            user_file_keywords = ["my", "document", "file", "upload", "PDF", "article", "personal", "doctor", "record"]
+            if any(keyword in query_lower for keyword in user_file_keywords):
+                relevant_disciplines.append("doctors_files")
+                confidence_scores["doctors_files"] = 85  # High confidence for user file queries
+        
         # If no keyword matches, use AI to analyze
         if not relevant_disciplines:
             relevant_disciplines = self._ai_analyze_query(query)
             for discipline in relevant_disciplines:
                 confidence_scores[discipline] = 70  # Default AI confidence
+            
+            # Add doctors_files to AI analysis if user has files
+            if has_files and "doctors_files" not in relevant_disciplines:
+                relevant_disciplines.append("doctors_files")
+                confidence_scores["doctors_files"] = 75
         
         # Ensure we have at least one discipline (default to family medicine)
         if not relevant_disciplines:
@@ -176,7 +216,7 @@ class MedicalQueryRouter:
         relevant_disciplines.sort(key=lambda d: confidence_scores.get(d, 0), reverse=True)
         
         return {
-            "disciplines": relevant_disciplines[:3],  # Limit to top 3
+            "disciplines": relevant_disciplines[:2],  # Limit to top 3
             "confidence_scores": confidence_scores,
             "routing_method": "hybrid" if len(relevant_disciplines) > 0 else "default"
         }
@@ -193,10 +233,13 @@ class MedicalQueryRouter:
             
             Available specialties: {', '.join(discipline_names)}
             
-            Return only the specialty names that are relevant, separated by commas.
-            If the query is general or could apply to multiple specialties, include Family Medicine.
-            If unclear, default to Family Medicine.
+            Guidelines:
+            - If the query mentions "my files", "my documents", "uploaded", or refers to user's personal documents, include "Doctor's Files"
+            - If the query is general or could apply to multiple specialties, include Family Medicine
+            - If unclear, default to Family Medicine
+            - Consider that "Doctor's Files" contains user-uploaded PDFs and documents
             
+            Return only the specialty names that are relevant, separated by commas.
             Response format: Specialty1, Specialty2 (max 3)
             """
             
@@ -559,8 +602,13 @@ def handle_query():
         all_responses = []
         all_citations = []
         
-        # 1. Query Organization KB (discipline-specific)
+        # 1. Query Organization KB (discipline-specific) - Skip session-based disciplines
         for discipline_id in relevant_disciplines:
+            # Skip session-based disciplines for Organization KB
+            discipline_config = next((d for d in disciplines_config.get("disciplines", []) if d["id"] == discipline_id), None)
+            if discipline_config and discipline_config.get("is_session_based", False):
+                continue
+                
             try:
                 vector_db_path = get_discipline_vector_db_path(discipline_id)
                 if vector_db_path and os.path.exists(vector_db_path):
@@ -591,11 +639,15 @@ def handle_query():
             except Exception as e:
                 print(f"Error querying {discipline_id}: {e}")
         
-        # 2. Query Adhoc KB (user-uploaded content)
+        # 2. Query Adhoc KB (user-uploaded content) - Higher priority if doctors_files is selected
+        doctors_files_selected = "doctors_files" in relevant_disciplines
         try:
             latest_vector_db = get_latest_vector_db()
             if latest_vector_db and os.path.exists(latest_vector_db):
-                print("📄 Querying Adhoc KB (user uploads)")
+                if doctors_files_selected:
+                    print("📄 Querying Doctor's Files (prioritized)")
+                else:
+                    print("📄 Querying Adhoc KB (user uploads)")
                 
                 vector_store = Chroma(persist_directory=latest_vector_db, embedding_function=embeddings)
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
@@ -605,10 +657,13 @@ def handle_query():
                 search_results = retriever.invoke(user_input)
                 
                 if adhoc_response['result'].strip():
+                    source_name = "Doctor's Files" if doctors_files_selected else "User Uploaded Documents"
+                    confidence = confidence_scores.get("doctors_files", 85) if doctors_files_selected else 85
+                    
                     all_responses.append({
-                        "source": "User Uploaded Documents",
+                        "source": source_name,
                         "content": adhoc_response['result'],
-                        "confidence": 85
+                        "confidence": confidence
                     })
                     
                     adhoc_citations = enhance_with_citations(search_results)
@@ -616,8 +671,9 @@ def handle_query():
                         clean_citations = clean_response_text(adhoc_citations)
                         # Split individual citations and format each one
                         citation_lines = [line.strip() for line in clean_citations.split('\n') if line.strip()]
+                        citation_prefix = "Doctor's Files" if doctors_files_selected else "User Documents"
                         for citation_line in citation_lines:
-                            all_citations.append(f"**User Documents: {citation_line}**")
+                            all_citations.append(f"**{citation_prefix}: {citation_line}**")
                         
         except Exception as e:
             print(f"Error querying adhoc KB: {e}")
