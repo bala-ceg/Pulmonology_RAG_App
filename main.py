@@ -537,6 +537,137 @@ def transcribe():
         result = model.transcribe(temp.name)
     return jsonify({"text": result['text']})
 
+@app.route('/transcribe_patient_notes', methods=['POST'])
+def transcribe_patient_notes():
+    """
+    Transcribe patient audio recording and generate medical summary.
+    Expects: audio file, doctor_name, patient_name
+    Returns: transcribed text, summary, and conclusion
+    """
+    try:
+        # Get form data
+        audio_file = request.files.get('audio')
+        doctor_name = request.form.get('doctor_name', '')
+        patient_name = request.form.get('patient_name', '')
+        
+        print(f"Processing patient recording for: {patient_name} by Dr. {doctor_name}")
+        
+        if not audio_file:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        if not doctor_name or not patient_name:
+            return jsonify({"error": "Doctor name and patient name are required"}), 400
+        
+        # Transcribe audio using Whisper
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                temp_path = temp.name
+                audio_file.save(temp_path)
+                print(f"Audio file saved to: {temp_path}")
+                
+                result = model.transcribe(temp_path)
+                transcribed_text = result['text']
+                print(f"Transcription completed. Length: {len(transcribed_text)} characters")
+                
+        except Exception as e:
+            print(f"Error during transcription: {str(e)}")
+            return jsonify({"error": f"Transcription failed: {str(e)}"}), 500
+        finally:
+            # Clean up temp file
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
+        
+        # Generate medical summary using OpenAI
+        summary_prompt = f"""
+        As a medical AI assistant, please analyze the following patient consultation transcript and provide a professional medical summary.
+        
+        Patient: {patient_name}
+        Doctor: {doctor_name}
+        Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        
+        Transcript:
+        {transcribed_text}
+        
+        Please provide:
+        1. A concise clinical summary highlighting key medical information, symptoms, findings, and discussions
+        2. Professional conclusions with recommendations, follow-up actions, or treatment plans mentioned
+        
+        Format your response exactly as:
+        SUMMARY:
+        [Provide a clear, professional summary of the medical consultation]
+        
+        CONCLUSION:
+        [Provide conclusions, recommendations, and any follow-up actions mentioned]
+        """
+        
+        try:
+            # Get AI response
+            print("Generating medical summary...")
+            ai_response = llm.invoke(summary_prompt)
+            if hasattr(ai_response, 'content'):
+                ai_content = ai_response.content.strip()
+            else:
+                ai_content = str(ai_response).strip()
+            
+            print(f"AI summary generated. Length: {len(ai_content)} characters")
+            
+            # Parse summary and conclusion from AI response
+            summary_parts = ai_content.split("CONCLUSION:")
+            if len(summary_parts) == 2:
+                summary = summary_parts[0].replace("SUMMARY:", "").strip()
+                conclusion = summary_parts[1].strip()
+            else:
+                # Fallback parsing method
+                lines = ai_content.split('\n')
+                summary_lines = []
+                conclusion_lines = []
+                in_conclusion = False
+                
+                for line in lines:
+                    if 'CONCLUSION' in line.upper():
+                        in_conclusion = True
+                        continue
+                    elif 'SUMMARY' in line.upper():
+                        in_conclusion = False
+                        continue
+                    
+                    if in_conclusion:
+                        conclusion_lines.append(line)
+                    else:
+                        summary_lines.append(line)
+                
+                summary = '\n'.join(summary_lines).strip()
+                conclusion = '\n'.join(conclusion_lines).strip()
+                
+                # Final fallback
+                if not summary and not conclusion:
+                    summary = ai_content[:len(ai_content)//2]
+                    conclusion = ai_content[len(ai_content)//2:]
+        
+        except Exception as e:
+            print(f"Error generating summary: {str(e)}")
+            return jsonify({"error": f"Summary generation failed: {str(e)}"}), 500
+        
+        response_data = {
+            "success": True,
+            "transcribed_text": transcribed_text,
+            "summary": summary,
+            "conclusion": conclusion,
+            "doctor_name": doctor_name,
+            "patient_name": patient_name,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        print(f"Successfully processed patient recording for {patient_name}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"Unexpected error in transcribe_patient_notes: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
 @app.route("/plain_english", methods=["POST"])
 def plain_english():
     user_text = request.json.get("text", "")

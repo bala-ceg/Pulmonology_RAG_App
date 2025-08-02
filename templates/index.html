@@ -407,6 +407,12 @@
                 <li>
                     <button class="dark-btn" onclick="createVectorDB()">Update KB</button>
                 </li>
+                <li>
+                    <button class="dark-btn" onclick="startPatientRecording()">Record Patient Notes</button>
+                </li>
+                <li>
+                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
+                </li>
                 
             </ul>
         </div>
@@ -431,19 +437,26 @@
     </div>
 
     <script>
-        function showToast(message) {
+        function showToast(message, duration = 3000) {
             const toast = document.getElementById("toast");
             toast.textContent = message;
             toast.classList.add("show");
             setTimeout(() => {
                 toast.classList.remove("show");
-            }, 2000);
+            }, duration);
         }
 
         function hideToast() {
             const toast = document.getElementById("toast");
             toast.classList.remove("show");
         }
+        
+        // Global variables for recording functionality
+        let audioChunks = [];
+        let mediaRecorder;
+        let mediaStream;
+        let patientRecordingTimeout;
+        
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -741,10 +754,6 @@
         }
 
 
-        let mediaRecorder;
-        let audioChunks = [];
-        let mediaStream;
-
         async function sendTranscription(transcription) {
             if (!transcription.trim()) return;
 
@@ -824,6 +833,174 @@
             document.getElementById('stop-btn').disabled = true;
         }
 
+        async function startPatientRecording() {
+            // Get patient and doctor names upfront
+            const patientName = prompt("Enter Patient Name:");
+            const userName = prompt("Enter Doctor's Name:");
+            
+            if (!patientName || !userName) {
+                alert("Patient name and doctor name are required!");
+                return;
+            }
+            
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaStream = stream;
+                    audioChunks = []; // Reset audio chunks
+
+                    // Update button states
+                    document.querySelector('button[onclick="startPatientRecording()"]').disabled = true;
+                    document.getElementById('stop-patient-btn').disabled = false;
+
+                    // Show recording status
+                    showToast("🎙️ Recording patient notes... (Max 3 minutes)");
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+                    
+                    mediaRecorder.addEventListener('stop', async () => {
+                        // Reset button states
+                        document.querySelector('button[onclick="startPatientRecording()"]').disabled = false;
+                        document.getElementById('stop-patient-btn').disabled = true;
+                        
+                        // Clear timeout if it exists
+                        if (patientRecordingTimeout) {
+                            clearTimeout(patientRecordingTimeout);
+                            patientRecordingTimeout = null;
+                        }
+                        
+                        showToast("🔄 Processing audio... Please wait.");
+                        
+                        try {
+                            const audioBlob = new Blob(audioChunks);
+                            const now = new Date();
+                            const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+                            // Send audio to backend for transcription and summary
+                            const formData = new FormData();
+                            formData.append('audio', audioBlob, 'patient_recording.wav');
+                            formData.append('doctor_name', userName);
+                            formData.append('patient_name', patientName);
+
+                            const response = await fetch('/transcribe_patient_notes', {
+                                method: 'POST',
+                                body: formData
+                            });
+
+                            const data = await response.json();
+                            
+                            if (data.success) {
+                                // Save JSON file with all data
+                                const jsonFileName = `${patientName}_${timestamp}.json`;
+                                const jsonData = {
+                                    header: {
+                                        doctorName: userName,
+                                        patientName: patientName,
+                                        dateTime: now.toISOString()
+                                    },
+                                    wholeText: data.transcribed_text,
+                                    summary: data.summary,
+                                    conclusion: data.conclusion,
+                                    metadata: {
+                                        recordingDuration: "Up to 3 minutes",
+                                        transcriptionEngine: "Whisper",
+                                        summaryEngine: "OpenAI"
+                                    }
+                                };
+
+                                const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+                                downloadFile(jsonBlob, jsonFileName);
+
+                                showToast("Patient notes saved successfully!");
+                                setTimeout(() => hideToast(), 2000);
+                                
+                            } else {
+                                throw new Error(data.error || 'Failed to process audio');
+                            }
+                            
+                        } catch (error) {
+                            console.error('Error processing patient recording:', error);
+                            showToast("Error processing recording. Please try again.", 5000);
+                        }
+                        
+                        mediaStream.getTracks().forEach(track => track.stop());
+                    });
+
+                    mediaRecorder.start();
+                    
+                    // Set 3-minute timeout
+                    patientRecordingTimeout = setTimeout(() => {
+                        if (mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            showToast("Recording automatically stopped after 3 minutes.");
+                        }
+                    }, 3 * 60 * 1000); // 3 minutes
+                })
+                .catch(error => {
+                    console.error('Error accessing microphone:', error);
+                    showToast("Error accessing microphone. Please check permissions.");
+                    
+                    // Reset button states on error
+                    document.querySelector('button[onclick="startPatientRecording()"]').disabled = false;
+                    document.getElementById('stop-patient-btn').disabled = true;
+                });
+        }
+
+        function stopPatientRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                showToast("Recording stopped manually.");
+                setTimeout(() => hideToast(), 2000);
+            }
+        }
+
+        // Helper function to download files
+        function downloadFile(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Helper function to generate PDF content
+        function generatePDFContent(data) {
+            return `
+PATIENT CONSULTATION REPORT
+================================
+
+Header Information:
+------------------
+Doctor's Name: ${data.header.doctorName}
+Patient Name: ${data.header.patientName}
+Date & Time: ${new Date(data.header.dateTime).toLocaleString()}
+
+Full Transcription:
+------------------
+${data.wholeText}
+
+Medical Summary:
+---------------
+${data.summary}
+
+Conclusion & Recommendations:
+----------------------------
+${data.conclusion}
+
+Technical Details:
+-----------------
+Recording Duration: ${data.metadata.recordingDuration}
+Transcription Engine: ${data.metadata.transcriptionEngine}
+Summary Generation: ${data.metadata.summaryEngine}
+Generated on: ${new Date().toLocaleString()}
+            `.trim();
+        }
+
         async function uploadFiles(type) {     
             const inputElement = type === 'pdf' ? document.getElementById('pdf-upload') : document.getElementById('url-upload');
             const files = inputElement.files;
@@ -871,7 +1048,7 @@
             showToast("Knowledge Bank is updating... please wait.");
             let response = await fetch('/create_vector_db', { method: 'POST' });
             let data = await response.json();
-            showToast("✅ Knowledge Bank updated.");
+            showToast(" Knowledge Bank updated.");
             setTimeout(() => hideToast(), 1000);
 
         }
