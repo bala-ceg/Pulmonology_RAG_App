@@ -668,6 +668,109 @@ def transcribe_patient_notes():
         traceback.print_exc()
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
+@app.route('/generate_summary', methods=['POST'])
+def generate_summary():
+    """
+    Generate medical summary and conclusion from transcription text.
+    Expects: transcription text, doctor_name, patient_name
+    Returns: summary and conclusion
+    """
+    try:
+        data = request.get_json()
+        transcription = data.get('transcription', '').strip()
+        doctor_name = data.get('doctor_name', '').strip()
+        patient_name = data.get('patient_name', '').strip()
+        
+        if not transcription:
+            return jsonify({"success": False, "error": "No transcription text provided"}), 400
+        
+        print(f"Generating summary for patient: {patient_name} by Dr. {doctor_name}")
+        
+        # Generate medical summary using OpenAI
+        summary_prompt = f"""
+        As a medical AI assistant, please analyze the following patient consultation transcript and provide a professional medical summary.
+        
+        Patient: {patient_name if patient_name else 'Not specified'}
+        Doctor: {doctor_name if doctor_name else 'Not specified'}
+        Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        
+        Transcript:
+        {transcription}
+        
+        Please provide:
+        1. A concise clinical summary highlighting key medical information, symptoms, findings, and discussions
+        2. Professional conclusions with recommendations, follow-up actions, or treatment plans mentioned
+        
+        If the transcript does not contain relevant medical information, please provide appropriate default responses indicating the lack of medical content.
+        
+        Format your response exactly as:
+        SUMMARY:
+        [Provide a clear, professional summary of the medical consultation]
+        
+        CONCLUSION:
+        [Provide conclusions, recommendations, and any follow-up actions mentioned]
+        """
+        
+        try:
+            # Get AI response
+            print("Generating medical summary from transcription...")
+            ai_response = llm.invoke(summary_prompt)
+            if hasattr(ai_response, 'content'):
+                ai_content = ai_response.content.strip()
+            else:
+                ai_content = str(ai_response).strip()
+            
+            print(f"AI summary generated. Length: {len(ai_content)} characters")
+            
+            # Parse summary and conclusion from AI response
+            summary_parts = ai_content.split("CONCLUSION:")
+            if len(summary_parts) == 2:
+                summary = summary_parts[0].replace("SUMMARY:", "").strip()
+                conclusion = summary_parts[1].strip()
+            else:
+                # Fallback parsing method
+                lines = ai_content.split('\n')
+                summary_lines = []
+                conclusion_lines = []
+                in_conclusion = False
+                
+                for line in lines:
+                    if 'CONCLUSION' in line.upper():
+                        in_conclusion = True
+                        continue
+                    elif 'SUMMARY' in line.upper():
+                        in_conclusion = False
+                        continue
+                    
+                    if in_conclusion:
+                        conclusion_lines.append(line)
+                    else:
+                        summary_lines.append(line)
+                
+                summary = '\n'.join(summary_lines).strip()
+                conclusion = '\n'.join(conclusion_lines).strip()
+                
+                # Final fallback with appropriate default responses
+                if not summary and not conclusion:
+                    summary = "The consultation transcript provided does not contain any relevant medical information, symptoms, findings, or discussions related to a patient's health."
+                    conclusion = "As there is no pertinent information available in the transcript, no medical conclusions, recommendations, or follow-up actions can be provided. It is recommended to ensure accurate and detailed documentation of patient consultations for proper medical assessment and care."
+        
+        except Exception as e:
+            print(f"Error generating summary: {str(e)}")
+            return jsonify({"success": False, "error": f"Summary generation failed: {str(e)}"}), 500
+        
+        return jsonify({
+            "success": True,
+            "summary": summary,
+            "conclusion": conclusion
+        })
+        
+    except Exception as e:
+        print(f"Unexpected error in generate_summary: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"An unexpected error occurred: {str(e)}"}), 500
+
 @app.route("/plain_english", methods=["POST"])
 def plain_english():
     user_text = request.json.get("text", "")
