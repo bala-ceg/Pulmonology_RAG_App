@@ -1173,7 +1173,210 @@ def create_vector_db():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route("/generate_patient_pdf", methods=["POST"])
+def generate_patient_pdf():
+    """Generate PDF for patient notes"""
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        import io
+        
+        data = request.json
+        
+        # Extract data
+        doctor_name = data.get('doctorName', '')
+        patient_name = data.get('patientName', '')
+        date_time = data.get('dateTime', '')
+        transcription = data.get('transcription', '')
+        summary = data.get('summary', '')
+        conclusion = data.get('conclusion', '')
+        
+        # Create PDF in memory
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch, leftMargin=inch, 
+                               topMargin=inch, bottomMargin=inch)
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        )
+        
+        header_style = ParagraphStyle(
+            'CustomHeader',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+            spaceBefore=20,
+            fontName='Helvetica-Bold'
+        )
+        
+        # Build PDF content
+        story = []
+        
+        # Title
+        story.append(Paragraph("PATIENT CONSULTATION REPORT", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Header Information
+        story.append(Paragraph("Header Information:", header_style))
+        story.append(Paragraph(f"<b>Doctor Name:</b> {doctor_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Patient Name:</b> {patient_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Date:</b> {date_time}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Original Text
+        story.append(Paragraph("Original Text:", header_style))
+        story.append(Paragraph(transcription, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Summary
+        story.append(Paragraph("Summary:", header_style))
+        story.append(Paragraph(summary, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Conclusion
+        story.append(Paragraph("Conclusion:", header_style))
+        story.append(Paragraph(conclusion, styles['Normal']))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Return PDF as response
+        from flask import make_response
+        response = make_response(buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{patient_name.upper().replace(" ", "")}-{data.get("timestamp", "")}.pdf"'
+        
+        return response
+        
+    except ImportError:
+        # Fallback if reportlab is not installed
+        return jsonify({"error": "PDF generation not available. Please install reportlab."}), 500
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        return jsonify({"error": f"Failed to generate PDF: {str(e)}"}), 500
 
+
+@app.route("/generate_chat_pdf", methods=["POST"])
+def generate_chat_pdf():
+    """Generate PDF for chat conversation with specified format"""
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        from reportlab.lib.colors import black
+        import io
+        
+        data = request.json
+        
+        # Extract data
+        doctor_name = data.get('doctorName', 'Dr. Name')
+        messages = data.get('messages', [])
+        json_data = data.get('jsonData', '')
+        
+        # Generate timestamp in YYYY MM DD HH MM format
+        now = datetime.now()
+        formatted_date = now.strftime("%Y %m %d %H %M")
+        
+        # Create PDF filename
+        timestamp = now.strftime("%Y%m%d%H%M")
+        filename = f"{doctor_name.upper().replace(' ', '')}-{timestamp}.pdf"
+        
+        # Create PDF in memory
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch, leftMargin=inch, 
+                               topMargin=inch, bottomMargin=inch)
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        header_style = ParagraphStyle(
+            'HeaderStyle',
+            parent=styles['Normal'],
+            fontSize=12,
+            fontName='Helvetica-Bold',
+            spaceAfter=12,
+            alignment=TA_LEFT
+        )
+        
+        section_header_style = ParagraphStyle(
+            'SectionHeader',
+            parent=styles['Normal'],
+            fontSize=11,
+            fontName='Helvetica-Bold',
+            spaceAfter=6,
+            spaceBefore=12,
+            alignment=TA_CENTER
+        )
+        
+        content_style = ParagraphStyle(
+            'ContentStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=8,
+            alignment=TA_LEFT
+        )
+        
+        # Build PDF content
+        story = []
+        
+        # Header section
+        story.append(Paragraph(f"Doctor Name: {doctor_name}", header_style))
+        story.append(Paragraph(f"Date: {formatted_date}", header_style))
+        story.append(Spacer(1, 20))
+        
+        # JSON Data section (if provided)
+        if json_data:
+            story.append(Paragraph("JSON Data:", section_header_style))
+            story.append(Paragraph(json_data, content_style))
+            story.append(Spacer(1, 20))
+        
+        # Chat conversation
+        for i, message in enumerate(messages):
+            role = message.get('role', '')
+            content = message.get('content', '')
+            
+            if role == 'user':
+                story.append(Paragraph("****** Doctor Input *****", section_header_style))
+                story.append(Paragraph(content, content_style))
+                story.append(Spacer(1, 12))
+            elif role == 'ai':
+                story.append(Paragraph("****** System Output *****", section_header_style))
+                story.append(Paragraph(content, content_style))
+                story.append(Spacer(1, 12))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Return PDF as response
+        from flask import make_response
+        response = make_response(buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except ImportError:
+        # Fallback if reportlab is not installed
+        return jsonify({"error": "PDF generation not available. Please install reportlab."}), 500
+    except Exception as e:
+        print(f"Error generating chat PDF: {e}")
+        return jsonify({"error": f"Failed to generate PDF: {str(e)}"}), 500
 
 
 if __name__ == "__main__":

@@ -28,4 +28,7 @@ webdriver-manager
 # Utilities
 glob2
 
+# PDF generation
+reportlab
+
 apify-client
