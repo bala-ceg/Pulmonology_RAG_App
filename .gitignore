@@ -3,3 +3,4 @@ vector_dbs/
 KB/
 .env
 myenv/
+.env.local
