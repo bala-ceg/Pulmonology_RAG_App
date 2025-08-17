@@ -28,6 +28,9 @@ webdriver-manager
 # Utilities
 glob2
 
+# Database
+psycopg
+
 # PDF generation
 reportlab
 

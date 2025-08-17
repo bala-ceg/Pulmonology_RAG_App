@@ -27,6 +27,8 @@ import glob
 import traceback
 from apify_client import ApifyClient
 import whisper, torch
+import psycopg
+from psycopg import sql
 
 
 
@@ -66,6 +68,15 @@ model = whisper.load_model("base").to(device)
 
 # Load environment variables
 load_dotenv()
+
+# Database configuration
+db_config = {
+    "host": os.getenv("DB_HOST"),
+    "port": os.getenv("DB_PORT"),
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD")
+}
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -1480,6 +1491,100 @@ def generate_chat_pdf():
     except Exception as e:
         print(f"Error generating chat PDF: {e}")
         return jsonify({"error": f"Failed to generate PDF: {str(e)}"}), 500
+
+
+@app.route('/search_doctors', methods=['GET'])
+def search_doctors():
+    """
+    Search for doctors by first_name and last_name from pces_users table.
+    Returns matching doctors based on partial input.
+    """
+    try:
+        query = request.args.get('q', '').strip().lower()
+        if not query:
+            return jsonify([])
+        
+        # Connect to database
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cursor:
+                # Search by first_name, last_name, or combined name
+                search_query = """
+                SELECT DISTINCT first_name, last_name 
+                FROM pces_users 
+                WHERE LOWER(first_name) LIKE %s 
+                   OR LOWER(last_name) LIKE %s 
+                   OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                ORDER BY first_name, last_name
+                LIMIT 10
+                """
+                
+                search_pattern = f"%{query}%"
+                cursor.execute(search_query, (search_pattern, search_pattern, search_pattern))
+                results = cursor.fetchall()
+                
+                # Format results
+                doctors = []
+                for row in results:
+                    if row[0] and row[1]:  # Ensure both names exist
+                        full_name = f"{row[0]} {row[1]}"
+                        doctors.append({
+                            "first_name": row[0],
+                            "last_name": row[1],
+                            "full_name": full_name
+                        })
+                
+                return jsonify(doctors)
+                
+    except Exception as e:
+        print(f"Error searching doctors: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/search_patients', methods=['GET'])
+def search_patients():
+    """
+    Search for patients by first_name and last_name from patient table.
+    Returns matching patients based on partial input.
+    """
+    try:
+        query = request.args.get('q', '').strip().lower()
+        if not query:
+            return jsonify([])
+        
+        # Connect to database
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cursor:
+                # Search by first_name, last_name, or combined name
+                search_query = """
+                SELECT DISTINCT first_name, last_name 
+                FROM patient 
+                WHERE LOWER(first_name) LIKE %s 
+                   OR LOWER(last_name) LIKE %s 
+                   OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                ORDER BY first_name, last_name
+                LIMIT 10
+                """
+                
+                search_pattern = f"%{query}%"
+                cursor.execute(search_query, (search_pattern, search_pattern, search_pattern))
+                results = cursor.fetchall()
+                
+                # Format results
+                patients = []
+                for row in results:
+                    if row[0] and row[1]:  # Ensure both names exist
+                        full_name = f"{row[0]} {row[1]}"
+                        patients.append({
+                            "first_name": row[0],
+                            "last_name": row[1],
+                            "full_name": full_name
+                        })
+                
+                return jsonify(patients)
+                
+    except Exception as e:
+        print(f"Error searching patients: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

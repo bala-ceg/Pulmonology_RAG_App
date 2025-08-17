@@ -748,10 +748,166 @@
             width: 95%;
         }
 
+        /* Autocomplete styles */
+        .autocomplete-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .autocomplete-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .autocomplete-input:focus {
+            border-color: #007bff;
+        }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .autocomplete-suggestion {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+
+        .autocomplete-suggestion:hover,
+        .autocomplete-suggestion.selected {
+            background-color: #f0f0f0;
+        }
+
+        .autocomplete-suggestion:last-child {
+            border-bottom: none;
+        }
+
+        /* Modal overlay for name input */
+        .name-input-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .name-input-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .name-input-content h3 {
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .name-field {
+            margin-bottom: 20px;
+        }
+
+        .name-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .name-input-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .name-input-buttons button {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+
     </style>
 </head>
 <body> 
     <div id="toast" class="toast"></div>
+
+    <!-- Name Input Modal -->
+    <div id="name-input-modal" class="name-input-modal" style="display: none;">
+        <div class="name-input-content">
+            <h3>Enter Names for Recording</h3>
+            
+            <div class="name-field">
+                <label for="doctor-name-input">Doctor's Name:</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="doctor-name-input" class="autocomplete-input" 
+                           placeholder="Start typing doctor's name..." autocomplete="off">
+                    <div id="doctor-suggestions" class="autocomplete-suggestions"></div>
+                </div>
+            </div>
+            
+            <div class="name-field">
+                <label for="patient-name-input">Patient's Name:</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="patient-name-input" class="autocomplete-input" 
+                           placeholder="Start typing patient's name..." autocomplete="off">
+                    <div id="patient-suggestions" class="autocomplete-suggestions"></div>
+                </div>
+            </div>
+            
+            <div class="name-input-buttons">
+                <button type="button" class="btn-secondary" onclick="cancelNameInput()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="confirmNameInput()">Start Recording</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Patient Notes Modal -->
     <div id="patient-notes-modal" class="modal-overlay">
@@ -887,6 +1043,204 @@
         function hideToast() {
             const toast = document.getElementById("toast");
             toast.classList.remove("show");
+        }
+
+        // Autocomplete functionality
+        let doctorSearchTimeout;
+        let patientSearchTimeout;
+        let selectedDoctorIndex = -1;
+        let selectedPatientIndex = -1;
+
+        function setupAutocomplete() {
+            const doctorInput = document.getElementById('doctor-name-input');
+            const patientInput = document.getElementById('patient-name-input');
+            const doctorSuggestions = document.getElementById('doctor-suggestions');
+            const patientSuggestions = document.getElementById('patient-suggestions');
+
+            // Doctor name autocomplete
+            doctorInput.addEventListener('input', function(e) {
+                const query = e.target.value.trim();
+                clearTimeout(doctorSearchTimeout);
+                selectedDoctorIndex = -1;
+
+                if (query.length < 2) {
+                    doctorSuggestions.style.display = 'none';
+                    return;
+                }
+
+                doctorSearchTimeout = setTimeout(() => {
+                    searchDoctors(query);
+                }, 300);
+            });
+
+            doctorInput.addEventListener('keydown', function(e) {
+                handleAutocompleteKeydown(e, doctorSuggestions, 'doctor');
+            });
+
+            doctorInput.addEventListener('blur', function() {
+                setTimeout(() => {
+                    doctorSuggestions.style.display = 'none';
+                }, 200);
+            });
+
+            // Patient name autocomplete
+            patientInput.addEventListener('input', function(e) {
+                const query = e.target.value.trim();
+                clearTimeout(patientSearchTimeout);
+                selectedPatientIndex = -1;
+
+                if (query.length < 2) {
+                    patientSuggestions.style.display = 'none';
+                    return;
+                }
+
+                patientSearchTimeout = setTimeout(() => {
+                    searchPatients(query);
+                }, 300);
+            });
+
+            patientInput.addEventListener('keydown', function(e) {
+                handleAutocompleteKeydown(e, patientSuggestions, 'patient');
+            });
+
+            patientInput.addEventListener('blur', function() {
+                setTimeout(() => {
+                    patientSuggestions.style.display = 'none';
+                }, 200);
+            });
+        }
+
+        async function searchDoctors(query) {
+            try {
+                const response = await fetch(`/search_doctors?q=${encodeURIComponent(query)}`);
+                const doctors = await response.json();
+                displaySuggestions(doctors, 'doctor-suggestions', 'doctor');
+            } catch (error) {
+                console.error('Error searching doctors:', error);
+            }
+        }
+
+        async function searchPatients(query) {
+            try {
+                const response = await fetch(`/search_patients?q=${encodeURIComponent(query)}`);
+                const patients = await response.json();
+                displaySuggestions(patients, 'patient-suggestions', 'patient');
+            } catch (error) {
+                console.error('Error searching patients:', error);
+            }
+        }
+
+        function displaySuggestions(suggestions, containerId, type) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            if (suggestions.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            suggestions.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-suggestion';
+                div.textContent = item.full_name;
+                div.addEventListener('click', () => {
+                    selectSuggestion(item.full_name, type);
+                });
+                container.appendChild(div);
+            });
+
+            container.style.display = 'block';
+        }
+
+        function handleAutocompleteKeydown(e, suggestionContainer, type) {
+            const suggestions = suggestionContainer.querySelectorAll('.autocomplete-suggestion');
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (type === 'doctor') {
+                    selectedDoctorIndex = Math.min(selectedDoctorIndex + 1, suggestions.length - 1);
+                } else {
+                    selectedPatientIndex = Math.min(selectedPatientIndex + 1, suggestions.length - 1);
+                }
+                updateSelection(suggestions, type);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (type === 'doctor') {
+                    selectedDoctorIndex = Math.max(selectedDoctorIndex - 1, 0);
+                } else {
+                    selectedPatientIndex = Math.max(selectedPatientIndex - 1, 0);
+                }
+                updateSelection(suggestions, type);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const selectedIndex = type === 'doctor' ? selectedDoctorIndex : selectedPatientIndex;
+                if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+                    selectSuggestion(suggestions[selectedIndex].textContent, type);
+                }
+            } else if (e.key === 'Escape') {
+                suggestionContainer.style.display = 'none';
+                if (type === 'doctor') {
+                    selectedDoctorIndex = -1;
+                } else {
+                    selectedPatientIndex = -1;
+                }
+            }
+        }
+
+        function updateSelection(suggestions, type) {
+            suggestions.forEach((suggestion, index) => {
+                suggestion.classList.remove('selected');
+            });
+
+            const selectedIndex = type === 'doctor' ? selectedDoctorIndex : selectedPatientIndex;
+            if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+                suggestions[selectedIndex].classList.add('selected');
+            }
+        }
+
+        function selectSuggestion(fullName, type) {
+            const inputId = type === 'doctor' ? 'doctor-name-input' : 'patient-name-input';
+            const suggestionId = type === 'doctor' ? 'doctor-suggestions' : 'patient-suggestions';
+            
+            document.getElementById(inputId).value = fullName;
+            document.getElementById(suggestionId).style.display = 'none';
+            
+            if (type === 'doctor') {
+                selectedDoctorIndex = -1;
+            } else {
+                selectedPatientIndex = -1;
+            }
+        }
+
+        function showNameInputModal() {
+            document.getElementById('name-input-modal').style.display = 'flex';
+            document.getElementById('doctor-name-input').value = '';
+            document.getElementById('patient-name-input').value = '';
+            document.getElementById('doctor-suggestions').style.display = 'none';
+            document.getElementById('patient-suggestions').style.display = 'none';
+            setupAutocomplete();
+            
+            // Focus on doctor input
+            setTimeout(() => {
+                document.getElementById('doctor-name-input').focus();
+            }, 100);
+        }
+
+        function cancelNameInput() {
+            document.getElementById('name-input-modal').style.display = 'none';
+        }
+
+        function confirmNameInput() {
+            const doctorName = document.getElementById('doctor-name-input').value.trim();
+            const patientName = document.getElementById('patient-name-input').value.trim();
+
+            if (!doctorName || !patientName) {
+                alert("Both doctor name and patient name are required!");
+                return;
+            }
+
+            document.getElementById('name-input-modal').style.display = 'none';
+            startPatientRecordingWithNames(doctorName, patientName);
         }
         
         // Global variables for recording functionality
@@ -1310,15 +1664,11 @@
         }
 
         async function startPatientRecording() {
-            // Get patient and doctor names upfront
-            const patientName = prompt("Enter Patient Name:");
-            const userName = prompt("Enter Doctor's Name:");
-            
-            if (!patientName || !userName) {
-                alert("Patient name and doctor name are required!");
-                return;
-            }
-            
+            // Show the name input modal instead of using prompts
+            showNameInputModal();
+        }
+
+        async function startPatientRecordingWithNames(doctorName, patientName) {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     mediaRecorder = new MediaRecorder(stream);
@@ -1357,7 +1707,7 @@
                             // Send audio to backend for transcription and summary
                             const formData = new FormData();
                             formData.append('audio', audioBlob, 'patient_recording.wav');
-                            formData.append('doctor_name', userName);
+                            formData.append('doctor_name', doctorName);
                             formData.append('patient_name', patientName);
 
                             const response = await fetch('/transcribe_patient_notes', {
@@ -1370,7 +1720,7 @@
                             if (data.success) {
                                 // Store patient data for modal
                                 currentPatientData = {
-                                    doctorName: userName,
+                                    doctorName: doctorName,
                                     patientName: patientName,
                                     dateTime: now.toISOString(),
                                     wholeText: data.transcribed_text,
