@@ -874,6 +874,72 @@
             background-color: #545b62;
         }
 
+        /* Problem row and pill styles */
+        .problem-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .pill {
+            background-color: #007bff;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: default;
+        }
+
+        .pill.large {
+            background-color: #e9ecef;
+            color: #333;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            flex: 1;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+        }
+
+        .pill.large:hover {
+            background-color: #dee2e6;
+        }
+
+       .red-box {
+        border: 2px solid red !important;  /* 🔴 force red border */
+        border-radius: 6px;
+        padding: 40px;
+        margin: 8px 20px;  /* top/bottom = 8px, left/right = 20px */
+        background-color: transparent; /* make sure background doesn't cover it */
+        padding-left: 30px;   /* space on left */
+        padding-right: 30px;  /* space on right */
+        max-width: 250px;   /* control width */
+        margin: 10px auto;  /* center with space left/right */
+        }
+
+        .red-box li {
+        margin: 10px 0;
+        }
+
+        .red-box button {
+        width: 90%;
+        margin: 0 auto;
+        display: block;
+        white-space: normal;       /* allow text wrap */
+        word-break: break-word;    /* break long words */
+        text-align: center;
+        padding: 10px;
+        box-sizing: border-box;
+        }
+
     </style>
 </head>
 <body> 
@@ -921,7 +987,10 @@
             <!-- Patient and Doctor Names - Highlighted Section -->
             <div class="names-section">
                 <div class="name-display">
-                    <strong>Patient Name: <span id="display-patient-name">[Enter Patient Name]</span></strong>
+                <strong>
+                    Patient Name: <span id="display-patient-name">[Enter Patient Name]</span>
+                    – Patient ID: <span id="display-patient-id">[Enter Patient ID]</span>
+                </strong>
                 </div>
                 <div class="name-display">
                     <strong>Doctor's Name: <span id="display-doctor-name">[Enter Doctor Name]</span></strong>
@@ -984,31 +1053,40 @@
                 <li onclick="alert('History Coming Soon')">Chat History</li>
                 <li onclick="alert('Settings Coming Soon')">Settings</li>
                 
-                <li>
+                <!-- inside your existing <ul> ... -->
+                <li class="no-bullet">
+                <ul class="red-box">
+                    <li>
                     <button class="light-btn" onclick="document.getElementById('pdf-upload').click()">Choose Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
-                </li>
-                <li>
+                    </li>
+                    <li>
                     <button class="dark-btn" onclick="uploadFiles('pdf')">Add PDF</button>
-                </li>
-                <li>
+                    </li>
+                    <li>
                     <button class="light-btn" onclick="document.getElementById('url-upload').click()">Choose URL</button>
                     <input type="file" id="url-upload" multiple style="display: none;">
-                </li>
-                <li>
+                    </li>
+                    <li>
                     <button class="dark-btn" onclick="uploadFiles('url')">Add URL</button>
-                </li>
-                <li>
+                    </li>
+                    <li>
                     <button class="dark-btn" onclick="createVectorDB()">Update KB</button>
+                    </li>
+                </ul>
                 </li>
+
+                
+            <li class="no-bullet">
+            <ul class="red-box">
                 <li>
                     <button class="dark-btn" onclick="startPatientRecording()">Record Patient Notes</button>
                 </li>
                 <li>
                     <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
                 </li>
-                
             </ul>
+            </li>
         </div>
 
         <div class="chat-container">
@@ -1019,6 +1097,13 @@
                 </div>
             </div>
             <div id="chat-messages" class="chat-messages"></div>
+            
+            <!-- Problem Row Section -->
+            <div class="problem-row">
+              <div class="pill">Patient's Problem</div>
+              <div class="pill large" id="problem-text" title="Double-click to edit">35 Years Male patient with Type 2 Diabetes and High BP</div>
+            </div>
+            
             <div class="chat-input">
                 <input type="text" id="user-input" placeholder="Type your message...">
                 <button id="send-btn" onclick="sendMessage()">Generate</button>
@@ -1088,6 +1173,9 @@
                 const query = e.target.value.trim();
                 clearTimeout(patientSearchTimeout);
                 selectedPatientIndex = -1;
+                
+                // Clear selected patient ID when user types manually
+                window.selectedPatientId = null;
 
                 if (query.length < 2) {
                     patientSuggestions.style.display = 'none';
@@ -1143,8 +1231,19 @@
                 const div = document.createElement('div');
                 div.className = 'autocomplete-suggestion';
                 div.textContent = item.full_name;
+                
+                // Store the full item data as a data attribute for patients
+                if (type === 'patient') {
+                    div.setAttribute('data-patient-id', item.patient_id);
+                    div.setAttribute('data-full-name', item.full_name);
+                }
+                
                 div.addEventListener('click', () => {
-                    selectSuggestion(item.full_name, type);
+                    if (type === 'patient') {
+                        selectSuggestion(item.full_name, type, item.patient_id);
+                    } else {
+                        selectSuggestion(item.full_name, type);
+                    }
                 });
                 container.appendChild(div);
             });
@@ -1175,7 +1274,14 @@
                 e.preventDefault();
                 const selectedIndex = type === 'doctor' ? selectedDoctorIndex : selectedPatientIndex;
                 if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-                    selectSuggestion(suggestions[selectedIndex].textContent, type);
+                    const selectedElement = suggestions[selectedIndex];
+                    if (type === 'patient') {
+                        const patientId = selectedElement.getAttribute('data-patient-id');
+                        const fullName = selectedElement.getAttribute('data-full-name');
+                        selectSuggestion(fullName, type, patientId);
+                    } else {
+                        selectSuggestion(selectedElement.textContent, type);
+                    }
                 }
             } else if (e.key === 'Escape') {
                 suggestionContainer.style.display = 'none';
@@ -1198,12 +1304,18 @@
             }
         }
 
-        function selectSuggestion(fullName, type) {
+        function selectSuggestion(fullName, type, patientId = null) {
             const inputId = type === 'doctor' ? 'doctor-name-input' : 'patient-name-input';
             const suggestionId = type === 'doctor' ? 'doctor-suggestions' : 'patient-suggestions';
             
             document.getElementById(inputId).value = fullName;
             document.getElementById(suggestionId).style.display = 'none';
+            
+            // Store patient_id when a patient is selected
+            if (type === 'patient' && patientId) {
+                window.selectedPatientId = patientId;
+                console.log('Selected patient ID:', patientId);
+            }
             
             if (type === 'doctor') {
                 selectedDoctorIndex = -1;
@@ -1218,6 +1330,10 @@
             document.getElementById('patient-name-input').value = '';
             document.getElementById('doctor-suggestions').style.display = 'none';
             document.getElementById('patient-suggestions').style.display = 'none';
+            
+            // Reset selected patient ID
+            window.selectedPatientId = null;
+            
             setupAutocomplete();
             
             // Focus on doctor input
@@ -1239,8 +1355,14 @@
                 return;
             }
 
+            // Check if patient was selected from autocomplete (has patient_id)
+            if (!window.selectedPatientId) {
+                alert("Please select a patient from the dropdown suggestions!");
+                return;
+            }
+
             document.getElementById('name-input-modal').style.display = 'none';
-            startPatientRecordingWithNames(doctorName, patientName);
+            startPatientRecordingWithNames(doctorName, patientName, window.selectedPatientId);
         }
         
         // Global variables for recording functionality
@@ -1668,12 +1790,17 @@
             showNameInputModal();
         }
 
-        async function startPatientRecordingWithNames(doctorName, patientName) {
+        async function startPatientRecordingWithNames(doctorName, patientName, patientId) {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     mediaRecorder = new MediaRecorder(stream);
                     mediaStream = stream;
                     audioChunks = []; // Reset audio chunks
+
+                    // Store names and patient ID for later use
+                    window.currentDoctorName = doctorName;
+                    window.currentPatientName = patientName;
+                    window.currentPatientId = patientId;
 
                     // Update button states
                     document.querySelector('button[onclick="startPatientRecording()"]').disabled = true;
@@ -1720,8 +1847,9 @@
                             if (data.success) {
                                 // Store patient data for modal
                                 currentPatientData = {
-                                    doctorName: doctorName,
-                                    patientName: patientName,
+                                    doctorName: window.currentDoctorName || doctorName,
+                                    patientName: window.currentPatientName || patientName,
+                                    patientId: window.currentPatientId || 'Unknown ID',
                                     dateTime: now.toISOString(),
                                     wholeText: data.transcribed_text,
                                     summary: data.summary,
@@ -1783,6 +1911,7 @@
 
             // Update name displays
             document.getElementById('display-patient-name').textContent = patientName;
+            document.getElementById('display-patient-id').textContent = currentPatientData.patientId || '[Enter Patient ID]';
             document.getElementById('display-doctor-name').textContent = currentPatientData.doctorName || '[Enter Doctor Name]';
 
             // Update session date
@@ -1884,6 +2013,7 @@
             // Get updated values from modal and currentPatientData
             const doctorName = currentPatientData.doctorName || 'Unknown Doctor';
             const patientName = currentPatientData.patientName || 'Unknown Patient';
+            const patientId = currentPatientData.patientId || 'N/A';
             const editedTranscription = document.getElementById('modal-transcription').value.trim();
             const editedSummary = document.getElementById('modal-summary').value.trim();
             const editedConclusion = document.getElementById('modal-conclusion').value.trim();
@@ -1899,11 +2029,12 @@
             // Prepare data for PDF generation
             const now = new Date(currentPatientData.dateTime);
             const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-            const formattedDate = `${now.getFullYear()} ${String(now.getMonth() + 1).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')} ${String(now.getMinutes()).padStart(2, '0')}`;
+            const formattedDate = now.toLocaleString(); // This will format like "8/23/2025, 12:05:13 AM"
             
             const pdfData = {
                 doctorName: doctorName,
                 patientName: patientName,
+                patientId: patientId,
                 dateTime: formattedDate,
                 transcription: editedTranscription,
                 summary: editedSummary || 'No summary provided',
@@ -2107,6 +2238,46 @@ Generated on: ${new Date().toLocaleString()}
                     cancelPatientNotes();
                 }
             });
+
+            // Problem text editing functionality
+            const problemText = document.getElementById('problem-text');
+            if (problemText) {
+                problemText.addEventListener('dblclick', function() {
+                    const currentText = this.textContent;
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = currentText;
+                    input.style.width = '100%';
+                    input.style.padding = '10px 20px';
+                    input.style.border = '2px solid #007bff';
+                    input.style.borderRadius = '20px';
+                    input.style.fontSize = '16px';
+                    input.style.outline = 'none';
+                    
+                    // Replace the pill with input
+                    this.style.display = 'none';
+                    this.parentNode.appendChild(input);
+                    input.focus();
+                    input.select();
+                    
+                    // Save on Enter or blur
+                    function saveEdit() {
+                        problemText.textContent = input.value || currentText;
+                        problemText.style.display = 'flex';
+                        input.remove();
+                    }
+                    
+                    input.addEventListener('blur', saveEdit);
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            saveEdit();
+                        } else if (e.key === 'Escape') {
+                            problemText.style.display = 'flex';
+                            input.remove();
+                        }
+                    });
+                });
+            }
         });
 
     </script>

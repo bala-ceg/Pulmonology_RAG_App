@@ -1294,15 +1294,18 @@ def generate_patient_pdf():
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        from reportlab.lib.colors import black
         import io
+        import os
         
         data = request.json
         
         # Extract data
         doctor_name = data.get('doctorName', '')
         patient_name = data.get('patientName', '')
+        patient_id = data.get('patientId', '')
         date_time = data.get('dateTime', '')
         transcription = data.get('transcription', '')
         summary = data.get('summary', '')
@@ -1318,48 +1321,114 @@ def generate_patient_pdf():
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
-            alignment=TA_CENTER,
+            fontSize=16,
+            spaceAfter=10,
+            alignment=TA_LEFT,
             fontName='Helvetica-Bold'
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=15,
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            textColor='blue'
         )
         
         header_style = ParagraphStyle(
             'CustomHeader',
             parent=styles['Heading2'],
-            fontSize=14,
-            spaceAfter=12,
-            spaceBefore=20,
+            fontSize=12,
+            spaceAfter=8,
+            spaceBefore=15,
             fontName='Helvetica-Bold'
+        )
+        
+        session_style = ParagraphStyle(
+            'SessionStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=5
         )
         
         # Build PDF content
         story = []
         
-        # Title
-        story.append(Paragraph("PATIENT CONSULTATION REPORT", title_style))
-        story.append(Spacer(1, 20))
+        # Add logo at the top right with patient-specific title
+        logo_path = os.path.join(os.path.dirname(__file__), 'ClientLogo101.png')
+        patient_display_name = patient_name if patient_name else "Patient Name"
+        main_title = f"Patient – {patient_display_name} – Recording Notes"
         
-        # Header Information
-        story.append(Paragraph("Header Information:", header_style))
-        story.append(Paragraph(f"<b>Doctor Name:</b> {doctor_name}", styles['Normal']))
-        story.append(Paragraph(f"<b>Patient Name:</b> {patient_name}", styles['Normal']))
-        story.append(Paragraph(f"<b>Date:</b> {date_time}", styles['Normal']))
-        story.append(Spacer(1, 20))
+        if os.path.exists(logo_path):
+            try:
+                # Create a table to position title on left and logo on right
+                logo_img = Image(logo_path, width=1.5*inch, height=0.9*inch)
+                title_paragraph = Paragraph(main_title, title_style)
+                
+                # Create table with title and logo
+                header_data = [[title_paragraph, logo_img]]
+                header_table = Table(header_data, colWidths=[4.5*inch, 2*inch])
+                header_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                story.append(header_table)
+                story.append(Spacer(1, 15))
+            except Exception as e:
+                print(f"Warning: Could not add logo to PDF: {e}")
+                # Fallback to just title
+                story.append(Paragraph(main_title, title_style))
+                story.append(Spacer(1, 15))
+        else:
+            # Fallback to just title if logo doesn't exist
+            story.append(Paragraph(main_title, title_style))
+            story.append(Spacer(1, 15))
         
-        # Original Text
-        story.append(Paragraph("Original Text:", header_style))
-        story.append(Paragraph(transcription, styles['Normal']))
-        story.append(Spacer(1, 20))
+        # Add "Patient Recording Notes" subtitle
+        story.append(Paragraph("Patient Recording Notes", subtitle_style))
+        story.append(Spacer(1, 10))
         
-        # Summary
-        story.append(Paragraph("Summary:", header_style))
-        story.append(Paragraph(summary, styles['Normal']))
-        story.append(Spacer(1, 20))
+        # Patient and Doctor Information
+        patient_id_display = patient_id if patient_id else "N/A"
+        patient_info = f"Patient Name: {patient_display_name} – Patient ID: {patient_id_display}"
+        doctor_info = f"Doctor's Name: {doctor_name if doctor_name else 'Unknown Doctor'}"
         
-        # Conclusion
-        story.append(Paragraph("Conclusion:", header_style))
-        story.append(Paragraph(conclusion, styles['Normal']))
+        story.append(Paragraph(patient_info, styles['Normal']))
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(doctor_info, styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Session Information
+        story.append(Paragraph("Session Information", header_style))
+        story.append(Paragraph("Transcription Engine: Whisper; Summary Engine: OpenAI", session_style))
+        
+        # Format date
+        display_date = date_time if date_time else datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
+        story.append(Paragraph(f"Date: {display_date}", session_style))
+        story.append(Spacer(1, 15))
+        
+        # Original Transcription Text
+        story.append(Paragraph("Original Transcription Text", header_style))
+        transcription_text = transcription if transcription else "No transcription available"
+        story.append(Paragraph(transcription_text, styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Medical Summary
+        story.append(Paragraph("Medical Summary", header_style))
+        summary_text = summary if summary else "No summary available"
+        story.append(Paragraph(summary_text, styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Conclusion & Recommendations
+        story.append(Paragraph("Conclusion & Recommendations", header_style))
+        conclusion_text = conclusion if conclusion else "No conclusion available"
+        story.append(Paragraph(conclusion_text, styles['Normal']))
         
         # Build PDF
         doc.build(story)
@@ -1388,10 +1457,11 @@ def generate_chat_pdf():
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
         from reportlab.lib.colors import black
         import io
+        import os
         
         data = request.json
         
@@ -1447,6 +1517,17 @@ def generate_chat_pdf():
         
         # Build PDF content
         story = []
+        
+        # Add logo at the top
+        logo_path = os.path.join(os.path.dirname(__file__), 'ClientLogo101.png')
+        if os.path.exists(logo_path):
+            try:
+                logo = Image(logo_path, width=2*inch, height=1.2*inch)
+                logo.hAlign = 'CENTER'
+                story.append(logo)
+                story.append(Spacer(1, 20))
+            except Exception as e:
+                print(f"Warning: Could not add logo to PDF: {e}")
         
         # Header section
         story.append(Paragraph(f"Doctor Name: {doctor_name}", header_style))
@@ -1556,7 +1637,7 @@ def search_patients():
             with conn.cursor() as cursor:
                 # Search by first_name, last_name, or combined name
                 search_query = """
-                SELECT DISTINCT first_name, last_name 
+                SELECT DISTINCT patient_id, first_name, last_name 
                 FROM patient 
                 WHERE LOWER(first_name) LIKE %s 
                    OR LOWER(last_name) LIKE %s 
@@ -1572,11 +1653,12 @@ def search_patients():
                 # Format results
                 patients = []
                 for row in results:
-                    if row[0] and row[1]:  # Ensure both names exist
-                        full_name = f"{row[0]} {row[1]}"
+                    if row[1] and row[2]:  # Ensure both names exist
+                        full_name = f"{row[1]} {row[2]}"
                         patients.append({
-                            "first_name": row[0],
-                            "last_name": row[1],
+                            "patient_id": row[0],
+                            "first_name": row[1],
+                            "last_name": row[2],
                             "full_name": full_name
                         })
                 
