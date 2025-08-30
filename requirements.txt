@@ -35,3 +35,15 @@ psycopg
 reportlab
 
 apify-client
+
+# Azure Storage for cloud uploads
+azure-storage-blob
+azure-core
+
+# Voice diarization and processing
+pyannote.audio
+torch
+torchaudio
+
+# OpenAI for role assignment
+openai

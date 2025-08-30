@@ -9,6 +9,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 import os
 import json
+import io
 from datetime import datetime
 import whisper
 import tempfile
@@ -28,6 +29,26 @@ import traceback
 from apify_client import ApifyClient
 import whisper, torch
 import psycopg
+import asyncio
+import threading
+
+# Import new utilities
+try:
+    import importlib
+    import azure_storage
+    importlib.reload(azure_storage)  # Force reload the module
+    from azure_storage import get_storage_manager
+    AZURE_AVAILABLE = True
+except ImportError:
+    print("Azure storage not available. Install with: pip install azure-storage-blob")
+    AZURE_AVAILABLE = False
+
+try:
+    from voice_diarization import get_diarization_processor
+    DIARIZATION_AVAILABLE = True
+except ImportError:
+    print("Voice diarization not available. Install dependencies: pip install pyannote.audio torch")
+    DIARIZATION_AVAILABLE = False
 from psycopg import sql
 
 
@@ -1289,7 +1310,7 @@ def create_vector_db():
 
 @app.route("/generate_patient_pdf", methods=["POST"])
 def generate_patient_pdf():
-    """Generate PDF for patient notes"""
+    """Generate PDF for patient notes with patient problem capture and Azure upload"""
     try:
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1310,6 +1331,9 @@ def generate_patient_pdf():
         transcription = data.get('transcription', '')
         summary = data.get('summary', '')
         conclusion = data.get('conclusion', '')
+        
+        # NEW: Extract patient problem (required for first PDF only)
+        patient_problem = data.get('patientProblem', '')
         
         # Create PDF in memory
         buffer = io.BytesIO()
@@ -1413,6 +1437,12 @@ def generate_patient_pdf():
         story.append(Paragraph(f"Date: {display_date}", session_style))
         story.append(Spacer(1, 15))
         
+        # NEW: Patient Problem (if provided)
+        if patient_problem:
+            story.append(Paragraph("Patient Problem", header_style))
+            story.append(Paragraph(patient_problem, styles['Normal']))
+            story.append(Spacer(1, 15))
+        
         # Original Transcription Text
         story.append(Paragraph("Original Transcription Text", header_style))
         transcription_text = transcription if transcription else "No transcription available"
@@ -1433,12 +1463,42 @@ def generate_patient_pdf():
         # Build PDF
         doc.build(story)
         buffer.seek(0)
+        pdf_content = buffer.getvalue()
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        filename = f"{patient_name.upper().replace(' ', '')}-{timestamp}.pdf"
+        
+        # NEW: Upload to Azure if available
+        azure_url = None
+        if AZURE_AVAILABLE:
+            try:
+                # Prepare metadata
+                metadata = {
+                    'doctor_name': doctor_name,
+                    'patient_name': patient_name,
+                    'patient_id': patient_id,
+                    'date_time': date_time,
+                    'patient_problem': patient_problem,
+                    'pdf_type': 'patient_notes',
+                    'generated_at': datetime.now().isoformat()
+                }
+                
+                # Upload to patient summary container
+                azure_url = upload_pdf_to_azure(pdf_content, filename, "patient_summary", metadata)
+                
+            except Exception as e:
+                print(f"Azure upload failed: {e}")
         
         # Return PDF as response
         from flask import make_response
-        response = make_response(buffer.getvalue())
+        response = make_response(pdf_content)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename="{patient_name.upper().replace(" ", "")}-{data.get("timestamp", "")}.pdf"'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Add Azure URL to response headers if available
+        if azure_url:
+            response.headers['X-Azure-URL'] = azure_url
         
         return response
         
@@ -1467,6 +1527,7 @@ def generate_chat_pdf():
         
         # Extract data
         doctor_name = data.get('doctorName', 'Dr. Name')
+        patient_name = data.get('patientName', '')  # NEW: Include patient name
         messages = data.get('messages', [])
         json_data = data.get('jsonData', '')
         
@@ -1474,9 +1535,12 @@ def generate_chat_pdf():
         now = datetime.now()
         formatted_date = now.strftime("%Y %m %d %H %M")
         
-        # Create PDF filename
+        # Create PDF filename - include patient name if provided
         timestamp = now.strftime("%Y%m%d%H%M")
-        filename = f"{doctor_name.upper().replace(' ', '')}-{timestamp}.pdf"
+        if patient_name:
+            filename = f"{doctor_name.upper().replace(' ', '')}-{patient_name.upper().replace(' ', '')}-{timestamp}.pdf"
+        else:
+            filename = f"{doctor_name.upper().replace(' ', '')}-{timestamp}.pdf"
         
         # Create PDF in memory
         buffer = io.BytesIO()
@@ -1557,12 +1621,36 @@ def generate_chat_pdf():
         # Build PDF
         doc.build(story)
         buffer.seek(0)
+        pdf_content = buffer.getvalue()
+        
+        # NEW: Upload to Azure if available
+        azure_url = None
+        if AZURE_AVAILABLE:
+            try:
+                # Prepare metadata
+                metadata = {
+                    'doctor_name': doctor_name,
+                    'pdf_type': 'research_chat',
+                    'generated_at': datetime.now().isoformat(),
+                    'message_count': len(messages),
+                    'has_json_data': bool(json_data)
+                }
+                
+                # Upload to research container
+                azure_url = upload_pdf_to_azure(pdf_content, filename, "research", metadata)
+                
+            except Exception as e:
+                print(f"Azure upload failed: {e}")
         
         # Return PDF as response
         from flask import make_response
-        response = make_response(buffer.getvalue())
+        response = make_response(pdf_content)
         response.headers['Content-Type'] = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Add Azure URL to response headers if available
+        if azure_url:
+            response.headers['X-Azure-URL'] = azure_url
         
         return response
         
@@ -1572,6 +1660,225 @@ def generate_chat_pdf():
     except Exception as e:
         print(f"Error generating chat PDF: {e}")
         return jsonify({"error": f"Failed to generate PDF: {str(e)}"}), 500
+
+
+@app.route("/generate_conversation_pdf", methods=["POST"])
+def generate_conversation_pdf():
+    """Generate PDF for conversation segments with voice diarization results"""
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        from reportlab.lib.colors import black, green, blue
+        import io
+        import os
+        
+        data = request.json
+        
+        # Extract data
+        doctor_name = data.get('doctorName', 'Doctor')
+        patient_name = data.get('patientName', 'Patient')
+        date_time = data.get('dateTime', '')
+        segments = data.get('segments', [])
+        full_transcript = data.get('fullTranscript', '')
+        processing_info = data.get('processingInfo', {})
+        is_duplicate = data.get('isDuplicate', False)
+        
+        # Create PDF in memory
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch, leftMargin=inch, 
+                               topMargin=inch, bottomMargin=inch)
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=10,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold'
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=15,
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            textColor=blue
+        )
+        
+        header_style = ParagraphStyle(
+            'CustomHeader',
+            parent=styles['Heading2'],
+            fontSize=12,
+            spaceAfter=8,
+            spaceBefore=15,
+            fontName='Helvetica-Bold'
+        )
+        
+        segment_style = ParagraphStyle(
+            'SegmentStyle',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceAfter=10,
+            fontName='Helvetica'
+        )
+        
+        doctor_segment_style = ParagraphStyle(
+            'DoctorSegmentStyle',
+            parent=segment_style,
+            leftIndent=20,
+            textColor=green
+        )
+        
+        patient_segment_style = ParagraphStyle(
+            'PatientSegmentStyle',
+            parent=segment_style,
+            leftIndent=20,
+            textColor=blue
+        )
+        
+        # Build PDF content
+        story = []
+        
+        # Add logo and title
+        logo_path = os.path.join(os.path.dirname(__file__), 'ClientLogo101.png')
+        duplicate_text = " (Duplicate)" if is_duplicate else ""
+        main_title = f"Doctor-Patient Conversation Analysis{duplicate_text}"
+        
+        if os.path.exists(logo_path):
+            try:
+                logo_img = Image(logo_path, width=1.5*inch, height=0.9*inch)
+                title_paragraph = Paragraph(main_title, title_style)
+                
+                header_data = [[title_paragraph, logo_img]]
+                header_table = Table(header_data, colWidths=[4.5*inch, 2*inch])
+                header_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                story.append(header_table)
+                story.append(Spacer(1, 15))
+            except Exception as e:
+                print(f"Warning: Could not add logo to PDF: {e}")
+                story.append(Paragraph(main_title, title_style))
+                story.append(Spacer(1, 15))
+        else:
+            story.append(Paragraph(main_title, title_style))
+            story.append(Spacer(1, 15))
+        
+        # Add subtitle
+        story.append(Paragraph("Voice Diarization & Transcription Results", subtitle_style))
+        story.append(Spacer(1, 10))
+        
+        # Participant Information
+        doctor_info = f"Doctor: {doctor_name}"
+        patient_info = f"Patient: {patient_name}"
+        
+        story.append(Paragraph(doctor_info, styles['Normal']))
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(patient_info, styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Processing Information
+        story.append(Paragraph("Processing Information", header_style))
+        engine_info = processing_info.get('engine', 'OpenAI Voice Diarization + Whisper')
+        total_segments = processing_info.get('totalSegments', len(segments))
+        
+        story.append(Paragraph(f"Engine: {engine_info}", styles['Normal']))
+        story.append(Paragraph(f"Total Segments: {total_segments}", styles['Normal']))
+        
+        # Format date
+        display_date = date_time if date_time else datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
+        story.append(Paragraph(f"Processing Date: {display_date}", styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Conversation Segments
+        if segments and len(segments) > 0:
+            story.append(Paragraph("Conversation Segments", header_style))
+            
+            for i, segment in enumerate(segments):
+                role = segment.get('role', 'Unknown')
+                text = segment.get('text', '')
+                start_time = segment.get('start', '')
+                end_time = segment.get('end', '')
+                confidence = segment.get('confidence', 0)
+                
+                # Create segment header
+                timing_info = f"[{start_time} - {end_time}]" if start_time and end_time else ""
+                confidence_info = f"(Confidence: {int(confidence * 100)}%)" if confidence > 0 else ""
+                header_text = f"{role} {timing_info} {confidence_info}"
+                
+                # Choose style based on role
+                if role.lower() == 'doctor':
+                    story.append(Paragraph(f"<b>{header_text}</b>", doctor_segment_style))
+                    story.append(Paragraph(text, doctor_segment_style))
+                else:  # Patient
+                    story.append(Paragraph(f"<b>{header_text}</b>", patient_segment_style))
+                    story.append(Paragraph(text, patient_segment_style))
+                
+                story.append(Spacer(1, 8))
+            
+            story.append(Spacer(1, 15))
+        
+        # Full Transcript
+        story.append(Paragraph("Complete Transcript", header_style))
+        transcript_text = full_transcript if full_transcript else "No transcript available"
+        story.append(Paragraph(transcript_text, styles['Normal']))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        pdf_content = buffer.getvalue()
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        duplicate_suffix = "-DUPLICATE" if is_duplicate else ""
+        filename = f"CONVERSATION-{doctor_name.upper().replace(' ', '')}{duplicate_suffix}-{timestamp}.pdf"
+        
+        # Upload to Azure if available
+        azure_url = None
+        if AZURE_AVAILABLE:
+            try:
+                metadata = {
+                    'doctor_name': doctor_name,
+                    'patient_name': patient_name,
+                    'date_time': date_time,
+                    'pdf_type': 'conversation_segments',
+                    'is_duplicate': is_duplicate,
+                    'total_segments': len(segments),
+                    'generated_at': datetime.now().isoformat()
+                }
+                
+                azure_url = upload_pdf_to_azure(pdf_content, filename, "conversation", metadata)
+                
+            except Exception as e:
+                print(f"Azure upload failed: {e}")
+        
+        # Return PDF as response
+        from flask import make_response
+        response = make_response(pdf_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        if azure_url:
+            response.headers['X-Azure-URL'] = azure_url
+        
+        return response
+        
+    except ImportError:
+        return jsonify({"error": "PDF generation not available. Please install reportlab."}), 500
+    except Exception as e:
+        print(f"Error generating conversation PDF: {e}")
+        return jsonify({"error": f"Failed to generate conversation PDF: {str(e)}"}), 500
 
 
 @app.route('/search_doctors', methods=['GET'])
@@ -1667,6 +1974,260 @@ def search_patients():
     except Exception as e:
         print(f"Error searching patients: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/transcribe_doctor_patient_conversation", methods=["POST"])
+def transcribe_doctor_patient_conversation():
+    """Handle doctor-patient conversation recording with voice diarization"""
+    if not DIARIZATION_AVAILABLE:
+        return jsonify({"error": "Voice diarization not available. Please install required dependencies."}), 500
+    
+    try:
+        audio_file = request.files['audio']
+        doctor_name = request.form.get('doctor_name', 'Unknown Doctor')
+        patient_name = request.form.get('patient_name', 'Unknown Patient')
+        
+        # Save uploaded audio to temporary file with proper format
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            audio_file.save(temp_audio.name)
+            temp_audio_path = temp_audio.name
+        
+        # Convert audio to proper format for pyannote
+        try:
+            import librosa
+            import soundfile as sf
+            
+            # Load audio and convert to proper format
+            audio_data, sample_rate = librosa.load(temp_audio_path, sr=16000, mono=True)
+            
+            # Create a new properly formatted WAV file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_audio:
+                sf.write(converted_audio.name, audio_data, sample_rate, format='WAV', subtype='PCM_16')
+                converted_audio_path = converted_audio.name
+            
+            # Clean up original temp file
+            os.unlink(temp_audio_path)
+            temp_audio_path = converted_audio_path
+            
+        except ImportError:
+            # If librosa/soundfile not available, try with pydub
+            try:
+                from pydub import AudioSegment
+                import io
+                
+                # Load the audio file
+                audio_segment = AudioSegment.from_file(temp_audio_path)
+                
+                # Convert to proper format: 16kHz, mono, 16-bit PCM
+                audio_segment = audio_segment.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+                
+                # Export as proper WAV
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_audio:
+                    audio_segment.export(converted_audio.name, format="wav")
+                    converted_audio_path = converted_audio.name
+                
+                # Clean up original temp file
+                os.unlink(temp_audio_path)
+                temp_audio_path = converted_audio_path
+                
+            except ImportError:
+                # If no audio processing libraries available, log warning and continue
+                print("Warning: No audio processing libraries available. Using original audio format.")
+        
+        try:
+            # Process conversation with voice diarization (OpenAI-only mode)
+            diarization_processor = get_diarization_processor()
+            
+            # Run async function in thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            print("🔄 Using OpenAI-only processing (bypassing pyannote)")
+            result = loop.run_until_complete(
+                diarization_processor.process_doctor_patient_conversation_openai_only(temp_audio_path)
+            )
+            
+            if result.get("error"):
+                return jsonify({"success": False, "error": result["error"]}), 500
+            
+            # Prepare conversation data
+            conversation_data = {
+                "doctor_name": doctor_name,
+                "patient_name": patient_name,
+                "session_date": datetime.now().isoformat(),
+                "duration": result.get("total_duration", "Unknown"),
+                "total_segments": result.get("total_segments", 0),
+                "doctor_segments": result.get("doctor_segments", 0),
+                "patient_segments": result.get("patient_segments", 0),
+                "speakers_detected": result.get("speakers_detected", 0),
+                "transcript": result.get("transcript", []),
+                "raw_transcript": result.get("raw_transcript", ""),
+                "role_mapping": result.get("role_mapping", {})
+            }
+            
+            return jsonify({
+                "success": True,
+                "conversation_data": conversation_data,
+                "message": "Doctor-patient conversation processed successfully"
+            })
+            
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_audio_path)
+            except:
+                pass
+                
+    except Exception as e:
+        print(f"Error processing doctor-patient conversation: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Update existing PDF generation functions to include Azure uploads
+def upload_pdf_to_azure(pdf_content, filename, pdf_type, metadata=None):
+    """Helper function to upload PDFs to Azure"""
+    if not AZURE_AVAILABLE:
+        print("Azure storage not available")
+        return None
+    
+    try:
+        storage_manager = get_storage_manager()
+        
+        if pdf_type == "research":
+            return storage_manager.upload_research_pdf(pdf_content, filename, metadata.get('patient_problem'), metadata)
+        elif pdf_type == "patient_summary":
+            # Extract patient data from metadata for the patient_data parameter
+            patient_data = {
+                'patient_name': metadata.get('patient_name'),
+                'patient_id': metadata.get('patient_id'),
+                'doctor_name': metadata.get('doctor_name'),
+                'session_date': metadata.get('date_time')
+            }
+            return storage_manager.upload_patient_summary_pdf(pdf_content, filename, patient_data, metadata)
+        elif pdf_type == "conversation":
+            # Extract conversation data from metadata for the conversation_data parameter
+            conversation_data = {
+                'doctor_name': metadata.get('doctor_name'),
+                'patient_name': metadata.get('patient_name'),
+                'duration': metadata.get('duration', 'Unknown'),
+                'session_date': metadata.get('date_time')
+            }
+            return storage_manager.upload_conversation_pdf(pdf_content, filename, conversation_data, metadata)
+        
+    except Exception as e:
+        print(f"Azure upload failed: {e}")
+        return None
+
+
+@app.route('/check_azure_files', methods=['GET'])
+def check_azure_files():
+    """Check what files have been uploaded to Azure"""
+    if not AZURE_AVAILABLE:
+        return jsonify({"error": "Azure storage not available"}), 500
+    
+    try:
+        storage_manager = get_storage_manager()
+        
+        # Get file type filter from query params
+        file_type = request.args.get('type', 'all')  # 'research', 'patient_summary', 'conversation', or 'all'
+        
+        files_info = {}
+        
+        if file_type in ['research', 'all']:
+            research_files = storage_manager.list_files_in_container("contoso", "pces/documents/research/")
+            files_info['research_files'] = research_files
+        
+        if file_type in ['patient_summary', 'all']:
+            patient_files = storage_manager.list_files_in_container("contoso", "pces/documents/doc-patient-summary/")
+            files_info['patient_summary_files'] = patient_files
+        
+        if file_type in ['conversation', 'all']:
+            conversation_files = storage_manager.list_files_in_container("contoso", "pces/documents/conversation/")
+            files_info['conversation_files'] = conversation_files
+        
+        # Count totals
+        total_files = sum(len(files) for files in files_info.values())
+        
+        return jsonify({
+            "success": True,
+            "total_files": total_files,
+            "files": files_info,
+            "message": f"Found {total_files} files in Azure storage"
+        })
+        
+    except Exception as e:
+        print(f"Error checking Azure files: {e}")
+        return jsonify({"error": f"Failed to check Azure files: {str(e)}"}), 500
+
+
+@app.route('/check_azure_file/<path:filename>', methods=['GET'])
+def check_azure_file(filename):
+    """Check if a specific file exists in Azure"""
+    if not AZURE_AVAILABLE:
+        return jsonify({"error": "Azure storage not available"}), 500
+    
+    try:
+        storage_manager = get_storage_manager()
+        container_name = request.args.get('container', 'contoso')
+        file_path = request.args.get('path', f'pces/documents/research/{filename}')
+        
+        # Check if file exists
+        exists = storage_manager.check_file_exists(container_name, file_path)
+        
+        if exists:
+            # Get file metadata
+            file_info = storage_manager.get_file_metadata(container_name, file_path)
+            return jsonify({
+                "success": True,
+                "exists": True,
+                "file_info": file_info
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "exists": False,
+                "message": f"File {filename} not found in Azure"
+            })
+        
+    except Exception as e:
+        print(f"Error checking Azure file: {e}")
+        return jsonify({"error": f"Failed to check Azure file: {str(e)}"}), 500
+
+
+@app.route('/azure_storage_info', methods=['GET'])
+def azure_storage_info():
+    """Get Azure storage configuration and status"""
+    try:
+        info = {
+            "azure_available": AZURE_AVAILABLE,
+            "connection_configured": bool(os.getenv('AZURE_STORAGE_CONNECTION_STRING')),
+            "containers": {
+                "contoso": {
+                    "research_path": "pces/documents/research/",
+                    "patient_summary_path": "pces/documents/doc-patient-summary/",
+                    "conversations_path": "pces/documents/conversation/"
+                }
+            }
+        }
+        
+        if AZURE_AVAILABLE and info["connection_configured"]:
+            try:
+                storage_manager = get_storage_manager()
+                # Test connection by listing containers
+                containers = []
+                for container in storage_manager.blob_service_client.list_containers():
+                    containers.append(container.name)
+                info["available_containers"] = containers
+                info["connection_status"] = "Connected"
+            except Exception as e:
+                info["connection_status"] = f"Connection failed: {str(e)}"
+        else:
+            info["connection_status"] = "Not configured"
+        
+        return jsonify(info)
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to get Azure info: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
