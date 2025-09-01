@@ -1517,49 +1517,109 @@ def generate_chat_pdf():
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
         from reportlab.lib.colors import black
         import io
         import os
         
         data = request.json
-        
+
         # Extract data
         doctor_name = data.get('doctorName', 'Dr. Name')
-        patient_name = data.get('patientName', '')  # NEW: Include patient name
+        patient_name = data.get('patientName', '')
+        patient_id = data.get('patientId', '')
+        patient_problem = data.get('patientProblem', '')
         messages = data.get('messages', [])
         json_data = data.get('jsonData', '')
         
-        # Generate timestamp in YYYY MM DD HH MM format
+        # Debug logging
+        print(f"DEBUG: Received data in generate_chat_pdf:")
+        print(f"  doctor_name: {doctor_name}")
+        print(f"  patient_name: {patient_name}")
+        print(f"  patient_id: {patient_id}")
+        print(f"  patient_problem: '{patient_problem}'")
+        print(f"  messages count: {len(messages)}")
+        print(f"  json_data: {json_data}")
+        print(f"DEBUG: Full request data: {data}")  # Show full JSON
+
+        # Generate timestamp
         now = datetime.now()
-        formatted_date = now.strftime("%Y %m %d %H %M")
-        
+        formatted_date = now.strftime("%m/%d/%Y, %I:%M:%S %p")
+
         # Create PDF filename - include patient name if provided
         timestamp = now.strftime("%Y%m%d%H%M")
         if patient_name:
             filename = f"{doctor_name.upper().replace(' ', '')}-{patient_name.upper().replace(' ', '')}-{timestamp}.pdf"
         else:
             filename = f"{doctor_name.upper().replace(' ', '')}-{timestamp}.pdf"
-        
+
         # Create PDF in memory
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch, leftMargin=inch, 
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch, leftMargin=inch,
                                topMargin=inch, bottomMargin=inch)
-        
+
         # Get styles
         styles = getSampleStyleSheet()
-        
-        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=10,
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold'
+        )
+
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=15,
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            textColor='blue'
+        )
+
         header_style = ParagraphStyle(
             'HeaderStyle',
-            parent=styles['Normal'],
+            parent=styles['Heading2'],
             fontSize=12,
-            fontName='Helvetica-Bold',
-            spaceAfter=12,
-            alignment=TA_LEFT
+            spaceAfter=8,
+            spaceBefore=15,
+            fontName='Helvetica-Bold'
         )
-        
+
+        session_style = ParagraphStyle(
+            'SessionStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=5
+        )
+
+        content_style = ParagraphStyle(
+            'ContentStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=8,
+            alignment=TA_LEFT,
+            spaceBefore=2,
+            leading=14  # Increase line spacing for better readability
+        )
+
+        # Style for citation content with better formatting
+        citation_style = ParagraphStyle(
+            'CitationStyle',
+            parent=styles['Normal'],
+            fontSize=9,
+            fontName='Helvetica',
+            spaceAfter=4,
+            alignment=TA_LEFT,
+            leftIndent=10,
+            leading=12
+        )
+
         section_header_style = ParagraphStyle(
             'SectionHeader',
             parent=styles['Normal'],
@@ -1569,89 +1629,208 @@ def generate_chat_pdf():
             spaceBefore=12,
             alignment=TA_CENTER
         )
-        
-        content_style = ParagraphStyle(
-            'ContentStyle',
-            parent=styles['Normal'],
-            fontSize=10,
-            fontName='Helvetica',
-            spaceAfter=8,
-            alignment=TA_LEFT
-        )
-        
+
         # Build PDF content
         story = []
-        
-        # Add logo at the top
+
+        # Title with optional patient name
+        patient_display_name = patient_name if patient_name else "Patient Name"
+        main_title = f"Patient – {patient_display_name} – Research"
+
         logo_path = os.path.join(os.path.dirname(__file__), 'ClientLogo101.png')
+        # Create a table to position title on left and logo on right (match patient PDF layout)
         if os.path.exists(logo_path):
             try:
-                logo = Image(logo_path, width=2*inch, height=1.2*inch)
-                logo.hAlign = 'CENTER'
-                story.append(logo)
-                story.append(Spacer(1, 20))
+                logo_img = Image(logo_path, width=1.5*inch, height=0.9*inch)
+                title_paragraph = Paragraph(main_title, title_style)
+
+                header_data = [[title_paragraph, logo_img]]
+                header_table = Table(header_data, colWidths=[4.5*inch, 2*inch])
+                header_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                story.append(header_table)
+                story.append(Spacer(1, 15))
             except Exception as e:
                 print(f"Warning: Could not add logo to PDF: {e}")
-        
-        # Header section
-        story.append(Paragraph(f"Doctor Name: {doctor_name}", header_style))
-        story.append(Paragraph(f"Date: {formatted_date}", header_style))
-        story.append(Spacer(1, 20))
-        
+                story.append(Paragraph(main_title, title_style))
+                story.append(Spacer(1, 15))
+        else:
+            story.append(Paragraph(main_title, title_style))
+            story.append(Spacer(1, 15))
+
+        # Subtitle
+        story.append(Paragraph("Patient Recording Notes", subtitle_style))
+        story.append(Spacer(1, 10))
+
+        # Patient and Doctor Information
+        # Only include patient ID if provided (avoid showing 'N/A')
+        if patient_id:
+            patient_info = f"Patient Name: {patient_display_name} – Patient ID: {patient_id}"
+        else:
+            patient_info = f"Patient Name: {patient_display_name}"
+        doctor_info = f"Doctor's Name: {doctor_name if doctor_name else 'Unknown Doctor'}"
+
+        story.append(Paragraph(patient_info, styles['Normal']))
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(doctor_info, styles['Normal']))
+        story.append(Spacer(1, 15))
+
+        # Session Information
+        story.append(Paragraph("Session Information", header_style))
+        story.append(Paragraph(f"Date: {formatted_date}", session_style))
+        story.append(Spacer(1, 12))
+
+        # Patient Problem (if provided)
+        if patient_problem:
+            print(f"DEBUG: Adding Patient Problem section: '{patient_problem}'")
+            story.append(Paragraph("Patient Problem", header_style))
+            story.append(Paragraph(patient_problem, styles['Normal']))
+            story.append(Spacer(1, 12))
+        else:
+            print("DEBUG: No patient problem provided, skipping section")
+
         # JSON Data section (if provided)
         if json_data:
             story.append(Paragraph("JSON Data:", section_header_style))
             story.append(Paragraph(json_data, content_style))
-            story.append(Spacer(1, 20))
-        
-        # Chat conversation
+            story.append(Spacer(1, 12))
+
+        # Conversation
+        story.append(Paragraph("Conversation", header_style))
+        story.append(Spacer(1, 6))
+
+        def convert_markdown_to_reportlab(text):
+            """Convert markdown formatting to ReportLab-compatible HTML-like formatting"""
+            import re
+            
+            # Handle special sections first
+            
+            # 1. Handle Citations section - format as a separate section with proper line breaks
+            citations_match = re.search(r'\*\*Citations:\*\*(.*?)(?=\*\*Query Routing:|$)', text, re.DOTALL)
+            citations_text = ""
+            if citations_match:
+                citations_content = citations_match.group(1).strip()
+                
+                # Process individual citations to add proper line breaks
+                # Handle patterns like **Text** **Text** where multiple citations are adjacent
+                citations_content = re.sub(r'\*\*\s*\*\*', '** **', citations_content)  # Fix broken bold markers
+                
+                # Split by pattern where one citation ends and another begins
+                # Look for **...** followed by **...** 
+                citation_entries = re.findall(r'\*\*[^*]+?\*\*', citations_content)
+                
+                formatted_citations = []
+                for entry in citation_entries:
+                    if entry.strip():
+                        # Convert to ReportLab format
+                        formatted_entry = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', entry.strip())
+                        formatted_citations.append(formatted_entry)
+                
+                if formatted_citations:
+                    citations_text = f"<br/><br/><b>Citations:</b><br/>• " + "<br/>• ".join(formatted_citations) + "<br/>"
+                else:
+                    # Fallback to simple formatting
+                    simple_citations = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', citations_content)
+                    citations_text = f"<br/><br/><b>Citations:</b><br/>{simple_citations}<br/>"
+                
+                # Remove the original citations from text
+                text = re.sub(r'\*\*Citations:\*\*.*?(?=\*\*Query Routing:|$)', '', text, flags=re.DOTALL)
+            
+            # 2. Handle Query Routing section
+            routing_match = re.search(r'\*\*Query Routing:\*\*(.*?)$', text, re.DOTALL)
+            routing_text = ""
+            if routing_match:
+                routing_content = routing_match.group(1).strip()
+                routing_text = f"<br/><br/><b>Query Routing:</b><br/>{routing_content}"
+                # Remove the original routing from text
+                text = re.sub(r'\*\*Query Routing:\*\*.*?$', '', text, flags=re.DOTALL)
+            
+            # Clean up the main text
+            text = text.strip()
+            
+            # 3. Convert remaining **bold** to <b>bold</b>
+            text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+            
+            # 4. Convert *italic* to <i>italic</i>
+            text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
+            
+            # 5. Handle line breaks - convert \n to <br/>
+            text = text.replace('\n', '<br/>')
+            
+            # 6. Handle multiple line breaks for better paragraph spacing
+            text = re.sub(r'(<br/>){3,}', '<br/><br/>', text)
+            
+            # 7. Clean up extra spaces
+            text = re.sub(r'\s+', ' ', text)
+            
+            # Combine all parts
+            full_text = text + citations_text + routing_text
+            
+            return full_text.strip()
+
         for i, message in enumerate(messages):
             role = message.get('role', '')
             content = message.get('content', '')
             
+            # Convert markdown formatting to ReportLab-compatible format
+            formatted_content = convert_markdown_to_reportlab(content)
+
             if role == 'user':
-                story.append(Paragraph("****** Doctor Input *****", section_header_style))
-                story.append(Paragraph(content, content_style))
-                story.append(Spacer(1, 12))
+                story.append(Paragraph("Doctor Input:", section_header_style))
+                story.append(Paragraph(formatted_content, content_style))
+                story.append(Spacer(1, 8))
             elif role == 'ai':
-                story.append(Paragraph("****** System Output *****", section_header_style))
-                story.append(Paragraph(content, content_style))
-                story.append(Spacer(1, 12))
-        
+                story.append(Paragraph("System Output:", section_header_style))
+                story.append(Paragraph(formatted_content, content_style))
+                story.append(Spacer(1, 8))
+            else:
+                # Generic role
+                story.append(Paragraph(f"{role.title()}:", section_header_style))
+                story.append(Paragraph(formatted_content, content_style))
+                story.append(Spacer(1, 8))
+
         # Build PDF
         doc.build(story)
         buffer.seek(0)
         pdf_content = buffer.getvalue()
-        
+
         # NEW: Upload to Azure if available
         azure_url = None
         if AZURE_AVAILABLE:
             try:
                 # Prepare metadata
                 metadata = {
-                    'doctor_name': doctor_name,
+                    'doctor_name': str(doctor_name),
+                    'patient_name': str(patient_name) if patient_name else '',
+                    'patient_id': str(patient_id) if patient_id else '',
+                    'patient_problem': str(patient_problem) if patient_problem else '',
                     'pdf_type': 'research_chat',
                     'generated_at': datetime.now().isoformat(),
-                    'message_count': len(messages),
-                    'has_json_data': bool(json_data)
+                    'message_count': str(len(messages)),
+                    'has_json_data': str(bool(json_data))
                 }
-                
+
                 # Upload to research container
                 azure_url = upload_pdf_to_azure(pdf_content, filename, "research", metadata)
-                
+
             except Exception as e:
                 print(f"Azure upload failed: {e}")
-        
+
         # Return PDF as response
         from flask import make_response
         response = make_response(pdf_content)
         response.headers['Content-Type'] = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
+
         # Add Azure URL to response headers if available
         if azure_url:
             response.headers['X-Azure-URL'] = azure_url
-        
+
         return response
         
     except ImportError:
@@ -1683,6 +1862,8 @@ def generate_conversation_pdf():
         date_time = data.get('dateTime', '')
         segments = data.get('segments', [])
         full_transcript = data.get('fullTranscript', '')
+        summary = data.get('summary', '')
+        conclusion = data.get('conclusion', '')
         processing_info = data.get('processingInfo', {})
         is_duplicate = data.get('isDuplicate', False)
         
@@ -1833,6 +2014,19 @@ def generate_conversation_pdf():
         story.append(Paragraph("Complete Transcript", header_style))
         transcript_text = full_transcript if full_transcript else "No transcript available"
         story.append(Paragraph(transcript_text, styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Medical Summary
+        if summary:
+            story.append(Paragraph("Medical Summary", header_style))
+            story.append(Paragraph(summary, styles['Normal']))
+            story.append(Spacer(1, 15))
+        
+        # Conclusion & Recommendations
+        if conclusion:
+            story.append(Paragraph("Conclusion & Recommendations", header_style))
+            story.append(Paragraph(conclusion, styles['Normal']))
+            story.append(Spacer(1, 15))
         
         # Build PDF
         doc.build(story)
@@ -1852,6 +2046,8 @@ def generate_conversation_pdf():
                     'doctor_name': doctor_name,
                     'patient_name': patient_name,
                     'date_time': date_time,
+                    'summary': summary if summary else '',
+                    'conclusion': conclusion if conclusion else '',
                     'pdf_type': 'conversation_segments',
                     'is_duplicate': is_duplicate,
                     'total_segments': len(segments),
@@ -2064,6 +2260,90 @@ def transcribe_doctor_patient_conversation():
                 "raw_transcript": result.get("raw_transcript", ""),
                 "role_mapping": result.get("role_mapping", {})
             }
+            
+            # Generate medical summary and conclusion from the conversation transcript
+            full_transcript = result.get("raw_transcript", "")
+            if full_transcript:
+                try:
+                    print("Generating medical summary and conclusion for conversation...")
+                    
+                    summary_prompt = f"""
+                    As a medical AI assistant, please analyze the following doctor-patient conversation transcript and provide a professional medical summary.
+                    
+                    Doctor: {doctor_name}
+                    Patient: {patient_name}
+                    Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                    
+                    Conversation Transcript:
+                    {full_transcript}
+                    
+                    Please provide:
+                    1. A concise clinical summary highlighting key medical information, symptoms, findings, and discussions from the conversation
+                    2. Professional conclusions with recommendations, follow-up actions, or treatment plans mentioned during the conversation
+                    
+                    Format your response exactly as:
+                    SUMMARY:
+                    [Provide a clear, professional summary of the medical conversation]
+                    
+                    CONCLUSION:
+                    [Provide conclusions, recommendations, and any follow-up actions mentioned]
+                    """
+                    
+                    # Get AI response
+                    ai_response = llm.invoke(summary_prompt)
+                    if hasattr(ai_response, 'content'):
+                        ai_content = ai_response.content.strip()
+                    else:
+                        ai_content = str(ai_response).strip()
+                    
+                    print(f"AI summary generated for conversation. Length: {len(ai_content)} characters")
+                    
+                    # Parse summary and conclusion from AI response
+                    summary_parts = ai_content.split("CONCLUSION:")
+                    if len(summary_parts) == 2:
+                        summary = summary_parts[0].replace("SUMMARY:", "").strip()
+                        conclusion = summary_parts[1].strip()
+                    else:
+                        # Fallback parsing method
+                        lines = ai_content.split('\n')
+                        summary_lines = []
+                        conclusion_lines = []
+                        in_conclusion = False
+                        
+                        for line in lines:
+                            if 'CONCLUSION' in line.upper():
+                                in_conclusion = True
+                                continue
+                            elif 'SUMMARY' in line.upper():
+                                in_conclusion = False
+                                continue
+                            
+                            if in_conclusion:
+                                conclusion_lines.append(line)
+                            else:
+                                summary_lines.append(line)
+                        
+                        summary = '\n'.join(summary_lines).strip()
+                        conclusion = '\n'.join(conclusion_lines).strip()
+                        
+                        # Final fallback
+                        if not summary and not conclusion:
+                            summary = "Medical conversation analysis completed. Please refer to the full transcript for detailed information."
+                            conclusion = "Further medical review and assessment may be required based on the conversation content."
+                    
+                    # Add summary and conclusion to conversation data
+                    conversation_data["summary"] = summary
+                    conversation_data["conclusion"] = conclusion
+                    
+                except Exception as e:
+                    print(f"Error generating summary for conversation: {str(e)}")
+                    # Add default summary and conclusion if generation fails
+                    conversation_data["summary"] = "Summary generation was not available for this conversation."
+                    conversation_data["conclusion"] = "Please review the conversation transcript for medical conclusions."
+            else:
+                # Add default summary and conclusion if no transcript
+                conversation_data["summary"] = "No transcript available for summary generation."
+                conversation_data["conclusion"] = "Please ensure audio quality is sufficient for transcription."
             
             return jsonify({
                 "success": True,

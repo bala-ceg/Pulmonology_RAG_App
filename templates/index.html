@@ -1536,6 +1536,27 @@
                 <label for="conv-full-transcript">Complete Transcript (Editable):</label>
                 <div class="edit-prompt">Doctor, please edit accordingly</div>
                 <textarea id="conv-full-transcript" placeholder="Complete conversation transcript will appear here..." title="You can edit this transcript"></textarea>
+                
+                <!-- Generate Summary Button -->
+                <div class="generate-section">
+                    <button class="generate-summary-btn" onclick="generateConversationSummaryFromTranscript()" id="conv-generate-summary-btn">
+                        Generate Medical Summary & Recommendations
+                    </button>
+                </div>
+            </div>
+
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <label for="conv-summary">Medical Summary (Editable):</label>
+                <div class="edit-prompt">Doctor, please review and edit accordingly</div>
+                <textarea id="conv-summary" placeholder="AI-generated medical summary will appear here..." title="You can edit this summary"></textarea>
+            </div>
+
+            <!-- Conclusion Section -->
+            <div class="conclusion-section">
+                <label for="conv-conclusion">Conclusion & Recommendations (Editable):</label>
+                <div class="edit-prompt">Doctor, please review and edit accordingly</div>
+                <textarea id="conv-conclusion" placeholder="AI-generated conclusion and recommendations will appear here..." title="You can edit this conclusion"></textarea>
             </div>
 
             <!-- Modal Buttons -->
@@ -1548,12 +1569,7 @@
 
     <div class="container">
         <div class="sidebar" id="sidebar">
-            <button class="toggle-btn">&#9776; Menu</button>
             <ul>
-                <li onclick="alert('New Chat Coming Soon')">New Chat</li>
-                <li onclick="alert('History Coming Soon')">Chat History</li>
-                <li onclick="alert('Settings Coming Soon')">Settings</li>
-                
                 <!-- inside your existing <ul> ... -->
                 <li class="no-bullet">
                 <ul class="red-box">
@@ -1859,6 +1875,11 @@
                 confirmButton.textContent = 'Save PDF';
                 // Make patient name optional for chat save
                 document.getElementById('patient-name-input').placeholder = 'Patient name (optional)';
+            } else if (operation === 'conversation_recording') {
+                modalTitle.textContent = 'Enter Names for Conversation Recording';
+                confirmButton.textContent = 'Start Recording';
+                // Make patient name required for conversation recording
+                document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
             } else {
                 modalTitle.textContent = 'Enter Names for Recording';
                 confirmButton.textContent = 'Start Recording';
@@ -1903,6 +1924,15 @@
 
                 document.getElementById('name-input-modal').style.display = 'none';
                 startPatientRecordingWithNames(doctorName, patientName, window.selectedPatientId);
+            } else if (currentOperation === 'conversation_recording') {
+                // For conversation recording, both names are required
+                if (!patientName) {
+                    alert("Patient name is required for conversation recording!");
+                    return;
+                }
+
+                document.getElementById('name-input-modal').style.display = 'none';
+                startConversationRecordingWithNames(doctorName, patientName);
             } else if (currentOperation === 'chat_save') {
                 // For chat save, patient name is optional
                 document.getElementById('name-input-modal').style.display = 'none';
@@ -2127,9 +2157,15 @@
             showToast("🔄 Generating PDF... Please wait.");
 
             // Prepare data for PDF generation
+            // Get patient problem from the editable element (same as patient PDF)
+            const patientProblemElement = document.getElementById('problem-text');
+            const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
+            
             const pdfData = {
                 doctorName: doctorName,
                 patientName: patientName || '', // Include patient name if provided
+                patientId: '', // Add patientId field for consistency
+                patientProblem: patientProblem, // Include patient problem
                 messages: messages,
                 jsonData: '' // You can add JSON data here if needed
             };
@@ -2848,20 +2884,14 @@ Generated on: ${new Date().toLocaleString()}
         let conversationIsRecording = false;
 
         async function startConversationRecording() {
-            // Use default names or get from existing modal inputs if available
-            let doctorName = 'Unknown Doctor';
-            let patientName = 'Unknown Patient';
-            
-            // Try to get names from the modal if it exists and has values
-            const modalDoctorInput = document.getElementById('modal-doctor-name');
-            const modalPatientInput = document.getElementById('modal-patient-name');
-            
-            if (modalDoctorInput && modalDoctorInput.value.trim()) {
-                doctorName = modalDoctorInput.value.trim();
-            }
-            if (modalPatientInput && modalPatientInput.value.trim()) {
-                patientName = modalPatientInput.value.trim();
-            }
+            // Show the name input modal just like patient recording
+            showNameInputModal('conversation_recording');
+        }
+
+        async function startConversationRecordingWithNames(doctorName, patientName) {
+            // Store names for later use
+            window.currentConversationDoctorName = doctorName;
+            window.currentConversationPatientName = patientName;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -2922,9 +2952,11 @@ Generated on: ${new Date().toLocaleString()}
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'conversation.webm');
                 
-                // Use default names since we removed the input fields
-                formData.append('doctor_name', 'Doctor');
-                formData.append('patient_name', 'Patient');
+                // Use the names that were collected from the modal
+                const doctorName = window.currentConversationDoctorName || 'Doctor';
+                const patientName = window.currentConversationPatientName || 'Patient';
+                formData.append('doctor_name', doctorName);
+                formData.append('patient_name', patientName);
                 
                 showToast('Processing conversation with voice diarization...');
                 
@@ -3002,6 +3034,10 @@ Generated on: ${new Date().toLocaleString()}
             
             document.getElementById('conv-full-transcript').value = fullTranscript;
             
+            // Clear summary and conclusion fields - they should be generated by clicking the button
+            document.getElementById('conv-summary').value = '';
+            document.getElementById('conv-conclusion').value = '';
+            
             // Show modal
             document.getElementById('conversation-segments-modal').classList.add('show');
         }
@@ -3026,6 +3062,8 @@ Generated on: ${new Date().toLocaleString()}
                 dateTime: now.toLocaleString(),
                 segments: currentConversationData.transcript || [],
                 fullTranscript: document.getElementById('conv-full-transcript').value,
+                summary: document.getElementById('conv-summary').value,
+                conclusion: document.getElementById('conv-conclusion').value,
                 processingInfo: {
                     engine: 'OpenAI Voice Diarization + Whisper',
                     totalSegments: currentConversationData.transcript ? currentConversationData.transcript.length : 0
@@ -3058,6 +3096,9 @@ Generated on: ${new Date().toLocaleString()}
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
 
+                // Close the modal after successful save
+                closeConversationModal();
+                
                 hideToast();
                 showToast(`✅ Conversation PDF saved successfully!`);
                 setTimeout(() => hideToast(), 3000);
@@ -3066,6 +3107,161 @@ Generated on: ${new Date().toLocaleString()}
                 console.error('Error generating conversation PDF:', error);
                 hideToast();
                 showToast("❌ Error generating PDF. Please try again.", 5000);
+            });
+        }
+
+        // Function to generate medical summary and recommendations from chat conversation
+        function generateMedicalSummaryRecommendations() {
+            // Check if there are messages to work with
+            if (!messages || messages.length === 0) {
+                showToast('❌ No conversation history found. Please have a medical conversation first.');
+                setTimeout(() => hideToast(), 3000);
+                return;
+            }
+
+            // Filter only meaningful medical messages (exclude empty or system messages)
+            const meaningfulMessages = messages.filter(msg => 
+                msg && msg.content && msg.content.trim().length > 10
+            );
+
+            if (meaningfulMessages.length < 2) {
+                showToast('❌ Insufficient conversation data. Please have a more detailed medical discussion first.');
+                setTimeout(() => hideToast(), 3000);
+                return;
+            }
+
+            // Show loading state
+            const generateBtn = document.getElementById('generate-medical-summary-btn');
+            const originalText = generateBtn.innerHTML;
+            generateBtn.innerHTML = 'Generating Summary...';
+            generateBtn.disabled = true;
+
+            showToast('🤖 Analyzing conversation and generating medical summary & recommendations...');
+
+            // Prepare conversation text for analysis
+            const conversationText = meaningfulMessages.map((msg, index) => {
+                const role = msg.role === 'user' ? 'Patient/User' : 'AI Medical Assistant';
+                return `${role}: ${msg.content}`;
+            }).join('\n\n');
+
+            // Call the backend to generate medical summary
+            fetch('/generate_summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transcription: conversationText,
+                    doctor_name: 'Medical AI Assistant',
+                    patient_name: 'Patient from Chat Conversation'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    hideToast();
+                    
+                    // Display the generated summary and recommendations in the chat
+                    const summaryMessage = `
+**🏥 MEDICAL SUMMARY & RECOMMENDATIONS**
+
+**📋 CLINICAL SUMMARY:**
+${data.summary}
+
+**💡 RECOMMENDATIONS & CONCLUSIONS:**
+${data.conclusion}
+
+---
+*Generated from conversation analysis at ${new Date().toLocaleString()}*
+                    `;
+                    
+                    addMessage('ai', summaryMessage);
+                    
+                    showToast('✅ Medical summary and recommendations generated successfully!');
+                    setTimeout(() => hideToast(), 3000);
+                    
+                } else {
+                    hideToast();
+                    showToast('❌ Failed to generate medical summary. Please try again.');
+                    console.error('Medical summary generation failed:', data.error);
+                    setTimeout(() => hideToast(), 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error generating medical summary:', error);
+                hideToast();
+                showToast('❌ Error generating medical summary. Please check your connection and try again.');
+                setTimeout(() => hideToast(), 3000);
+            })
+            .finally(() => {
+                // Restore button state
+                generateBtn.innerHTML = originalText;
+                generateBtn.disabled = false;
+            });
+        }
+
+        // Function to generate medical summary and recommendations for conversation transcript
+        function generateConversationSummaryFromTranscript() {
+            const transcriptionText = document.getElementById('conv-full-transcript').value.trim();
+            const doctorName = currentConversationData?.doctor_name || 'Unknown Doctor';
+            const patientName = currentConversationData?.patient_name || 'Unknown Patient';
+            
+            if (!transcriptionText) {
+                alert('Please ensure there is conversation transcript text available to generate a summary.');
+                return;
+            }
+
+            // Show loading state
+            const generateBtn = document.getElementById('conv-generate-summary-btn');
+            const originalText = generateBtn.innerHTML;
+            generateBtn.innerHTML = 'Generating Summary...';
+            generateBtn.disabled = true;
+
+            showToast('🤖 Generating medical summary and recommendations from conversation...');
+
+            // Call the backend to generate summary
+            fetch('/generate_summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transcription: transcriptionText,
+                    doctor_name: doctorName,
+                    patient_name: patientName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Populate the conversation modal fields with generated content
+                    document.getElementById('conv-summary').value = data.summary;
+                    document.getElementById('conv-conclusion').value = data.conclusion;
+                    
+                    hideToast();
+                    showToast('✅ Medical summary and recommendations generated successfully!');
+                    
+                    // Update currentConversationData with the new summary and conclusion
+                    if (currentConversationData) {
+                        currentConversationData.summary = data.summary;
+                        currentConversationData.conclusion = data.conclusion;
+                    }
+                } else {
+                    hideToast();
+                    showToast('❌ Failed to generate conversation summary. Please try again.');
+                    console.error('Conversation summary generation failed:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error generating conversation summary:', error);
+                hideToast();
+                showToast('❌ Error generating conversation summary. Please check your connection and try again.');
+            })
+            .finally(() => {
+                // Restore button state
+                generateBtn.innerHTML = originalText;
+                generateBtn.disabled = false;
+                setTimeout(() => hideToast(), 3000);
             });
         }
 

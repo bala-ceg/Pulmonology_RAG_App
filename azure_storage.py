@@ -9,13 +9,12 @@ from datetime import datetime
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.core.exceptions import AzureError
 import logging
-from dotenv import load_dotenv
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+
+AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=sauslocumservices;AccountKey=Sa4Do30I009CwG89FfTrmQ1lI/2/A4qgwBMQwM778Pi1099b+LQytd3YaXV9VytpVr8M3Bv6HP+M+AStLm/tTQ==;EndpointSuffix=core.windows.net"
 
 
 class AzureStorageManager:
