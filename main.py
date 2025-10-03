@@ -6,6 +6,14 @@ from langchain_openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# Import new RAG architecture
+try:
+    from rag_architecture import TwoStoreRAGManager, TFIDFLexicalGate
+    RAG_ARCHITECTURE_AVAILABLE = True
+except ImportError:
+    print("RAG architecture not available. Install dependencies: pip install scikit-learn")
+    RAG_ARCHITECTURE_AVAILABLE = False
 from dotenv import load_dotenv
 import os
 import json
@@ -425,6 +433,54 @@ embeddings = OpenAIEmbeddings(
     base_url=os.getenv('base_url'),
     model=os.getenv('embedding_model_name')
 )
+
+# Initialize Two-Store RAG Manager
+rag_manager = None
+if RAG_ARCHITECTURE_AVAILABLE:
+    try:
+        rag_manager = TwoStoreRAGManager(embeddings, llm, VECTOR_DBS_FOLDER)
+        print("✅ Two-Store RAG Manager initialized successfully")
+        
+        # Check if external KB already has content to avoid reloading
+        kb_external_has_content = False
+        if rag_manager.kb_external:
+            try:
+                # Check if external KB has documents
+                count = rag_manager.kb_external._collection.count()
+                kb_external_has_content = count > 0
+                print(f"📊 External KB already contains {count} documents")
+            except:
+                kb_external_has_content = False
+        
+        # Only load external content if KB is empty
+        if not kb_external_has_content:
+            print("🌐 External KB is empty, loading initial content...")
+            
+            # Initialize external knowledge base with some medical topics
+            medical_topics = [
+                "pulmonology", "cardiology", "neurology", "family medicine", 
+                "medical diagnosis", "clinical medicine", "pharmacology"
+            ]
+            print(f"📚 Loading {len(medical_topics)} Wikipedia topics...")
+            rag_manager.load_wikipedia_content(medical_topics, max_docs_per_topic=2)
+            
+            # Load some medical research from arXiv
+            arxiv_queries = [
+                "medical diagnosis AI", "clinical decision support", 
+                "medical imaging analysis", "healthcare machine learning"
+            ]
+            print(f"🔬 Loading {len(arxiv_queries)} arXiv queries...")
+            rag_manager.load_arxiv_content(arxiv_queries, max_docs_per_query=1)
+            
+            print("✅ External KB initial content loaded successfully")
+        else:
+            print("✅ External KB already populated, skipping content loading")
+        
+    except Exception as e:
+        print(f"❌ Failed to initialize RAG Manager: {e}")
+        rag_manager = None
+else:
+    print("⚠️ RAG Architecture not available - using legacy mode")
 
 # Split documents and create FAISS vector store
 text_splitter = RecursiveCharacterTextSplitter(
@@ -855,7 +911,56 @@ def handle_query():
         return jsonify({"response": False, "message": "Please provide a valid input."})
 
     try:
-        # 🧠 INTELLIGENT ROUTING: Analyze query to determine relevant disciplines
+        # 🚀 NEW TWO-STORE RAG ARCHITECTURE WITH LEXICAL GATE
+        if rag_manager and RAG_ARCHITECTURE_AVAILABLE:
+            print("🧠 Using Two-Store RAG Architecture with Lexical Gate")
+            print(f"📝 Query: '{user_input}'")
+            
+            # Use the RAG manager's intelligent routing
+            rag_result = rag_manager.query_with_routing(user_input)
+            
+            if rag_result['responses']:
+                # Sort responses by confidence
+                rag_result['responses'].sort(key=lambda x: x["confidence"], reverse=True)
+                
+                # Create comprehensive response
+                final_response = ""
+                
+                for i, resp in enumerate(rag_result['responses'][:2], 1):  # Limit to top 2 responses
+                    if i > 1:
+                        final_response += "\n\n"  # Add spacing between multiple responses
+                    final_response += clean_response_text(resp['content'])
+                
+                # Add citations in bold
+                if rag_result['citations']:
+                    final_response += "\n\n**Citations:**\n"
+                    for citation in rag_result['citations']:
+                        final_response += f"{citation}\n"
+                
+                # Add routing information
+                routing_info = rag_result['routing_info']
+                sources_info = ', '.join(routing_info.get('sources_queried', []))
+                final_response += f"\n**RAG Routing:** TF-IDF similarity: {routing_info.get('similarity_score', 0):.3f}, Sources: {sources_info}"
+                
+                return jsonify({
+                    "response": True, 
+                    "message": final_response,
+                    "routing_details": {
+                        "method": "Two-Store RAG with Lexical Gate",
+                        "similarity_score": float(routing_info.get('similarity_score', 0)),
+                        "query_local_first": bool(routing_info.get('query_local_first', False)),
+                        "sources_queried": list(routing_info.get('sources_queried', [])),
+                        "responses_count": int(len(rag_result['responses']))
+                    }
+                })
+            else:
+                # No responses from RAG system, fallback to original implementation
+                print("⚠️ No responses from RAG system, falling back to legacy implementation")
+        
+        # 🏥 LEGACY IMPLEMENTATION: Keep existing medical routing as fallback
+        print("🔄 Using legacy medical routing system")
+        
+        # INTELLIGENT ROUTING: Analyze query to determine relevant disciplines
         routing_result = medical_router.analyze_query(user_input)
         relevant_disciplines = routing_result["disciplines"]
         confidence_scores = routing_result["confidence_scores"]
@@ -966,8 +1071,6 @@ def handle_query():
             # Add routing information on a new line
             routing_info = f"\n**Query Routing:** Analyzed and routed to {', '.join([d.replace('_', ' ').title() for d in relevant_disciplines])}"
             final_response += routing_info
-            
-            # Don't apply clean_response_text to the final response as it breaks formatting
             
             # Return response with routing details
             return jsonify({
@@ -1300,6 +1403,15 @@ def create_vector_db():
             embedding=embeddings,
             persist_directory=persist_dir
         )
+
+        # 🚀 NEW: Add documents to RAG manager's local knowledge base
+        if rag_manager and RAG_ARCHITECTURE_AVAILABLE:
+            try:
+                print("📚 Adding documents to RAG manager's local knowledge base...")
+                rag_manager.add_documents_to_local(documents)
+                print(f"✅ Successfully added {len(documents)} documents to kb_local and updated lexical gate")
+            except Exception as e:
+                print(f"⚠️ Error adding documents to RAG manager: {e}")
 
         return jsonify({"message": "New Vector DB created", "db": last_created_folder})
 

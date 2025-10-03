@@ -6,6 +6,17 @@ langchain
 langchain_openai
 langchain_community
 langchain-chroma
+langchain-text-splitters
+
+# Vector database
+chromadb
+
+# Document processing
+pypdf
+tiktoken
+
+# Scikit-learn for TF-IDF gate
+scikit-learn
 
 # Environment variable support
 python-dotenv
