@@ -57,6 +57,16 @@ try:
 except ImportError:
     print("Voice diarization not available. Install dependencies: pip install pyannote.audio torch")
     DIARIZATION_AVAILABLE = False
+
+# Import Integrated RAG System
+try:
+    from integrated_rag import IntegratedMedicalRAG
+    INTEGRATED_RAG_AVAILABLE = True
+    print("✅ Integrated RAG system loaded successfully")
+except ImportError:
+    print("⚠️ Integrated RAG system not available. Some advanced features may be limited.")
+    INTEGRATED_RAG_AVAILABLE = False
+
 from psycopg import sql
 
 
@@ -482,6 +492,25 @@ if RAG_ARCHITECTURE_AVAILABLE:
 else:
     print("⚠️ RAG Architecture not available - using legacy mode")
 
+# Initialize Integrated Medical RAG System
+integrated_rag_system = None
+if INTEGRATED_RAG_AVAILABLE:
+    try:
+        api_key = os.getenv('openai_api_key')
+        if api_key:
+            integrated_rag_system = IntegratedMedicalRAG(
+                openai_api_key=api_key,
+                base_vector_path=VECTOR_DBS_FOLDER
+            )
+            print("✅ Integrated Medical RAG System initialized successfully")
+        else:
+            print("⚠️ OpenAI API key not found - Integrated RAG system disabled")
+    except Exception as e:
+        print(f"❌ Failed to initialize Integrated RAG System: {e}")
+        integrated_rag_system = None
+else:
+    print("⚠️ Integrated RAG System not available")
+
 # Split documents and create FAISS vector store
 text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=4096, 
@@ -904,14 +933,180 @@ def clean_response_text(text):
     
     return text.strip()
 
+def generate_full_html_response(result_data):
+    """
+    ✅ Guaranteed vertical layout version.
+    Everything is inside ONE single <div>, so host grid/flex can't split them into columns.
+    """
+
+    # Extract data
+    medical_summary = result_data.get("medical_summary", "No medical summary available.")
+    sources = result_data.get("sources", [])
+    tool_info = result_data.get("tool_info", {})
+    primary_tool = tool_info.get("primary_tool", "Unknown")
+    confidence = tool_info.get("confidence", "Unknown")
+    tools_used = tool_info.get("tools_used", "N/A")
+    reasoning = tool_info.get("reasoning", "No reasoning provided.")
+
+    # Format sources
+    sources_html = (
+        "<ul>" + "".join(f"<li>{s}</li>" for s in sources) + "</ul>"
+        if sources else "<p>No sources available.</p>"
+    )
+
+    # ✅ Everything inside ONE single <div>
+    html = f"""
+<div style="display:block; width:100%; max-width:100%; line-height:1.6;">
+  <h3 style="color:#007bff; font-size:20px; margin-bottom:10px;">📋 Medical Summary</h3>
+  <div style="background:#e3f2fd; padding:15px; border-radius:8px; margin-bottom:30px;">
+    {medical_summary}
+  </div>
+
+  <h3 style="color:#6f42c1; font-size:20px; margin-bottom:10px;">📖 Sources</h3>
+  <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:30px;">
+    {sources_html}
+  </div>
+
+  <h3 style="color:#ff6600; font-size:20px; margin-bottom:10px;">🔧 Tool Selection &amp; Query Routing</h3>
+  <div style="background:#fff3cd; padding:15px; border-radius:8px;">
+    <p><strong>Primary Tool:</strong> {primary_tool}</p>
+    <p><strong>Confidence:</strong> {confidence}</p>
+    <p><strong>Tools Used:</strong> {tools_used}</p>
+    <p><strong>Reasoning:</strong> {reasoning}</p>
+  </div>
+</div>
+"""
+    return html
+
+
+def parse_enhanced_response(answer, routing_info, tools_used, explanation):
+    """Parse enhanced HTML response and extract structured data for new HTML format"""
+    
+    # Initialize result data
+    result_data = {
+        'medical_summary': 'No medical summary available.',
+        'sources': [],
+        'tool_info': {}
+    }
+    
+    # Check if this is an enhanced HTML response
+    if '<div' in answer and '<h4' in answer:
+        # Parse HTML content to extract sections
+        import re
+        
+        # Extract Medical Summary
+        medical_summary_match = re.search(r'<h4[^>]*>.*?Medical Summary.*?</h4><div[^>]*>(.*?)</div>', answer, re.DOTALL | re.IGNORECASE)
+        if medical_summary_match:
+            medical_content = medical_summary_match.group(1)
+            # Clean HTML tags but preserve content
+            medical_content = re.sub(r'<[^>]+>', '', medical_content).strip()
+            result_data['medical_summary'] = medical_content
+        
+        # Extract Sources
+        sources_match = re.search(r'<h4[^>]*>.*?Sources.*?</h4><div[^>]*>(.*?)</div>', answer, re.DOTALL | re.IGNORECASE)
+        if sources_match:
+            sources_content = sources_match.group(1)
+            # Extract links and convert to simple format
+            link_matches = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>([^<]+)</a>[^<]*\(([^)]+)\)', sources_content)
+            for url, title, source_type in link_matches:
+                result_data['sources'].append(f"{title} ({source_type})")
+            
+            # If no links found, extract plain text
+            if not result_data['sources']:
+                sources_text = re.sub(r'<[^>]+>', '', sources_content).strip()
+                if sources_text:
+                    result_data['sources'].append(sources_text)
+        
+        # Extract Tool Selection info from HTML
+        tool_match = re.search(r'<h4[^>]*>.*?Tool Selection.*?</h4><div[^>]*>(.*?)</div>', answer, re.DOTALL | re.IGNORECASE)
+        if tool_match:
+            tool_content = tool_match.group(1)
+            
+            # Extract Primary Tool
+            primary_tool_match = re.search(r'Primary Tool:\s*<strong>([^<]+)</strong>', tool_content)
+            primary_tool = primary_tool_match.group(1) if primary_tool_match else routing_info.get('primary_tool', 'Unknown')
+            
+            # Extract Confidence
+            confidence_match = re.search(r'Confidence:\s*<span[^>]*>([^<]+)</span>', tool_content)
+            confidence = confidence_match.group(1) if confidence_match else routing_info.get('confidence', 'Unknown')
+            
+            # Extract Reasoning
+            reasoning_match = re.search(r'Reasoning:\s*([^<]+?)(?:<|$)', tool_content)
+            reasoning = reasoning_match.group(1).strip() if reasoning_match else routing_info.get('reasoning', 'No reasoning provided.')
+            
+            result_data['tool_info'] = {
+                'primary_tool': primary_tool,
+                'confidence': confidence,
+                'reasoning': reasoning
+            }
+    else:
+        # Handle plain text responses
+        result_data['medical_summary'] = answer[:500] + "..." if len(answer) > 500 else answer
+        
+        # Add basic tool info from routing_info
+        primary_tool = routing_info.get('primary_tool', 'Unknown')
+        confidence = routing_info.get('confidence', 'Unknown')
+        
+        # Format confidence
+        if isinstance(confidence, str):
+            confidence_mapping = {'high': 'High (≈90%)', 'medium': 'Medium (≈70%)', 'low': 'Low (≈50%)'}
+            confidence = confidence_mapping.get(confidence.lower(), confidence)
+        elif isinstance(confidence, (int, float)):
+            confidence = f"{confidence}%"
+        
+        result_data['tool_info'] = {
+            'primary_tool': primary_tool,
+            'confidence': confidence,
+            'reasoning': routing_info.get('reasoning', explanation or 'No reasoning provided.')
+        }
+        
+        result_data['sources'] = ['No specific sources identified.']
+    
+    return result_data
+
 @app.route("/data", methods=["POST"])
 def handle_query():
+    """Original JSON endpoint for the UI - returns JSON responses"""
     user_input = request.json.get("data", "")
     if not user_input:
-        return jsonify({"response": False, "message": "Please provide a valid input."})
+        return jsonify({
+            "response": False,
+            "message": "Please provide a valid input to get a medical response."
+        })
 
     try:
-        # 🚀 NEW TWO-STORE RAG ARCHITECTURE WITH LEXICAL GATE
+        # 🎯 INTEGRATED MEDICAL RAG SYSTEM WITH INTELLIGENT TOOL ROUTING
+        if integrated_rag_system and INTEGRATED_RAG_AVAILABLE:
+            print("🚀 Using Integrated Medical RAG System with Tool Routing")
+            print(f"📝 Query: '{user_input}'")
+            
+            # Extract session ID from request if available
+            session_id = request.json.get("session_id", "guest")
+            
+            # Use the integrated RAG system's intelligent query method
+            integrated_result = integrated_rag_system.query(user_input, session_id)
+            
+            if integrated_result and integrated_result.get('answer'):
+                answer = integrated_result['answer']
+                routing_info = integrated_result.get('routing_info', {})
+                tools_used = integrated_result.get('tools_used', [])
+                explanation = integrated_result.get('explanation', '')
+                
+                # Return JSON response for UI
+                return jsonify({
+                    "response": True,
+                    "message": answer,
+                    "routing_details": {
+                        "disciplines": tools_used,
+                        "sources": routing_info.get('sources', []),
+                        "method": routing_info.get('confidence', 'medium'),
+                        "confidence": routing_info.get('confidence', 'medium')
+                    }
+                })
+            else:
+                print("⚠️ No response from Integrated RAG system, falling back to Two-Store RAG")
+        
+        # 🚀 FALLBACK: TWO-STORE RAG ARCHITECTURE WITH LEXICAL GATE
         if rag_manager and RAG_ARCHITECTURE_AVAILABLE:
             print("🧠 Using Two-Store RAG Architecture with Lexical Gate")
             print(f"📝 Query: '{user_input}'")
@@ -942,15 +1137,15 @@ def handle_query():
                 sources_info = ', '.join(routing_info.get('sources_queried', []))
                 final_response += f"\n**RAG Routing:** TF-IDF similarity: {routing_info.get('similarity_score', 0):.3f}, Sources: {sources_info}"
                 
+                # Return JSON response for two-store RAG
                 return jsonify({
-                    "response": True, 
+                    "response": True,
                     "message": final_response,
                     "routing_details": {
-                        "method": "Two-Store RAG with Lexical Gate",
-                        "similarity_score": float(routing_info.get('similarity_score', 0)),
-                        "query_local_first": bool(routing_info.get('query_local_first', False)),
-                        "sources_queried": list(routing_info.get('sources_queried', [])),
-                        "responses_count": int(len(rag_result['responses']))
+                        "disciplines": routing_info.get('sources_queried', []),
+                        "sources": rag_result['citations'],
+                        "method": "Two-Store RAG",
+                        "confidence": f"{routing_info.get('similarity_score', 0):.0%}"
                     }
                 })
             else:
@@ -1073,14 +1268,15 @@ def handle_query():
             final_response += routing_info
             
             # Return response with routing details
+            # Return JSON response for legacy medical routing
             return jsonify({
-                "response": True, 
+                "response": True,
                 "message": final_response,
                 "routing_details": {
-                    "disciplines": [d.replace('_', ' ').title() for d in relevant_disciplines],
-                    "confidence_scores": confidence_scores,
-                    "sources": f"{len(all_responses)} sources found",
-                    "method": routing_result.get("routing_method", "hybrid")
+                    "disciplines": relevant_disciplines,
+                    "sources": all_citations,
+                    "method": routing_result.get('routing_method', 'hybrid'),
+                    "confidence": f"{max(confidence_scores.values()) if confidence_scores else 0:.0%}"
                 }
             })
         else:
@@ -1100,20 +1296,140 @@ def handle_query():
             Consider uploading relevant medical documents or rephrasing your question for better results.
             """
             
+            # Return JSON response for fallback
             return jsonify({
-                "response": True, 
+                "response": True,
                 "message": clean_response_text(fallback_response),
                 "routing_details": {
-                    "disciplines": [d.replace('_', ' ').title() for d in relevant_disciplines],
-                    "confidence_scores": confidence_scores,
-                    "sources": "No relevant sources found",
-                    "method": routing_result.get("routing_method", "hybrid")
+                    "disciplines": relevant_disciplines,
+                    "sources": [],
+                    "method": routing_result.get('routing_method', 'hybrid'),
+                    "confidence": "Low (≈30%)"
                 }
             })
 
     except Exception as e:
         print(f"Error in handle_query: {e}")
-        return jsonify({"response": False, "message": f"Error: {str(e)}"})
+        # Return JSON error response
+        return jsonify({
+            "response": False,
+            "message": f"An error occurred while processing your query: {str(e)}"
+        })
+
+
+@app.route("/data-html", methods=["POST"])
+def handle_query_html():
+    """HTML endpoint that returns complete HTML documents with 3-section structure"""
+    user_input = request.json.get("data", "")
+    if not user_input:
+        # Create HTML error response for empty input
+        result_data = {
+            'medical_summary': 'Please provide a valid input to get a medical response.',
+            'sources': ['Input Validation'],
+            'tool_info': {
+                'primary_tool': 'Input Validator',
+                'confidence': 'N/A',
+                'reasoning': 'No query text provided in the request.'
+            }
+        }
+        
+        html_response = generate_full_html_response(result_data)
+        from flask import make_response
+        response = make_response(html_response)
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return response
+
+    try:
+        # 🎯 INTEGRATED MEDICAL RAG SYSTEM WITH INTELLIGENT TOOL ROUTING
+        if integrated_rag_system and INTEGRATED_RAG_AVAILABLE:
+            print("🚀 Using Integrated Medical RAG System with Tool Routing")
+            print(f"📝 Query: '{user_input}'")
+            
+            # Extract session ID from request if available
+            session_id = request.json.get("session_id", "guest")
+            
+            # Use the integrated RAG system's intelligent query method
+            answer, routing_info, tools_used, explanation = integrated_rag_system.intelligent_query(
+                user_input, 
+                session_id=session_id
+            )
+            
+            # Handle Enhanced Tools Response (Wikipedia/ArXiv with HTML formatting)
+            if tools_used and any('Enhanced' in tool for tool in tools_used):
+                print("📋 Processing Enhanced Tools Response (HTML format)")
+                
+                # Parse the enhanced HTML response using our new parser
+                result_data = parse_enhanced_response(answer, routing_info, tools_used, explanation)
+                
+                html_response = generate_full_html_response(result_data)
+                from flask import make_response
+                response = make_response(html_response)
+                response.headers['Content-Type'] = 'text/html; charset=utf-8'
+                return response
+            
+            # Handle Two-Store RAG Response
+            else:
+                print("📋 Processing Two-Store RAG Response")
+                
+                # For internal VectorDB or organization KB responses, create result_data
+                result_data = {
+                    'Answer': answer,
+                    'sources': ['Internal Document (PDF)', 'Organization Knowledge Base'] if 'organization' in tools_used[0].lower() else ['Internal Document (PDF)'],
+                    'tool_info': {
+                        'primary_tool': tools_used[0] if tools_used else 'Internal_VectorDB',
+                        'confidence': f"{routing_info.get('confidence', 'medium').title()} (≈70%)",
+                        'reasoning': explanation or f"Queried internal knowledge base due to uploaded content. {routing_info.get('reasoning', '')}"
+                    }
+                }
+                
+                html_response = generate_full_html_response(result_data)
+                from flask import make_response
+                response = make_response(html_response)
+                response.headers['Content-Type'] = 'text/html; charset=utf-8'
+                return response
+
+        # 🔄 FALLBACK: Return error if integrated system not available
+        else:
+            print("⚠️ Integrated RAG system not available for HTML endpoint")
+            
+            # Create error response
+            result_data = {
+                'medical_summary': 'The HTML endpoint requires the integrated RAG system to be available. Please use the regular /data endpoint.',
+                'sources': ['System Configuration'],
+                'tool_info': {
+                    'primary_tool': 'Error Handler',
+                    'confidence': 'N/A',
+                    'reasoning': 'HTML endpoint requires integrated RAG system which is not currently available.'
+                }
+            }
+            
+            html_response = generate_full_html_response(result_data)
+            from flask import make_response
+            response = make_response(html_response)
+            response.headers['Content-Type'] = 'text/html; charset=utf-8'
+            return response
+
+    except Exception as e:
+        print(f"❌ Error in HTML query handler: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Create HTML error response
+        result_data = {
+            'medical_summary': f'An error occurred while processing your query: {str(e)}',
+            'sources': ['System Error'],
+            'tool_info': {
+                'primary_tool': 'Error Handler',
+                'confidence': 'N/A',
+                'reasoning': 'An unexpected error occurred during query processing.'
+            }
+        }
+        
+        html_response = generate_full_html_response(result_data)
+        from flask import make_response
+        response = make_response(html_response)
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return response
 
 
 def initialize_session(user="guest"):

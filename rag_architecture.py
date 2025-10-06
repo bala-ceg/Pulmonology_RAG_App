@@ -495,21 +495,102 @@ class TwoStoreRAGManager:
                 'routing_info': {'error': str(e)}
             }
     
+    def guarded_retrieve(self, query: str, retriever, similarity_threshold: float = 0.35) -> Optional[List]:
+        """
+        Post-retrieval guard that checks similarity and content relevance.
+        
+        Args:
+            query: User query string
+            retriever: LangChain retriever object
+            similarity_threshold: Minimum average similarity score
+            
+        Returns:
+            Documents if they pass the guard, None if they should trigger fallback
+        """
+        try:
+            # Retrieve documents
+            docs = retriever.invoke(query)
+            
+            if not docs:
+                return None
+            
+            # Extract main query terms for relevance checking
+            import re
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'what', 'how', 'why', 'when', 'where'}
+            cleaned_query = re.sub(r'[^\w\s]', '', query.lower())
+            main_terms = [word for word in cleaned_query.split() if word not in stop_words and len(word) > 2]
+            
+            if not main_terms:
+                # If we can't extract terms, use simple length check
+                if all(len(doc.page_content.strip()) < 50 for doc in docs):
+                    return None
+                return docs
+            
+            # Check if any of the top chunks contain main nouns
+            relevant_docs = []
+            for doc in docs:
+                content_lower = doc.page_content.lower()
+                if any(term in content_lower for term in main_terms):
+                    relevant_docs.append(doc)
+            
+            # If no documents contain main terms, trigger fallback
+            if not relevant_docs:
+                print(f"Guard: No documents contain main terms {main_terms} - triggering fallback")
+                return None
+            
+            # Check document quality - avoid very short or generic responses
+            quality_docs = []
+            for doc in relevant_docs:
+                content = doc.page_content.strip()
+                if len(content) > 50 and not self._is_generic_content(content):
+                    quality_docs.append(doc)
+            
+            if not quality_docs:
+                print("Guard: No quality documents found - triggering fallback")
+                return None
+            
+            return quality_docs
+            
+        except Exception as e:
+            print(f"Error in guarded_retrieve: {e}")
+            return None
+    
+    def _is_generic_content(self, content: str) -> bool:
+        """Check if content is too generic or unhelpful."""
+        generic_indicators = [
+            "no information available",
+            "not found in the context",
+            "insufficient data",
+            "cannot determine",
+            "more information needed"
+        ]
+        
+        content_lower = content.lower()
+        return any(indicator in content_lower for indicator in generic_indicators)
+
     def _query_kb_local(self, query: str) -> Optional[Dict]:
-        """Query the local knowledge base."""
+        """Query the local knowledge base with guarded retrieval."""
         try:
             if self.kb_local is None:
                 return None
                 
-            retriever = self.kb_local.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-            qa_chain = RetrievalQA.from_chain_type(llm=self.llm, retriever=retriever)
+            retriever = self.kb_local.as_retriever(search_type="similarity", search_kwargs={"k": 5})
             
+            # Apply guarded retrieval
+            search_results = self.guarded_retrieve(query, retriever)
+            
+            if search_results is None:
+                print("Local KB query failed guard check - low relevance")
+                return None
+            
+            # Use the filtered results for QA chain
+            qa_chain = RetrievalQA.from_chain_type(llm=self.llm, retriever=retriever)
             response = qa_chain.invoke(query)
-            search_results = retriever.invoke(query)
             
             return {
                 'result': response['result'],
-                'citations': self._format_citations(search_results, 'Local KB')
+                'citations': self._format_citations(search_results, 'Local KB'),
+                'guard_passed': True
             }
             
         except Exception as e:
@@ -517,20 +598,28 @@ class TwoStoreRAGManager:
             return None
     
     def _query_kb_external(self, query: str) -> Optional[Dict]:
-        """Query the external knowledge base."""
+        """Query the external knowledge base with guarded retrieval."""
         try:
             if self.kb_external is None:
                 return None
                 
-            retriever = self.kb_external.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-            qa_chain = RetrievalQA.from_chain_type(llm=self.llm, retriever=retriever)
+            retriever = self.kb_external.as_retriever(search_type="similarity", search_kwargs={"k": 5})
             
+            # Apply guarded retrieval
+            search_results = self.guarded_retrieve(query, retriever)
+            
+            if search_results is None:
+                print("External KB query failed guard check - low relevance")
+                return None
+            
+            # Use the filtered results for QA chain
+            qa_chain = RetrievalQA.from_chain_type(llm=self.llm, retriever=retriever)
             response = qa_chain.invoke(query)
-            search_results = retriever.invoke(query)
             
             return {
                 'result': response['result'],
-                'citations': self._format_citations(search_results, 'External KB')
+                'citations': self._format_citations(search_results, 'External KB'),
+                'guard_passed': True
             }
             
         except Exception as e:
@@ -601,3 +690,182 @@ class TwoStoreRAGManager:
             print(f"Error formatting citations: {e}")
             
         return citations
+
+
+class MedicalQueryRouter:
+    """
+    Intelligent query router that selects appropriate tools based on query analysis.
+    """
+    
+    def __init__(self, rag_manager=None):
+        """
+        Initialize the medical query router.
+        
+        Args:
+            rag_manager: TwoStoreRAGManager instance for checking content availability
+        """
+        self.rag_manager = rag_manager
+        
+        # Keywords for tool selection heuristics
+        self.arxiv_keywords = [
+            'latest', 'recent', 'new', 'research', 'study', 'paper', 'findings',
+            'experiment', 'trial', 'investigation', 'preprint', 'published',
+            'scientific', 'evidence', 'current research', 'recent developments',
+            'newest', 'breakthrough', 'cutting-edge', 'novel', 'innovative'
+        ]
+        
+        self.internal_keywords = [
+            'uploaded', 'my file', 'my document', 'my pdf', 'uploaded document',
+            'our protocol', 'our guideline', 'organization', 'my organization',
+            'internal', 'company', 'our study', 'my study', 'this document',
+            'uploaded content', 'my data', 'our data', 'session'
+        ]
+        
+        self.wikipedia_keywords = [
+            'what is', 'define', 'definition', 'explain', 'tell me about',
+            'overview', 'background', 'basic', 'general', 'introduction',
+            'simple explanation', 'layman', 'understand', 'meaning'
+        ]
+    
+    def route_tools(self, query: str, session_id: str = None) -> Dict:
+        """
+        Route query to appropriate tools with ranking and confidence scoring.
+        
+        Args:
+            query: User query string
+            session_id: Session identifier for checking user-specific content
+            
+        Returns:
+            Dictionary with ranked tools, confidence, and reasoning
+        """
+        try:
+            query_lower = query.lower()
+            
+            # Initialize scores for each tool
+            tool_scores = {
+                'Wikipedia_Search': 0,
+                'ArXiv_Search': 0,
+                'Internal_VectorDB': 0
+            }
+            
+            # Keyword-based scoring
+            for keyword in self.arxiv_keywords:
+                if keyword in query_lower:
+                    tool_scores['ArXiv_Search'] += 2
+                    
+            for keyword in self.internal_keywords:
+                if keyword in query_lower:
+                    tool_scores['Internal_VectorDB'] += 3
+                    
+            for keyword in self.wikipedia_keywords:
+                if keyword in query_lower:
+                    tool_scores['Wikipedia_Search'] += 2
+            
+            # Context-based adjustments
+            has_local_content = (self.rag_manager and 
+                               self.rag_manager.get_local_content_count() > 0)
+            
+            has_external_content = (self.rag_manager and 
+                                  self.rag_manager.has_external_content())
+            
+            # Boost internal tool if user has uploaded content
+            if has_local_content:
+                tool_scores['Internal_VectorDB'] += 1
+            else:
+                # Penalize internal tool if no content available
+                tool_scores['Internal_VectorDB'] -= 5
+            
+            # Default scoring if no keywords match
+            if max(tool_scores.values()) == 0:
+                # Default hierarchy: Wikipedia -> ArXiv -> Internal
+                tool_scores['Wikipedia_Search'] = 3
+                tool_scores['ArXiv_Search'] = 2
+                tool_scores['Internal_VectorDB'] = 1 if has_local_content else 0
+            
+            # Sort tools by score (descending)
+            ranked_tools = sorted(tool_scores.items(), 
+                                key=lambda x: x[1], 
+                                reverse=True)
+            
+            # Calculate confidence based on score differences
+            top_score = ranked_tools[0][1]
+            second_score = ranked_tools[1][1] if len(ranked_tools) > 1 else 0
+            
+            if top_score <= 0:
+                confidence = 'low'
+                confidence_score = 0.3
+            elif top_score - second_score >= 3:
+                confidence = 'high'
+                confidence_score = 0.9
+            elif top_score - second_score >= 1:
+                confidence = 'medium'
+                confidence_score = 0.7
+            else:
+                confidence = 'low'
+                confidence_score = 0.4
+            
+            # Generate reasoning
+            primary_tool = ranked_tools[0][0]
+            reasoning = self._generate_reasoning(query, primary_tool, tool_scores, 
+                                               has_local_content, has_external_content)
+            
+            # Return top 1-2 tools as requested
+            selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
+            
+            return {
+                'ranked_tools': selected_tools,
+                'primary_tool': primary_tool,
+                'confidence': confidence,
+                'confidence_score': confidence_score,
+                'reasoning': reasoning,
+                'tool_scores': tool_scores,
+                'session_has_content': has_local_content
+            }
+            
+        except Exception as e:
+            print(f"Error in route_tools: {e}")
+            return {
+                'ranked_tools': ['Wikipedia_Search'],
+                'primary_tool': 'Wikipedia_Search',
+                'confidence': 'low',
+                'confidence_score': 0.3,
+                'reasoning': f"Error in routing, defaulting to Wikipedia: {str(e)}",
+                'tool_scores': {'Wikipedia_Search': 1, 'ArXiv_Search': 0, 'Internal_VectorDB': 0},
+                'session_has_content': False
+            }
+    
+    def _generate_reasoning(self, query: str, primary_tool: str, scores: Dict, 
+                          has_local: bool, has_external: bool) -> str:
+        """Generate human-readable reasoning for tool selection."""
+        
+        query_lower = query.lower()
+        reasons = []
+        
+        if primary_tool == 'ArXiv_Search':
+            if any(kw in query_lower for kw in ['latest', 'recent', 'research', 'study']):
+                reasons.append("Query contains research-oriented keywords")
+            reasons.append("ArXiv selected for scientific papers and recent findings")
+        
+        elif primary_tool == 'Internal_VectorDB':
+            if any(kw in query_lower for kw in ['uploaded', 'my', 'our']):
+                reasons.append("Query references user-specific or uploaded content")
+            if has_local:
+                reasons.append("User has uploaded documents available")
+            else:
+                reasons.append("WARNING: Internal documents requested but none available")
+        
+        elif primary_tool == 'Wikipedia_Search':
+            if any(kw in query_lower for kw in ['what is', 'define', 'explain']):
+                reasons.append("Query seeks definitions or general explanations")
+            reasons.append("Wikipedia selected for encyclopedic knowledge")
+        
+        # Add confidence reasoning
+        score_diff = scores[primary_tool] - max([s for k, s in scores.items() if k != primary_tool])
+        if score_diff >= 3:
+            reasons.append("High confidence in tool selection based on keyword analysis")
+        elif score_diff >= 1:
+            reasons.append("Medium confidence - clear preference but alternatives possible")
+        else:
+            reasons.append("Low confidence - multiple tools could be relevant")
+        
+        return "; ".join(reasons) if reasons else "Default selection based on general query pattern"

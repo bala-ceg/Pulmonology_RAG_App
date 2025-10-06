@@ -17,13 +17,11 @@
         }
 
         .message-content {
-            padding: 10px;
-            border-radius: 5px;
-            background-color: white;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            word-wrap: break-word;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: white;
+        display: block;        /* ← stack children one after another */
+        word-wrap: break-word;
         }
 
         .edit-btn {
@@ -1974,14 +1972,26 @@
                     citationsContent = content.substring(citationsIndex).trim();
                 }
                 
-                // Render main content as markdown
-                messageContentDiv.innerHTML = renderMarkdown(mainContent);
+                // Check if content is HTML or markdown
+                if (mainContent.includes('<div') || mainContent.includes('<h4') || mainContent.includes('<a href')) {
+                    // This is HTML content from enhanced tools - render directly
+                    messageContentDiv.innerHTML = mainContent;
+                } else {
+                    // This is markdown content - process through renderMarkdown
+                    messageContentDiv.innerHTML = renderMarkdown(mainContent);
+                }
                 
                 // If there are citations, create a separate citations div
                 if (citationsContent) {
                     const citationsDiv = document.createElement("div");
                     citationsDiv.className = "citations-section";
-                    citationsDiv.innerHTML = renderMarkdown(citationsContent);
+                    if (citationsContent.includes('<a href') || citationsContent.includes('<div')) {
+                        // HTML citations - render directly
+                        citationsDiv.innerHTML = citationsContent;
+                    } else {
+                        // Markdown citations - process through renderMarkdown
+                        citationsDiv.innerHTML = renderMarkdown(citationsContent);
+                    }
                     messageDiv.appendChild(messageContentDiv);
                     messageDiv.appendChild(citationsDiv);
                 } else {
