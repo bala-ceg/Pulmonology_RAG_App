@@ -386,7 +386,7 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
     """Enhanced Internal VectorDB search with LLM summary and HTML formatting"""
     
     try:
-        print(f"Enhanced Internal_VectorDB: Searching for '{query}'")
+        print(f"Enhanced Internal_VectorDB: Searching for '{query}' (session: {session_id})")
         
         if not rag_manager:
             return {
@@ -395,6 +395,16 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
                 'citations': "",
                 'tool_info': ""
             }
+        
+        # Load session-specific vector database if session_id provided
+        session_kb_loaded = False
+        if session_id:
+            session_kb_loaded = rag_manager.load_session_vector_db(session_id)
+            if not session_kb_loaded:
+                print(f"Enhanced Internal_VectorDB: No session vector DB found for {session_id} - falling back to Wikipedia")
+                fallback_result = enhanced_wikipedia_search(query)
+                fallback_result['content'] = f"No documents found for your session. Showing general knowledge instead:\n\n{fallback_result['content']}"
+                return fallback_result
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:

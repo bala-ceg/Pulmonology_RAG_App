@@ -1080,8 +1080,13 @@ def handle_query():
             print("🚀 Using Integrated Medical RAG System with Tool Routing")
             print(f"📝 Query: '{user_input}'")
             
-            # Extract session ID from request if available
-            session_id = request.json.get("session_id", "guest")
+            # Extract session ID from request if available, fallback to current session
+            session_id = request.json.get("session_id")
+            if not session_id or session_id == "guest":
+                # Use the current session folder created when page was loaded
+                global last_created_folder
+                session_id = last_created_folder if last_created_folder else "guest"
+                print(f"🔄 Using current session: {session_id}")
             
             # Use the integrated RAG system's intelligent query method
             integrated_result = integrated_rag_system.query(user_input, session_id)
@@ -1111,8 +1116,11 @@ def handle_query():
             print("🧠 Using Two-Store RAG Architecture with Lexical Gate")
             print(f"📝 Query: '{user_input}'")
             
-            # Use the RAG manager's intelligent routing
-            rag_result = rag_manager.query_with_routing(user_input)
+            # Extract session ID from request if available
+            session_id = request.json.get("session_id", "guest")
+            
+            # Use the RAG manager's intelligent routing with session-specific vector DB
+            rag_result = rag_manager.query_with_routing(user_input, session_id)
             
             if rag_result['responses']:
                 # Sort responses by confidence
@@ -1345,8 +1353,13 @@ def handle_query_html():
             print("🚀 Using Integrated Medical RAG System with Tool Routing")
             print(f"📝 Query: '{user_input}'")
             
-            # Extract session ID from request if available
-            session_id = request.json.get("session_id", "guest")
+            # Extract session ID from request if available, fallback to current session
+            session_id = request.json.get("session_id")
+            if not session_id or session_id == "guest":
+                # Use the current session folder created when page was loaded
+                global last_created_folder
+                session_id = last_created_folder if last_created_folder else "guest"
+                print(f"🔄 Using current session: {session_id}")
             
             # Use the integrated RAG system's intelligent query method
             answer, routing_info, tools_used, explanation = integrated_rag_system.intelligent_query(

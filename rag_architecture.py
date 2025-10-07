@@ -179,20 +179,17 @@ class TwoStoreRAGManager:
         self.kb_external = None
         self.lexical_gate = TFIDFLexicalGate()
         
-        # Load existing components
-        self._initialize_vector_stores()
+        # Session-specific vector database cache
+        self.session_cache = {}
+        self.current_session_id = None
+        
+        # Load existing components (only external KB and lexical gate)
+        self._initialize_external_vector_store()
         self.lexical_gate.load_from_disk(self.lexical_gate_path)
     
-    def _initialize_vector_stores(self):
-        """Initialize or load existing vector stores."""
+    def _initialize_external_vector_store(self):
+        """Initialize or load existing external vector store only."""
         try:
-            # Initialize kb_local
-            if os.path.exists(self.kb_local_path) and os.listdir(self.kb_local_path):
-                self.kb_local = Chroma(persist_directory=self.kb_local_path, embedding_function=self.embeddings)
-                print("Loaded existing kb_local")
-            else:
-                print("kb_local not found - will be created when documents are added")
-            
             # Initialize kb_external  
             if os.path.exists(self.kb_external_path) and os.listdir(self.kb_external_path):
                 self.kb_external = Chroma(persist_directory=self.kb_external_path, embedding_function=self.embeddings)
@@ -201,7 +198,58 @@ class TwoStoreRAGManager:
                 print("kb_external not found - will be created when documents are added")
                 
         except Exception as e:
-            print(f"Error initializing vector stores: {e}")
+            print(f"Error initializing external vector store: {e}")
+    
+    def load_session_vector_db(self, session_id: str) -> bool:
+        """Load session-specific vector database dynamically.
+        
+        Args:
+            session_id: Session identifier for the vector database
+            
+        Returns:
+            True if session vector DB was loaded successfully, False otherwise
+        """
+        try:
+            # If already loaded for this session, return True
+            if self.current_session_id == session_id and self.kb_local is not None:
+                return True
+            
+            # Check if session vector DB exists
+            session_vector_path = os.path.join(self.base_vector_path, session_id)
+            
+            if not os.path.exists(session_vector_path) or not os.listdir(session_vector_path):
+                print(f"No vector DB found for session {session_id}")
+                self.kb_local = None
+                self.current_session_id = None
+                return False
+            
+            # Check cache first
+            if session_id in self.session_cache:
+                self.kb_local = self.session_cache[session_id]
+                self.current_session_id = session_id
+                print(f"Loaded session vector DB from cache: {session_id}")
+                return True
+            
+            # Load session-specific vector database
+            self.kb_local = Chroma(persist_directory=session_vector_path, embedding_function=self.embeddings)
+            
+            # Cache the loaded vector DB (limit cache size to prevent memory issues)
+            if len(self.session_cache) >= 5:  # Limit cache to 5 sessions
+                # Remove oldest entry
+                oldest_session = next(iter(self.session_cache))
+                del self.session_cache[oldest_session]
+            
+            self.session_cache[session_id] = self.kb_local
+            self.current_session_id = session_id
+            
+            print(f"Loaded session vector DB: {session_id}")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading session vector DB for {session_id}: {e}")
+            self.kb_local = None
+            self.current_session_id = None
+            return False
     
     def add_documents_to_local(self, documents: List[Document]) -> None:
         """
@@ -297,6 +345,27 @@ class TwoStoreRAGManager:
             return self.kb_external._collection.count()
         except:
             return 0
+
+    def has_session_content(self, session_id: str) -> bool:
+        """Check if a session has vector database content without loading it."""
+        if not session_id:
+            return False
+            
+        session_path = os.path.join(self.base_vector_path, session_id)
+        if not os.path.exists(session_path):
+            return False
+            
+        # Check if there's a chroma.sqlite3 file (indicates ChromaDB data)
+        chroma_file = os.path.join(session_path, "chroma.sqlite3")
+        if os.path.exists(chroma_file):
+            # Quick check: file size > minimal threshold indicates content
+            try:
+                size = os.path.getsize(chroma_file)
+                return size > 8192  # 8KB threshold for meaningful content
+            except:
+                return False
+                
+        return False
 
     def load_wikipedia_content(self, topics: List[str], max_docs_per_topic: int = 3, force_reload: bool = False) -> None:
         """
@@ -394,17 +463,23 @@ class TwoStoreRAGManager:
         except Exception as e:
             print(f"Error loading arXiv content: {e}")
     
-    def query_with_routing(self, query: str) -> Dict:
+    def query_with_routing(self, query: str, session_id: str = None) -> Dict:
         """
         Query the RAG system with intelligent routing based on the lexical gate.
         
         Args:
             query: User query string
+            session_id: Session identifier for loading appropriate vector database
             
         Returns:
             Dictionary with response, citations, and routing information
         """
         try:
+            # Load session-specific vector database if session_id provided
+            session_kb_loaded = False
+            if session_id:
+                session_kb_loaded = self.load_session_vector_db(session_id)
+            
             # Use lexical gate to determine routing
             query_local_first, similarity_score = self.lexical_gate.should_query_local_first(query)
             
@@ -413,7 +488,9 @@ class TwoStoreRAGManager:
             routing_info = {
                 'similarity_score': similarity_score,
                 'query_local_first': query_local_first,
-                'sources_queried': []
+                'sources_queried': [],
+                'session_id': session_id,
+                'session_kb_loaded': session_kb_loaded
             }
             
             if query_local_first:
@@ -761,26 +838,41 @@ class MedicalQueryRouter:
                 if keyword in query_lower:
                     tool_scores['Wikipedia_Search'] += 2
             
-            # Context-based adjustments
-            has_local_content = (self.rag_manager and 
-                               self.rag_manager.get_local_content_count() > 0)
+            # Context-based adjustments - SESSION-AWARE
+            # Check if session has content (without loading it)
+            has_session_content = (session_id and 
+                                 self.rag_manager and 
+                                 self.rag_manager.has_session_content(session_id))
             
             has_external_content = (self.rag_manager and 
                                   self.rag_manager.has_external_content())
             
-            # Boost internal tool if user has uploaded content
-            if has_local_content:
-                tool_scores['Internal_VectorDB'] += 1
-            else:
-                # Penalize internal tool if no content available
+            # Only boost Internal_VectorDB if we have a valid session with content
+            if has_session_content:
+                tool_scores['Internal_VectorDB'] += 3  # Higher boost for session content
+                print(f"🎯 Boosting Internal_VectorDB: Session content available (session: {session_id})")
+            elif session_id:
+                # Session provided but has no content
+                print(f"⚠️  Session {session_id} has no content - routing to external sources")
                 tool_scores['Internal_VectorDB'] -= 5
+            else:
+                # No session provided - prefer external sources for general queries
+                print(f"ℹ️  No session provided - routing to external sources")
+                tool_scores['Internal_VectorDB'] -= 3
             
             # Default scoring if no keywords match
             if max(tool_scores.values()) == 0:
-                # Default hierarchy: Wikipedia -> ArXiv -> Internal
-                tool_scores['Wikipedia_Search'] = 3
-                tool_scores['ArXiv_Search'] = 2
-                tool_scores['Internal_VectorDB'] = 1 if has_local_content else 0
+                # Session-aware default hierarchy
+                if has_session_content:
+                    # Prioritize internal content when user has session-specific documents
+                    tool_scores['Internal_VectorDB'] = 4
+                    tool_scores['Wikipedia_Search'] = 3
+                    tool_scores['ArXiv_Search'] = 2
+                else:
+                    # Standard hierarchy when no session content
+                    tool_scores['Wikipedia_Search'] = 3
+                    tool_scores['ArXiv_Search'] = 2
+                    tool_scores['Internal_VectorDB'] = 0
             
             # Sort tools by score (descending)
             ranked_tools = sorted(tool_scores.items(), 
@@ -807,7 +899,7 @@ class MedicalQueryRouter:
             # Generate reasoning
             primary_tool = ranked_tools[0][0]
             reasoning = self._generate_reasoning(query, primary_tool, tool_scores, 
-                                               has_local_content, has_external_content)
+                                               has_session_content, has_external_content)
             
             # Return top 1-2 tools as requested
             selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
@@ -819,7 +911,7 @@ class MedicalQueryRouter:
                 'confidence_score': confidence_score,
                 'reasoning': reasoning,
                 'tool_scores': tool_scores,
-                'session_has_content': has_local_content
+                'session_has_content': has_session_content
             }
             
         except Exception as e:

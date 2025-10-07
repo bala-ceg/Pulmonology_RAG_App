@@ -58,3 +58,13 @@ torchaudio
 
 # OpenAI for role assignment
 openai
+
+# Additional Python packages found in the codebase
+numpy
+pandas
+pydub
+librosa
+soundfile
+
+wikipedia
+arxiv

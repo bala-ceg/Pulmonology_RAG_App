@@ -301,10 +301,18 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         Plain string with concatenated internal document content and sources footer
     """
     try:
-        print(f"Internal_VectorDB: Searching internal KB for '{query}'")
+        print(f"Internal_VectorDB: Searching internal KB for '{query}' (session: {session_id})")
         
         if not rag_manager:
             return "Internal knowledge base is not available. Please ensure documents have been uploaded and the system is properly initialized."
+        
+        # Load session-specific vector database if session_id provided
+        session_kb_loaded = False
+        if session_id:
+            session_kb_loaded = rag_manager.load_session_vector_db(session_id)
+            if not session_kb_loaded:
+                print(f"Internal_VectorDB: No session vector DB found for {session_id} - triggering Wikipedia fallback")
+                return f"No documents found for your session ({session_id}). Searching general knowledge instead...\n\n{Wikipedia_Search(query)}"
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:
