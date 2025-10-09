@@ -838,7 +838,7 @@ class MedicalQueryRouter:
                 if keyword in query_lower:
                     tool_scores['Wikipedia_Search'] += 2
             
-            # Context-based adjustments - SESSION-AWARE
+            # Context-based adjustments - QUERY-CONTENT-AWARE ROUTING
             # Check if session has content (without loading it)
             has_session_content = (session_id and 
                                  self.rag_manager and 
@@ -847,18 +847,37 @@ class MedicalQueryRouter:
             has_external_content = (self.rag_manager and 
                                   self.rag_manager.has_external_content())
             
-            # Only boost Internal_VectorDB if we have a valid session with content
-            if has_session_content:
-                tool_scores['Internal_VectorDB'] += 3  # Higher boost for session content
-                print(f"🎯 Boosting Internal_VectorDB: Session content available (session: {session_id})")
+            # Calculate content relevance scores instead of unconditional boosting
+            pdf_relevance_score = self._calculate_pdf_relevance(query_lower)
+            wiki_relevance_score = self._calculate_wiki_relevance(query_lower)
+            arxiv_relevance_score = self._calculate_arxiv_relevance(query_lower)
+            
+            # Apply relevance-based scoring  
+            tool_scores['Internal_VectorDB'] += pdf_relevance_score
+            tool_scores['Wikipedia_Search'] += wiki_relevance_score  
+            tool_scores['ArXiv_Search'] += arxiv_relevance_score
+            
+            # Debug logging for routing decision factors
+            print(f"🔍 Routing Analysis for: '{query}'")
+            print(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}")
+            print(f"📁 Session Context - ID: {session_id}, Has Content: {has_session_content}")
+            print(f"🎯 Current Tool Scores - {tool_scores}")
+            
+            # Only boost Internal_VectorDB if session has content AND query is relevant to PDF content
+            if has_session_content and pdf_relevance_score > 0:
+                tool_scores['Internal_VectorDB'] += 1  # Modest boost for relevant session content
+                print(f"🎯 Boosting Internal_VectorDB: Session content available and query relevant (session: {session_id})")
+            elif has_session_content and pdf_relevance_score == 0:
+                # Session has content but query isn't PDF-relevant
+                print(f"📄 Session {session_id} has content but query not PDF-relevant - allowing content-based routing")
             elif session_id:
                 # Session provided but has no content
                 print(f"⚠️  Session {session_id} has no content - routing to external sources")
-                tool_scores['Internal_VectorDB'] -= 5
+                tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 2)
             else:
                 # No session provided - prefer external sources for general queries
                 print(f"ℹ️  No session provided - routing to external sources")
-                tool_scores['Internal_VectorDB'] -= 3
+                tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 1)
             
             # Default scoring if no keywords match
             if max(tool_scores.values()) == 0:
@@ -900,6 +919,11 @@ class MedicalQueryRouter:
             primary_tool = ranked_tools[0][0]
             reasoning = self._generate_reasoning(query, primary_tool, tool_scores, 
                                                has_session_content, has_external_content)
+            
+            # Final routing decision logging
+            print(f"🏆 Final Routing Decision: {primary_tool} (confidence: {confidence})")
+            print(f"💭 Reasoning: {reasoning}")
+            print(f"📋 Ranked Tools: {[tool for tool, score in ranked_tools if score > 0]}")
             
             # Return top 1-2 tools as requested
             selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
@@ -961,3 +985,65 @@ class MedicalQueryRouter:
             reasons.append("Low confidence - multiple tools could be relevant")
         
         return "; ".join(reasons) if reasons else "Default selection based on general query pattern"
+    
+    def _calculate_pdf_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for PDF/Internal content based on query terms."""
+        pdf_indicators = [
+            'rdw', 'red blood cell distribution', 'mortality', 'copd', 'patients', 'study',
+            'analysis', 'cohort', 'clinical', 'medical research', 'hospital', 'treatment',
+            'diagnosis', 'outcome', 'statistical', 'regression', 'correlation', 'odds ratio',
+            'confidence interval', 'p value', 'significant', 'investigation', 'findings',
+            'results', 'conclusion', 'method', 'participant', 'baseline', 'characteristic'
+        ]
+        
+        score = 0
+        for indicator in pdf_indicators:
+            if indicator in query_lower:
+                score += 2
+        
+        # Additional scoring for medical/research patterns
+        if any(pattern in query_lower for pattern in ['what was the relationship', 'increasing', 'levels']):
+            score += 3
+        if any(pattern in query_lower for pattern in ['between', 'and', 'association']):
+            score += 2
+            
+        return min(score, 8)  # Cap at 8 points
+    
+    def _calculate_wiki_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for Wikipedia content based on query terms."""
+        wiki_indicators = [
+            'what are', 'symptoms', 'covid19', 'coronavirus', 'definition', 'overview',
+            'explain', 'tell me about', 'basic', 'general', 'introduction', 'meaning',
+            'cause', 'prevention', 'treatment options', 'types of', 'common', 'typical'
+        ]
+        
+        score = 0
+        for indicator in wiki_indicators:
+            if indicator in query_lower:
+                score += 2
+                
+        # Boost for general knowledge queries  
+        if query_lower.startswith(('what', 'how', 'why', 'when', 'where')):
+            score += 1
+            
+        return min(score, 6)  # Cap at 6 points
+    
+    def _calculate_arxiv_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for ArXiv content based on query terms."""
+        arxiv_indicators = [
+            'latest research', 'recent', 'new', 'research', 'study', 'paper', 'findings',  
+            'experiment', 'trial', 'investigation', 'preprint', 'published', 'scientific',
+            'evidence', 'current research', 'recent developments', 'newest', 'breakthrough',
+            'cutting-edge', 'novel', 'innovative', 'pulmonology', 'get me the latest'
+        ]
+        
+        score = 0 
+        for indicator in arxiv_indicators:
+            if indicator in query_lower:
+                score += 2
+                
+        # Strong boost for explicit research requests
+        if 'latest' in query_lower and 'research' in query_lower:
+            score += 3
+            
+        return min(score, 8)  # Cap at 8 points

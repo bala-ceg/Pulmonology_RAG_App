@@ -27,12 +27,10 @@ ROUTING_SYSTEM_PROMPT = """You are a medical AI assistant with access to three s
    - User specifically asks for "latest findings" or "newest studies"
 
    **Use Internal_VectorDB when:**
-   - User specifically mentions "uploaded documents", "my files", or "my PDFs"
+   - User specifically mentions "uploaded documents", "my files", "my data" or "my PDFs"
    - Query refers to content that was previously uploaded to the system
    - User asks about information "from the documents I uploaded"
    - Query mentions specific document names or content unique to uploaded files
-   - User wants to analyze their own organizational knowledge base
-   - References to "my organization's protocols" or "our guidelines"
 
 2. **HANDLE FALLBACK SCENARIOS:**
    
