@@ -100,13 +100,14 @@ class IntegratedMedicalRAG:
             print(f"Error initializing agent: {e}")
             return None
     
-    def query(self, question: str, session_id: str = None) -> Dict[str, Any]:
+    def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
         """
         Process a medical query using intelligent tool routing.
         
         Args:
             question: User's medical question
             session_id: Session identifier for user-specific content
+            patient_context: Patient problem context for medical consultation
             
         Returns:
             Dictionary with response, routing info, and metadata
@@ -137,7 +138,7 @@ class IntegratedMedicalRAG:
                     self.agent.tools = original_tools
             else:
                 # Fallback: Direct tool execution
-                response = self._direct_tool_execution(question, allowed_tools[0], session_id)
+                response = self._direct_tool_execution(question, allowed_tools[0], session_id, patient_context)
             
             # Step 4: Generate routing explanation
             explanation = get_routing_explanation(
@@ -164,7 +165,7 @@ class IntegratedMedicalRAG:
                 'session_id': session_id
             }
     
-    def _direct_tool_execution(self, question: str, tool_name: str, session_id: str = None) -> str:
+    def _direct_tool_execution(self, question: str, tool_name: str, session_id: str = None, patient_context: str = None) -> str:
         """
         Direct tool execution fallback when agent is not available.
         
@@ -172,6 +173,7 @@ class IntegratedMedicalRAG:
             question: User question
             tool_name: Name of tool to execute
             session_id: Session identifier
+            patient_context: Patient problem context for medical consultation
             
         Returns:
             Tool response string
@@ -180,17 +182,17 @@ class IntegratedMedicalRAG:
             if tool_name == 'Wikipedia_Search':
                 # Use enhanced Wikipedia search with summaries and citations
                 from enhanced_tools import enhanced_wikipedia_search, format_enhanced_response
-                result = enhanced_wikipedia_search(question)
+                result = enhanced_wikipedia_search(question, patient_context)
                 return format_enhanced_response(result)
             elif tool_name == 'ArXiv_Search':
                 # Use enhanced ArXiv search with summaries and citations
                 from enhanced_tools import enhanced_arxiv_search, format_enhanced_response
-                result = enhanced_arxiv_search(question)
+                result = enhanced_arxiv_search(question, patient_context)
                 return format_enhanced_response(result)
             elif tool_name == 'Internal_VectorDB':
                 # Use enhanced Internal VectorDB search with summaries and citations
                 from enhanced_tools import enhanced_internal_search, format_enhanced_response
-                result = enhanced_internal_search(question, session_id, self.rag_manager)
+                result = enhanced_internal_search(question, session_id, self.rag_manager, patient_context)
                 return format_enhanced_response(result)
             else:
                 return f"Unknown tool: {tool_name}. Falling back to Wikipedia."

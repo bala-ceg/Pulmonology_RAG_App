@@ -172,16 +172,23 @@ def get_llm_instance():
     except:
         return None
 
-def generate_medical_summary(content: str, query: str, tool_name: str) -> str:
-    """Generate LLM summary of medical content"""
+def generate_medical_summary(content: str, query: str, tool_name: str, patient_context: str = None) -> str:
+    """Generate LLM summary of medical content with optional patient context"""
     
     llm = get_llm_instance()
     if not llm:
         return ""  # Return empty if no LLM available
     
     try:
-        prompt = f"""
-As a medical AI assistant, please provide a concise, professional summary of the following medical information in response to the query: "{query}"
+        # Base system message for medical AI
+        system_message = "You are a medical AI assistant providing accurate, evidence-based medical information and guidance."
+        
+        # Add patient context to system message if provided
+        if patient_context:
+            system_message = f"Patient Context: {patient_context}\n\n{system_message} Always consider the patient context when providing medical advice and recommendations. Tailor your responses to the specific patient demographics, conditions, and medical history provided."
+        
+        # Create the user prompt
+        user_prompt = f"""Please provide a concise, professional summary of the following medical information in response to the query: "{query}"
 
 Focus on:
 - Key medical facts and definitions
@@ -192,10 +199,21 @@ Focus on:
 Content to summarize:
 {content[:2000]}  # Limit content to avoid token limits
 
-Provide a 2-3 sentence summary that directly addresses the user's query.
-"""
+Provide a 2-3 sentence summary that directly addresses the user's query."""
         
-        response = llm.invoke(prompt)
+        # Create messages with system context
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # Use the chat completion format for better context handling
+        from langchain.schema import HumanMessage, SystemMessage
+        response = llm.invoke([
+            SystemMessage(content=system_message),
+            HumanMessage(content=user_prompt)
+        ])
+        
         if hasattr(response, 'content'):
             return response.content.strip()
         else:
@@ -261,7 +279,7 @@ def format_tool_routing_html(primary_tool: str, confidence: str, tools_used: Lis
 
     return html
 
-def enhanced_wikipedia_search(query: str) -> Dict[str, str]:
+def enhanced_wikipedia_search(query: str, patient_context: str = None) -> Dict[str, str]:
     """Enhanced Wikipedia search with LLM summary and HTML formatting"""
     
     try:
@@ -294,7 +312,7 @@ def enhanced_wikipedia_search(query: str) -> Dict[str, str]:
         raw_content = _join_docs(filtered_docs, max_chars=1200)
         
         # Generate LLM summary
-        summary = generate_medical_summary(raw_content, query, "Wikipedia")
+        summary = generate_medical_summary(raw_content, query, "Wikipedia", patient_context)
         
         # Format citations
         citations = format_citations_html(docs, 'wikipedia')
@@ -325,7 +343,7 @@ def enhanced_wikipedia_search(query: str) -> Dict[str, str]:
             'tool_info': ""
         }
 
-def enhanced_arxiv_search(query: str) -> Dict[str, str]:
+def enhanced_arxiv_search(query: str, patient_context: str = None) -> Dict[str, str]:
     """Enhanced ArXiv search with LLM summary and HTML formatting"""
     
     try:
@@ -351,7 +369,7 @@ def enhanced_arxiv_search(query: str) -> Dict[str, str]:
         raw_content = _join_docs(docs, max_chars=1200)
         
         # Generate LLM summary
-        summary = generate_medical_summary(raw_content, query, "ArXiv")
+        summary = generate_medical_summary(raw_content, query, "ArXiv", patient_context)
         
         # Format citations
         citations = format_citations_html(docs, 'arxiv')
@@ -382,7 +400,7 @@ def enhanced_arxiv_search(query: str) -> Dict[str, str]:
             'tool_info': ""
         }
 
-def enhanced_internal_search(query: str, session_id: str = None, rag_manager=None) -> Dict[str, str]:
+def enhanced_internal_search(query: str, session_id: str = None, rag_manager=None, patient_context: str = None) -> Dict[str, str]:
     """Enhanced Internal VectorDB search with LLM summary and HTML formatting"""
     
     try:
@@ -402,14 +420,14 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
             session_kb_loaded = rag_manager.load_session_vector_db(session_id)
             if not session_kb_loaded:
                 print(f"Enhanced Internal_VectorDB: No session vector DB found for {session_id} - falling back to Wikipedia")
-                fallback_result = enhanced_wikipedia_search(query)
+                fallback_result = enhanced_wikipedia_search(query, patient_context)
                 fallback_result['content'] = f"No documents found for your session. Showing general knowledge instead:\n\n{fallback_result['content']}"
                 return fallback_result
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:
             print("Enhanced Internal_VectorDB: No local content - falling back to Wikipedia")
-            return enhanced_wikipedia_search(query)
+            return enhanced_wikipedia_search(query, patient_context)
         
         # Create retriever for local knowledge base
         retriever = rag_manager.kb_local.as_retriever(
@@ -422,7 +440,7 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
         
         if docs is None:
             print("Enhanced Internal_VectorDB: Guard triggered - falling back to Wikipedia")
-            fallback_result = enhanced_wikipedia_search(query)
+            fallback_result = enhanced_wikipedia_search(query, patient_context)
             fallback_result['content'] = f"No relevant information found in uploaded documents. Showing general knowledge instead:\n\n{fallback_result['content']}"
             return fallback_result
         
@@ -437,12 +455,12 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
         # Check if result is too generic
         if len(raw_content) < 100 or _is_generic_content(raw_content):
             print("Enhanced Internal_VectorDB: Result too generic - falling back to Wikipedia")
-            fallback_result = enhanced_wikipedia_search(query)
+            fallback_result = enhanced_wikipedia_search(query, patient_context)
             fallback_result['content'] = f"Limited relevant information in uploaded documents. Supplementing with general knowledge:\n\n{fallback_result['content']}"
             return fallback_result
         
         # Generate LLM summary
-        summary = generate_medical_summary(raw_content, query, "Internal VectorDB")
+        summary = generate_medical_summary(raw_content, query, "Internal VectorDB", patient_context)
         
         # Format citations
         citations = format_citations_html(docs, 'internal')
@@ -468,7 +486,7 @@ def enhanced_internal_search(query: str, session_id: str = None, rag_manager=Non
         error_msg = f"Error searching internal knowledge base: {str(e)}"
         print(error_msg)
         # Fallback to Wikipedia on error
-        fallback_result = enhanced_wikipedia_search(query)
+        fallback_result = enhanced_wikipedia_search(query, patient_context)
         fallback_result['content'] = f"{error_msg}\n\nFalling back to general knowledge:\n\n{fallback_result['content']}"
         return fallback_result
 

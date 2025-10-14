@@ -2100,10 +2100,17 @@
             updateRoutingStatus('Analyzing query and routing to relevant medical disciplines...');
 
             try {
+                // Get patient problem context from the editable element
+                const patientProblemElement = document.getElementById('problem-text');
+                const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
+                
                 const response = await fetch('/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: message })
+                    body: JSON.stringify({ 
+                        data: message,
+                        patient_problem: patientProblem  // Include patient problem as context
+                    })
                 });
 
                 const data = await response.json();
@@ -2280,10 +2287,17 @@
             saveBtn.disabled = true;
 
             try {
+                // Get patient problem context from the editable element
+                const patientProblemElement = document.getElementById('problem-text');
+                const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
+                
                 const response = await fetch('/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: transcription })
+                    body: JSON.stringify({ 
+                        data: transcription,
+                        patient_problem: patientProblem  // Include patient problem as context
+                    })
                 });
 
                 const data = await response.json();
@@ -2313,10 +2327,17 @@
             saveBtn.disabled = true;
 
             try {
+                // Get patient problem context from the editable element
+                const patientProblemElement = document.getElementById('problem-text');
+                const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
+                
                 const response = await fetch('/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: transcription })
+                    body: JSON.stringify({ 
+                        data: transcription,
+                        patient_problem: patientProblem  // Include patient problem as context
+                    })
                 });
 
                 const data = await response.json();

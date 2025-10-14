@@ -130,6 +130,36 @@ llm = ChatOpenAI(
     model_name=os.getenv("llm_model_name")  # gpt-3.5-turbo
 )
 
+def create_contextual_llm(patient_context: str = None) -> ChatOpenAI:
+    """
+    Create an LLM instance with optional patient context as system message.
+    
+    Args:
+        patient_context: Patient context to be used as system message
+        
+    Returns:
+        ChatOpenAI instance configured with patient context
+    """
+    base_system_message = "You are a medical AI assistant providing accurate, evidence-based medical information and guidance."
+    
+    if patient_context:
+        system_message = f"Patient Context: {patient_context}\n\n{base_system_message} Always consider the patient context when providing medical advice and recommendations. Tailor your responses to the specific patient demographics, conditions, and medical history provided."
+    else:
+        system_message = base_system_message
+    
+    # Create LLM with system message
+    contextual_llm = ChatOpenAI(
+        api_key=os.getenv("openai_api_key"),
+        base_url=os.getenv("base_url"),
+        model_name=os.getenv("llm_model_name"),
+        temperature=0.1  # Lower temperature for medical advice
+    )
+    
+    # Store system message for use in chains
+    contextual_llm._system_message = system_message
+    
+    return contextual_llm
+
 client = ApifyClient(os.getenv("apify_api_key"))  # Initialize Apify client
 
 # Load disciplines configuration
@@ -1068,17 +1098,28 @@ def parse_enhanced_response(answer, routing_info, tools_used, explanation):
 def handle_query():
     """Original JSON endpoint for the UI - returns JSON responses"""
     user_input = request.json.get("data", "")
+    patient_problem = request.json.get("patient_problem", "").strip()
+    
     if not user_input:
         return jsonify({
             "response": False,
             "message": "Please provide a valid input to get a medical response."
         })
+    
+    # Store patient context for system message (don't append to query)
+    if patient_problem:
+        print(f"📋 Using patient context as system message: '{patient_problem}'")
+    
+    # Use original user input (not contextual_input)
+    query_input = user_input
 
     try:
         # 🎯 INTEGRATED MEDICAL RAG SYSTEM WITH INTELLIGENT TOOL ROUTING
         if integrated_rag_system and INTEGRATED_RAG_AVAILABLE:
             print("🚀 Using Integrated Medical RAG System with Tool Routing")
             print(f"📝 Query: '{user_input}'")
+            if patient_problem:
+                print(f"📋 Patient Context: '{patient_problem}'")
             
             # Extract session ID from request if available, fallback to current session
             session_id = request.json.get("session_id")
@@ -1089,7 +1130,7 @@ def handle_query():
                 print(f"🔄 Using current session: {session_id}")
             
             # Use the integrated RAG system's intelligent query method
-            integrated_result = integrated_rag_system.query(user_input, session_id)
+            integrated_result = integrated_rag_system.query(query_input, session_id, patient_problem)
             
             if integrated_result and integrated_result.get('answer'):
                 answer = integrated_result['answer']
@@ -1115,12 +1156,14 @@ def handle_query():
         if rag_manager and RAG_ARCHITECTURE_AVAILABLE:
             print("🧠 Using Two-Store RAG Architecture with Lexical Gate")
             print(f"📝 Query: '{user_input}'")
+            if patient_problem:
+                print(f"📋 Patient Context: '{patient_problem}'")
             
             # Extract session ID from request if available
             session_id = request.json.get("session_id", "guest")
             
             # Use the RAG manager's intelligent routing with session-specific vector DB
-            rag_result = rag_manager.query_with_routing(user_input, session_id)
+            rag_result = rag_manager.query_with_routing(query_input, session_id)
             
             if rag_result['responses']:
                 # Sort responses by confidence
@@ -1164,11 +1207,13 @@ def handle_query():
         print("🔄 Using legacy medical routing system")
         
         # INTELLIGENT ROUTING: Analyze query to determine relevant disciplines
-        routing_result = medical_router.analyze_query(user_input)
+        routing_result = medical_router.analyze_query(query_input)
         relevant_disciplines = routing_result["disciplines"]
         confidence_scores = routing_result["confidence_scores"]
         
         print(f"🧠 Query: '{user_input}'")
+        if patient_problem:
+            print(f"📋 Patient Context: '{patient_problem}'")
         print(f"🎯 Routed to disciplines: {relevant_disciplines}")
         print(f"📊 Confidence scores: {confidence_scores}")
         
@@ -1192,8 +1237,12 @@ def handle_query():
                     retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
                     qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
                     
-                    org_response = qa_chain.invoke(user_input)
-                    search_results = retriever.invoke(user_input)
+                    # Create contextual LLM with patient context as system message
+                    contextual_llm = create_contextual_llm(patient_problem)
+                    contextual_qa_chain = RetrievalQA.from_chain_type(llm=contextual_llm, retriever=retriever)
+                    
+                    org_response = contextual_qa_chain.invoke(query_input)
+                    search_results = retriever.invoke(query_input)
                     
                     if org_response['result'].strip():
                         all_responses.append({
@@ -1227,8 +1276,12 @@ def handle_query():
                 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 2})
                 qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
                 
-                adhoc_response = qa_chain.invoke(user_input)
-                search_results = retriever.invoke(user_input)
+                # Create contextual LLM with patient context as system message  
+                contextual_llm = create_contextual_llm(patient_problem)
+                contextual_qa_chain = RetrievalQA.from_chain_type(llm=contextual_llm, retriever=retriever)
+                
+                adhoc_response = contextual_qa_chain.invoke(query_input)
+                search_results = retriever.invoke(query_input)
                 
                 if adhoc_response['result'].strip():
                     source_name = "Doctor's Files" if doctors_files_selected else "User Uploaded Documents"
@@ -1329,6 +1382,8 @@ def handle_query():
 def handle_query_html():
     """HTML endpoint that returns complete HTML documents with 3-section structure"""
     user_input = request.json.get("data", "")
+    patient_problem = request.json.get("patient_problem", "").strip()
+    
     if not user_input:
         # Create HTML error response for empty input
         result_data = {
@@ -1347,11 +1402,20 @@ def handle_query_html():
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
 
+    # Store patient context for system message (don't append to query)
+    if patient_problem:
+        print(f"📋 Using patient context as system message: '{patient_problem}'")
+    
+    # Use original user input (not contextual_input)
+    query_input = user_input
+
     try:
         # 🎯 INTEGRATED MEDICAL RAG SYSTEM WITH INTELLIGENT TOOL ROUTING
         if integrated_rag_system and INTEGRATED_RAG_AVAILABLE:
             print("🚀 Using Integrated Medical RAG System with Tool Routing")
             print(f"📝 Query: '{user_input}'")
+            if patient_problem:
+                print(f"📋 Patient Context: '{patient_problem}'")
             
             # Extract session ID from request if available, fallback to current session
             session_id = request.json.get("session_id")
@@ -1363,7 +1427,7 @@ def handle_query_html():
             
             # Use the integrated RAG system's intelligent query method
             answer, routing_info, tools_used, explanation = integrated_rag_system.intelligent_query(
-                user_input, 
+                query_input, 
                 session_id=session_id
             )
             
@@ -2146,73 +2210,185 @@ def generate_chat_pdf():
         story.append(Spacer(1, 6))
 
         def convert_markdown_to_reportlab(text):
-            """Convert markdown formatting to ReportLab-compatible HTML-like formatting"""
+            """Convert enhanced tools HTML format to ReportLab-compatible text"""
             import re
+            from bs4 import BeautifulSoup
             
-            # Handle special sections first
+            # Check if this is HTML content (contains div tags)
+            if '<div' in text and '<h4' in text:
+                try:
+                    # Parse HTML using BeautifulSoup
+                    soup = BeautifulSoup(text, 'html.parser')
+                    
+                    sections = {
+                        'answer': '',
+                        'source': '',
+                        'tool_routing': ''
+                    }
+                    
+                    # Extract sections by looking for h4 headers
+                    divs = soup.find_all('div', style=lambda x: x and 'margin-bottom' in x)
+                    
+                    for div in divs:
+                        h4 = div.find('h4')
+                        if h4:
+                            header_text = h4.get_text().strip().lower()
+                            content_div = div.find('div', style=lambda x: x and ('background-color' in x or 'padding' in x))
+                            
+                            if 'answer' in header_text:
+                                if content_div:
+                                    sections['answer'] = content_div.get_text().strip()
+                            elif 'source' in header_text:
+                                if content_div:
+                                    # Extract links and text
+                                    sources = []
+                                    links = content_div.find_all('a')
+                                    if links:
+                                        for link in links:
+                                            link_text = link.get_text().strip()
+                                            # Get the text after the link (like "(Wikipedia)")
+                                            next_text = link.next_sibling
+                                            if next_text and isinstance(next_text, str):
+                                                sources.append(f"{link_text} {next_text.strip()}")
+                                            else:
+                                                sources.append(link_text)
+                                    else:
+                                        # Fallback to plain text
+                                        sources = [content_div.get_text().strip()]
+                                    sections['source'] = '\n'.join(sources)
+                        elif 'tool selection' in header_text or 'routing' in header_text:
+                            if content_div:
+                                # Get the raw text and preserve structure better
+                                routing_html = str(content_div)
+                                sections['tool_routing'] = routing_html                    # Build formatted text
+                    formatted_parts = []
+                    
+                    # 1. Answer section (main content)
+                    if sections['answer']:
+                        formatted_parts.append(sections['answer'])
+                    
+                    # 2. Source section
+                    if sections['source']:
+                        sources = [s.strip() for s in sections['source'].split('\n') if s.strip()]
+                        if sources:
+                            formatted_parts.append(f"<br/><br/><b>Sources:</b><br/>• " + "<br/>• ".join(sources))
+                    
+                    # 3. Tool routing section
+                    if sections['tool_routing']:
+                        routing_html = sections['tool_routing']
+                        
+                        # Simple and reliable parsing approach
+                        routing_soup = BeautifulSoup(routing_html, 'html.parser')
+                        text = routing_soup.get_text()
+                        
+                        confidence = ""
+                        tools_used = ""
+                        reasoning = ""
+                        
+                        # Split by key sections and parse each part
+                        lines = text.replace('\n', ' ').split('Tools Used:')
+                        
+                        if len(lines) >= 2:
+                            # First part contains confidence
+                            confidence_part = lines[0]
+                            confidence_match = re.search(r'Confidence:\s*(.+?)$', confidence_part.strip(), re.IGNORECASE)
+                            if confidence_match:
+                                confidence = confidence_match.group(1).strip()
+                            
+                            # Second part contains tools used and reasoning
+                            rest = lines[1]
+                            reasoning_split = rest.split('Reasoning:')
+                            
+                            if len(reasoning_split) >= 2:
+                                tools_used = reasoning_split[0].strip()
+                                reasoning = reasoning_split[1].strip()
+                            else:
+                                tools_used = rest.strip()
+                        
+                        # Build routing section
+                        routing_parts = []
+                        if confidence:
+                            routing_parts.append(f"<b>Confidence:</b> {confidence}")
+                        if tools_used:
+                            routing_parts.append(f"<b>Tools Used:</b> {tools_used}")
+                        if reasoning:
+                            routing_parts.append(f"<b>Reasoning:</b> {reasoning}")
+                        
+                        if routing_parts:
+                            formatted_parts.append(f"<br/><br/><b>Tool Selection & Query Routing:</b><br/>" + "<br/>".join(routing_parts))
+                    
+                    # Combine all parts
+                    full_text = "".join(formatted_parts)
+                    
+                    # Clean up extra spaces
+                    full_text = re.sub(r'\s+', ' ', full_text)
+                    
+                    return full_text.strip()
+                    
+                except Exception as e:
+                    print(f"Error parsing HTML content: {e}")
+                    # Fallback to plain text extraction
+                    soup = BeautifulSoup(text, 'html.parser')
+                    return soup.get_text().strip()
             
-            # 1. Handle Citations section - format as a separate section with proper line breaks
-            citations_match = re.search(r'\*\*Citations:\*\*(.*?)(?=\*\*Query Routing:|$)', text, re.DOTALL)
-            citations_text = ""
-            if citations_match:
-                citations_content = citations_match.group(1).strip()
+            else:
+                # Handle plain text format (original logic)
+                sections = {
+                    'answer': '',
+                    'source': '',
+                    'tool_routing': ''
+                }
                 
-                # Process individual citations to add proper line breaks
-                # Handle patterns like **Text** **Text** where multiple citations are adjacent
-                citations_content = re.sub(r'\*\*\s*\*\*', '** **', citations_content)  # Fix broken bold markers
+                # Split text by the new section headers
+                lines = text.split('\n')
+                current_section = None
                 
-                # Split by pattern where one citation ends and another begins
-                # Look for **...** followed by **...** 
-                citation_entries = re.findall(r'\*\*[^*]+?\*\*', citations_content)
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Check for section headers
+                    if line.lower().startswith('answer'):
+                        current_section = 'answer'
+                        continue
+                    elif line.lower().startswith('source'):
+                        current_section = 'source'
+                        continue
+                    elif line.lower().startswith('tool selection') or line.lower().startswith('confidence:'):
+                        current_section = 'tool_routing'
+                        if line.lower().startswith('tool selection'):
+                            continue
+                    
+                    # Add content to the appropriate section
+                    if current_section:
+                        if sections[current_section]:
+                            sections[current_section] += ' ' + line
+                        else:
+                            sections[current_section] = line
                 
-                formatted_citations = []
-                for entry in citation_entries:
-                    if entry.strip():
-                        # Convert to ReportLab format
-                        formatted_entry = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', entry.strip())
-                        formatted_citations.append(formatted_entry)
+                # Build formatted text for plain text
+                formatted_parts = []
                 
-                if formatted_citations:
-                    citations_text = f"<br/><br/><b>Citations:</b><br/>• " + "<br/>• ".join(formatted_citations) + "<br/>"
-                else:
-                    # Fallback to simple formatting
-                    simple_citations = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', citations_content)
-                    citations_text = f"<br/><br/><b>Citations:</b><br/>{simple_citations}<br/>"
+                if sections['answer']:
+                    formatted_parts.append(sections['answer'])
                 
-                # Remove the original citations from text
-                text = re.sub(r'\*\*Citations:\*\*.*?(?=\*\*Query Routing:|$)', '', text, flags=re.DOTALL)
-            
-            # 2. Handle Query Routing section
-            routing_match = re.search(r'\*\*Query Routing:\*\*(.*?)$', text, re.DOTALL)
-            routing_text = ""
-            if routing_match:
-                routing_content = routing_match.group(1).strip()
-                routing_text = f"<br/><br/><b>Query Routing:</b><br/>{routing_content}"
-                # Remove the original routing from text
-                text = re.sub(r'\*\*Query Routing:\*\*.*?$', '', text, flags=re.DOTALL)
-            
-            # Clean up the main text
-            text = text.strip()
-            
-            # 3. Convert remaining **bold** to <b>bold</b>
-            text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-            
-            # 4. Convert *italic* to <i>italic</i>
-            text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
-            
-            # 5. Handle line breaks - convert \n to <br/>
-            text = text.replace('\n', '<br/>')
-            
-            # 6. Handle multiple line breaks for better paragraph spacing
-            text = re.sub(r'(<br/>){3,}', '<br/><br/>', text)
-            
-            # 7. Clean up extra spaces
-            text = re.sub(r'\s+', ' ', text)
-            
-            # Combine all parts
-            full_text = text + citations_text + routing_text
-            
-            return full_text.strip()
+                if sections['source']:
+                    sources = [s.strip() for s in sections['source'].split('\n') if s.strip()]
+                    if sources:
+                        formatted_parts.append(f"<br/><br/><b>Sources:</b><br/>• " + "<br/>• ".join(sources))
+                
+                if sections['tool_routing']:
+                    formatted_parts.append(f"<br/><br/><b>Tool Selection & Query Routing:</b><br/>{sections['tool_routing']}")
+                
+                # If no structured sections found, treat as plain text
+                if not any(sections.values()):
+                    formatted_parts = [text]
+                
+                full_text = "".join(formatted_parts)
+                full_text = re.sub(r'\s+', ' ', full_text)
+                
+                return full_text.strip()
 
         for i, message in enumerate(messages):
             role = message.get('role', '')
