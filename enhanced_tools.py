@@ -18,6 +18,177 @@ from langchain_openai import ChatOpenAI
 # Import original functions
 from tools import _join_docs, guarded_retrieve, _is_generic_content
 
+
+def enhanced_tavily_search(query: str, patient_context: str = None) -> Dict[str, str]:
+    """Enhanced Tavily search with LLM summary and HTML formatting"""
+    
+    try:
+        print(f"Enhanced Tavily_Search: Searching web for '{query}'")
+        
+        # Import Tavily client
+        try:
+            from tavily import TavilyClient
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            return {
+                'content': f"Tavily package not installed. Unable to search for current information on '{query}'.",
+                'summary': "Real-time web search is currently unavailable due to missing dependencies.",
+                'citations': "",
+                'tool_info': ""
+            }
+        
+        # Get API key from environment
+        tavily_api_key = os.getenv('TAVILY_API_KEY')
+        if not tavily_api_key:
+            return {
+                'content': f"Tavily API key not configured. Unable to search for current information on '{query}'.",
+                'summary': "Real-time web search is currently unavailable due to missing API configuration.",
+                'citations': "",
+                'tool_info': ""
+            }
+        
+        # Initialize Tavily client
+        client = TavilyClient(api_key=tavily_api_key)
+        
+        # Perform search with medical focus
+        search_results = client.search(
+            query=f"medical {query}",
+            search_depth="advanced",
+            max_results=5,
+            include_domains=["nih.gov", "cdc.gov", "who.int", "fda.gov", "mayoclinic.org", "webmd.com", "medscape.com"]
+        )
+        
+        if not search_results or 'results' not in search_results:
+            return {
+                'content': f"No current web information found for '{query}'.",
+                'summary': "No recent information available on this topic from authoritative medical sources.",
+                'citations': "",
+                'tool_info': ""
+            }
+        
+        # Convert Tavily results to Document format for consistency
+        docs = []
+        for result in search_results['results']:
+            content = result.get('content', '').strip()
+            title = result.get('title', 'Web Result')
+            url = result.get('url', '')
+            
+            if content:
+                # Create Document object matching other tools
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        'source': url,
+                        'source_type': 'tavily',
+                        'title': title,
+                        'url': url
+                    }
+                )
+                docs.append(doc)
+        
+        if not docs:
+            return {
+                'content': f"No relevant current information found for '{query}'.",
+                'summary': "No recent information available on this topic from authoritative medical sources.",
+                'citations': "",
+                'tool_info': ""
+            }
+        
+        # Get the raw content using the same utility function
+        raw_content = _join_docs(docs, max_chars=1500)  # Slightly more content for better summaries
+        
+        # Generate LLM summary focused on current/recent information
+        summary = generate_medical_summary_tavily(raw_content, query, patient_context)
+        
+        # Format citations for web sources
+        citations = format_citations_html(docs, 'tavily')
+        
+        # Tool routing info
+        tool_info = format_tool_routing_html(
+            primary_tool="Tavily_Search",
+            confidence="high", 
+            tools_used=["Tavily_Search"],
+            reasoning="High confidence in tool selection based on keyword analysis"
+        )
+        
+        print(f"Enhanced Tavily_Search: Found {len(search_results['results'])} web results, generated summary")
+        
+        return {
+            'content': raw_content,
+            'summary': summary,
+            'citations': citations,
+            'tool_info': tool_info
+        }
+        
+    except Exception as e:
+        error_msg = f"Error searching web with Tavily: {str(e)}"
+        print(error_msg)
+        return {
+            'content': error_msg,
+            'summary': "Unable to retrieve current information due to search error.",
+            'citations': "",
+            'tool_info': ""
+        }
+
+
+def generate_medical_summary_tavily(content: str, query: str, patient_context: str = None) -> str:
+    """Generate LLM summary specifically for Tavily web search results"""
+    
+    llm = get_llm_instance()
+    if not llm:
+        return ""  # Return empty if no LLM available
+    
+    try:
+        # Base system message for medical AI with Tavily context
+        system_message = "You are a medical AI assistant providing accurate, evidence-based medical information from current web sources and official health organization guidelines."
+        
+        # Add patient context to system message if provided
+        if patient_context:
+            system_message = f"Patient Context: {patient_context}\n\n{system_message} Always consider the patient context when providing medical advice and recommendations."
+        
+        # Create the user prompt for Tavily results
+        user_prompt = f"""Please provide a concise, professional summary of the following current medical information in response to the query: "{query}"
+
+This information comes from recent web sources including official health organizations, medical institutions, and authoritative medical websites.
+
+Focus on:
+- Current guidelines, recommendations, or recent updates
+- Recent policy changes or new medical guidance
+- Current best practices or treatment protocols
+- Important dates or timelines mentioned
+- Regulatory or organizational announcements
+
+Use clear, accessible medical language and emphasize the currency and source authority of the information.
+
+Content to summarize:
+{content[:2000]}  # Limit content to avoid token limits
+
+Provide a 2-3 sentence summary that highlights the most current and relevant information for the user's query."""
+        
+        # Create messages with system context
+        from langchain.schema import HumanMessage, SystemMessage
+        response = llm.invoke([
+            SystemMessage(content=system_message),
+            HumanMessage(content=user_prompt)
+        ])
+        
+        if hasattr(response, 'content'):
+            return response.content.strip()
+        else:
+            return str(response).strip()
+        
+    except Exception as e:
+        print(f"Error generating Tavily summary: {e}")
+        return ""
+
+
+def test_enhanced_tools():
+    """Test the enhanced medical tools"""
+    
+    print("🧪 Testing Enhanced Medical Tools")
+    print("=" * 50)
+
 def preprocess_medical_query(query: str) -> str:
     """Preprocess medical queries to improve search accuracy"""
     
@@ -245,6 +416,13 @@ def format_citations_html(docs: List[Document], source_type: str) -> str:
             source_url = metadata.get('source', '#')
             authors = metadata.get('Authors', 'Unknown Authors')
             citations.append(f'<a href="{source_url}" target="_blank">{title}</a> by {authors} (arXiv)')
+            
+        elif source_type == 'tavily':
+            title = metadata.get('title', 'Web Result')
+            source_url = metadata.get('url', metadata.get('source', '#'))
+            # Clean up title if it's too long
+            display_title = title[:80] + "..." if len(title) > 80 else title
+            citations.append(f'<a href="{source_url}" target="_blank">{display_title}</a> (Web)')
             
         elif source_type == 'internal':
             source = metadata.get('source', 'Unknown Document')

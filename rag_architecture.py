@@ -803,6 +803,23 @@ class MedicalQueryRouter:
             'overview', 'background', 'basic', 'general', 'introduction',
             'simple explanation', 'layman', 'understand', 'meaning'
         ]
+        
+        self.tavily_keywords = [
+            'current', 'latest', 'recent', 'today', 'this year', '2024', '2025',
+            'fda', 'who', 'cdc', 'ama', 'guidelines', 'recommendations',
+            'breaking', 'news', 'alert', 'recall', 'approval', 'regulatory',
+            'policy', 'update', 'announcement', 'current guidelines',
+            'latest recommendations', 'recent updates', 'safety alert'
+        ]
+        
+        self.postgres_keywords = [
+            'database', 'diagnoses available', 'diagnosis code', 'medical code',
+            'p_diagnosis', 'diagnosis table', 'diagnostic code', 'condition code',
+            'diagnoses in database', 'diagnosis from database', 'db diagnosis',
+            'diagnosis records', 'medical records', 'diagnosis data',
+            'code d1', 'diagnostic database', 'hospital database', 'clinical records',
+            'diagnosis system', 'medical database', 'diagnosis lookup'
+        ]
     
     def route_tools(self, query: str, session_id: str = None) -> Dict:
         """
@@ -822,7 +839,9 @@ class MedicalQueryRouter:
             tool_scores = {
                 'Wikipedia_Search': 0,
                 'ArXiv_Search': 0,
-                'Internal_VectorDB': 0
+                'Tavily_Search': 0,
+                'Internal_VectorDB': 0,
+                'PostgreSQL_Diagnosis_Search': 0
             }
             
             # Keyword-based scoring
@@ -837,6 +856,14 @@ class MedicalQueryRouter:
             for keyword in self.wikipedia_keywords:
                 if keyword in query_lower:
                     tool_scores['Wikipedia_Search'] += 2
+                    
+            for keyword in self.tavily_keywords:
+                if keyword in query_lower:
+                    tool_scores['Tavily_Search'] += 2
+                    
+            for keyword in self.postgres_keywords:
+                if keyword in query_lower:
+                    tool_scores['PostgreSQL_Diagnosis_Search'] += 3
             
             # Context-based adjustments - QUERY-CONTENT-AWARE ROUTING
             # Check if session has content (without loading it)
@@ -851,15 +878,19 @@ class MedicalQueryRouter:
             pdf_relevance_score = self._calculate_pdf_relevance(query_lower)
             wiki_relevance_score = self._calculate_wiki_relevance(query_lower)
             arxiv_relevance_score = self._calculate_arxiv_relevance(query_lower)
+            tavily_relevance_score = self._calculate_tavily_relevance(query_lower)
+            postgres_relevance_score = self._calculate_postgres_relevance(query_lower)
             
             # Apply relevance-based scoring  
             tool_scores['Internal_VectorDB'] += pdf_relevance_score
             tool_scores['Wikipedia_Search'] += wiki_relevance_score  
             tool_scores['ArXiv_Search'] += arxiv_relevance_score
+            tool_scores['Tavily_Search'] += tavily_relevance_score
+            tool_scores['PostgreSQL_Diagnosis_Search'] += postgres_relevance_score
             
             # Debug logging for routing decision factors
             print(f"🔍 Routing Analysis for: '{query}'")
-            print(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}")
+            print(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}, Tavily: {tavily_relevance_score}")
             print(f"📁 Session Context - ID: {session_id}, Has Content: {has_session_content}")
             print(f"🎯 Current Tool Scores - {tool_scores}")
             
@@ -887,10 +918,14 @@ class MedicalQueryRouter:
                     tool_scores['Internal_VectorDB'] = 4
                     tool_scores['Wikipedia_Search'] = 3
                     tool_scores['ArXiv_Search'] = 2
+                    tool_scores['Tavily_Search'] = 2
+                    tool_scores['PostgreSQL_Diagnosis_Search'] = 1
                 else:
                     # Standard hierarchy when no session content
                     tool_scores['Wikipedia_Search'] = 3
                     tool_scores['ArXiv_Search'] = 2
+                    tool_scores['Tavily_Search'] = 2
+                    tool_scores['PostgreSQL_Diagnosis_Search'] = 1
                     tool_scores['Internal_VectorDB'] = 0
             
             # Sort tools by score (descending)
@@ -1047,3 +1082,61 @@ class MedicalQueryRouter:
             score += 3
             
         return min(score, 8)  # Cap at 8 points
+    
+    def _calculate_tavily_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for Tavily web search based on query terms."""
+        tavily_indicators = [
+            'current', 'latest', 'recent', 'today', 'this year', '2024', '2025',
+            'fda', 'who', 'cdc', 'ama', 'guidelines', 'recommendations',
+            'breaking', 'news', 'alert', 'recall', 'approval', 'regulatory',
+            'policy', 'update', 'announcement', 'current guidelines',
+            'latest recommendations', 'recent updates', 'safety alert',
+            'real-time', 'live', 'now', 'currently'
+        ]
+        
+        score = 0
+        for indicator in tavily_indicators:
+            if indicator in query_lower:
+                score += 2
+                
+        # Strong boost for explicit current/real-time requests
+        if any(word in query_lower for word in ['current', 'latest', 'recent']) and \
+           any(word in query_lower for word in ['guidelines', 'recommendations', 'policy']):
+            score += 3
+            
+        # Boost for regulatory/organizational queries
+        if any(org in query_lower for org in ['fda', 'who', 'cdc', 'ama']):
+            score += 2
+            
+        return min(score, 8)  # Cap at 8 points
+    
+    def _calculate_postgres_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for PostgreSQL diagnosis search based on query terms."""
+        postgres_indicators = [
+            'database', 'diagnoses available', 'diagnosis code', 'medical code',
+            'p_diagnosis', 'diagnosis table', 'diagnostic code', 'condition code',
+            'diagnoses in database', 'diagnosis from database', 'db diagnosis',
+            'diagnosis records', 'medical records', 'diagnosis data',
+            'diagnostic database', 'hospital database', 'clinical records',
+            'diagnosis system', 'medical database', 'diagnosis lookup'
+        ]
+        
+        score = 0
+        for indicator in postgres_indicators:
+            if indicator in query_lower:
+                score += 3  # Higher weight for database-specific queries
+                
+        # Strong boost for explicit database requests
+        if 'database' in query_lower and any(word in query_lower for word in ['diagnosis', 'diagnoses', 'medical']):
+            score += 4
+            
+        # Boost for specific diagnosis code patterns (D1XXX)
+        import re
+        if re.search(r'd1\d{3}', query_lower) or 'code d1' in query_lower:
+            score += 5
+            
+        # Boost for table-specific queries
+        if 'p_diagnosis' in query_lower or 'diagnosis table' in query_lower:
+            score += 4
+            
+        return min(score, 10)  # Cap at 10 points (higher than others for database queries)

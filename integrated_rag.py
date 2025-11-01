@@ -11,10 +11,18 @@ from typing import Dict, List, Optional, Any
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.agents import initialize_agent, AgentType
 from langchain.schema import Document
+try:
+    from langchain.tools import tool
+except ImportError:
+    # Fallback for older versions or different package structure
+    def tool(func):
+        """Simple decorator for tool functions."""
+        func.is_tool = True
+        return func
 
 # Import our custom modules
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
-from tools import Wikipedia_Search, ArXiv_Search, Internal_VectorDB, AVAILABLE_TOOLS
+from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 
 
@@ -63,15 +71,16 @@ class IntegratedMedicalRAG:
         """Setup tools with proper context injection."""
         tools = []
         
-        # Create Wikipedia and ArXiv tools (these don't need RAG manager)
-        tools.extend([Wikipedia_Search, ArXiv_Search])
+        # Create Wikipedia, ArXiv, Tavily, and PostgreSQL tools (these don't need RAG manager)
+        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search])
         
-        # Create Internal_VectorDB tool with RAG manager injected
+        # Create Internal_VectorDB tool with RAG manager injected using @tool decorator
+        @tool
         def internal_vectordb_with_context(query: str, session_id: str = None) -> str:
             """Internal VectorDB tool with RAG manager context."""
             return Internal_VectorDB(query, session_id, self.rag_manager)
         
-        # Copy metadata from original tool
+        # Set tool metadata to match original
         internal_vectordb_with_context.name = Internal_VectorDB.name
         internal_vectordb_with_context.description = Internal_VectorDB.description
         
@@ -127,9 +136,17 @@ class IntegratedMedicalRAG:
             if self.agent:
                 # Temporarily restrict agent to selected tools
                 original_tools = self.agent.tools
+                
+                # Debug: Print tool matching
+                print(f"Allowed tools: {allowed_tools}")
+                print(f"Available tool names: {[tool.name for tool in self.tools]}")
+                
+                # Fixed tool filtering logic - exact name match (case insensitive)
                 self.agent.tools = [tool for tool in self.tools 
-                                  if any(tool.name.replace('_', '').lower() in allowed_tool.replace('_', '').lower() 
+                                  if any(tool.name.lower() == allowed_tool.lower() 
                                         for allowed_tool in allowed_tools)]
+                
+                print(f"Filtered tools: {[tool.name for tool in self.agent.tools]}")
                 
                 try:
                     response = self.agent.run(question)
@@ -194,6 +211,15 @@ class IntegratedMedicalRAG:
                 from enhanced_tools import enhanced_internal_search, format_enhanced_response
                 result = enhanced_internal_search(question, session_id, self.rag_manager, patient_context)
                 return format_enhanced_response(result)
+            elif tool_name == 'Tavily_Search':
+                # Use enhanced Tavily search with summaries and citations
+                from enhanced_tools import enhanced_tavily_search, format_enhanced_response
+                result = enhanced_tavily_search(question, patient_context)
+                return format_enhanced_response(result)
+            elif tool_name == 'PostgreSQL_Diagnosis_Search':
+                # Use PostgreSQL database search for diagnosis information
+                result = PostgreSQL_Diagnosis_Search(question)
+                return result
             else:
                 return f"Unknown tool: {tool_name}. Falling back to Wikipedia."
                 
@@ -217,7 +243,8 @@ class IntegratedMedicalRAG:
             'routing_keywords': {
                 'arxiv': self.router.arxiv_keywords[:5],  # Show first 5
                 'internal': self.router.internal_keywords[:5],
-                'wikipedia': self.router.wikipedia_keywords[:5]
+                'wikipedia': self.router.wikipedia_keywords[:5],
+                'tavily': self.router.tavily_keywords[:5]
             },
             'vector_db_paths': {
                 'local': self.rag_manager.kb_local_path,

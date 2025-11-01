@@ -126,6 +126,39 @@
             background-color: #163d5d;
         }
 
+        /* Custom button styles for specific functions */
+        .sidebar .conversation-btn {
+            background-color: #9c88c4;  /* Light purple */
+            color: white;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .sidebar .conversation-btn:hover {
+            background-color: #8a76b8;
+        }
+
+        .sidebar .patient-notes-btn {
+            background-color: #6fc276;  /* Light green */
+            color: white;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .sidebar .patient-notes-btn:hover {
+            background-color: #5da865;
+        }
+
         .discipline-section {
             background: rgba(255, 255, 255, 0.1);
             padding: 10px;
@@ -778,11 +811,11 @@
             text-align: center;
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 2px dashed #28a745;
+            border-top: 2px dashed #6fc276;
         }
 
         .generate-summary-btn {
-            background: linear-gradient(135deg, #007bff, #0056b3);
+            background: linear-gradient(135deg, #6fc276, #5da865);
             color: white;
             border: none;
             padding: 12px 25px;
@@ -791,15 +824,15 @@
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(111, 194, 118, 0.3);
             position: relative;
             overflow: hidden;
         }
 
         .generate-summary-btn:hover {
-            background: linear-gradient(135deg, #0056b3, #004085);
+            background: linear-gradient(135deg, #5da865, #4a8c53);
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+            box-shadow: 0 6px 20px rgba(111, 194, 118, 0.4);
         }
 
         .generate-summary-btn:active {
@@ -1592,25 +1625,26 @@
                 </li>
 
                 
+            <!-- Doctor-Patient Conversation (moved above Record Patient Notes) -->
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="dark-btn" onclick="startPatientRecording()">Record Patient Notes</button>
+                    <button class="conversation-btn" onclick="startConversationRecording()" id="start-conversation-btn">Doc / Patient Conversation</button>
                 </li>
                 <li>
-                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
+                    <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>Stop Recording</button>
                 </li>
             </ul>
             </li>
 
-            <!-- Third Red Box: Doctor-Patient Conversation -->
+            <!-- Record Patient Notes (moved below Doctor-Patient Conversation) -->
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="dark-btn" onclick="startConversationRecording()" id="start-conversation-btn">Doc / Patient Conversation</button>
+                    <button class="patient-notes-btn" onclick="startPatientRecording()">Record Patient Notes</button>
                 </li>
                 <li>
-                    <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>Stop Recording</button>
+                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
                 </li>
             </ul>
             </li>

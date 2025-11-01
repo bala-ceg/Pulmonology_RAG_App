@@ -15,6 +15,10 @@ import os
 import re
 from typing import List, Dict, Optional, Tuple
 from langchain.schema import Document
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 try:
@@ -49,8 +53,8 @@ def _join_docs(docs: List[Document], max_chars: int = 1200) -> str:
         content = doc.page_content.strip()
         metadata = doc.metadata
         
-        # Calculate how much space we have left
-        space_left = max_chars - len(combined_text) - 50  # 50 chars buffer for formatting and sources
+        # Calculate how much space we have left (reserve more space for sources)
+        space_left = max_chars - len(combined_text) - 150  # 150 chars buffer for formatting and sources
         
         if space_left <= 0:
             break  # No more space
@@ -69,11 +73,14 @@ def _join_docs(docs: List[Document], max_chars: int = 1200) -> str:
                 sources.append(f"Wikipedia: {metadata.get('title', 'Unknown')}")
             elif metadata.get('source_type') == 'arxiv':
                 sources.append(f"arXiv: {metadata.get('Title', 'Unknown')}")
+            elif metadata.get('source_type') == 'tavily':
+                # Format Tavily sources consistently with other tools
+                sources.append(f"Web: {metadata.get('title', 'Unknown')}")
             else:
                 sources.append(os.path.basename(source) if source else "Unknown")
     
     # Add sources footer if we have sources and space
-    if sources and len(combined_text) < max_chars - 100:
+    if sources and len(combined_text) < max_chars - 50:
         sources_text = "\n\nSources: " + ", ".join(list(set(sources)))
         if len(combined_text) + len(sources_text) <= max_chars:
             combined_text += sources_text
@@ -274,6 +281,96 @@ def ArXiv_Search(query: str) -> str:
 
 
 @tool
+def Tavily_Search(query: str) -> str:
+    """
+    Search current web information using Tavily API for real-time medical updates.
+    
+    USE this tool when:
+    - User asks about "current", "latest", "recent" guidelines or protocols
+    - Query mentions specific organizations like "FDA", "WHO", "CDC", "AMA"
+    - Need real-time regulatory, policy, or breaking medical news
+    - Query contains words like "current guidelines", "latest recommendations", "recent updates"
+    - User asks about "today", "this year", "2024", "2025" or current time references
+    - Need information about drug recalls, safety alerts, or recent approvals
+    
+    DO NOT use this tool when:
+    - User asks for basic definitions or general explanations (use Wikipedia)
+    - Query is about research papers or scientific studies (use ArXiv)
+    - User wants information from uploaded documents (use Internal_VectorDB)
+    - Query is about well-established medical knowledge that doesn't change frequently
+    - User asks historical or background information
+    
+    Args:
+        query: The search query for real-time web information
+        
+    Returns:
+        Plain string with concatenated web search results and sources footer
+    """
+    try:
+        print(f"Tavily_Search: Searching web for '{query}'")
+        
+        # Import Tavily client
+        try:
+            from tavily import TavilyClient
+        except ImportError:
+            return f"Tavily package not installed. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        
+        # Get API key from environment
+        tavily_api_key = os.getenv('TAVILY_API_KEY')
+        if not tavily_api_key:
+            return f"Tavily API key not configured. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        
+        # Initialize Tavily client
+        client = TavilyClient(api_key=tavily_api_key)
+        
+        # Perform search with medical focus
+        search_results = client.search(
+            query=f"medical {query}",
+            search_depth="advanced",
+            max_results=5,
+            include_domains=["nih.gov", "cdc.gov", "who.int", "fda.gov", "mayoclinic.org", "webmd.com", "medscape.com"]
+        )
+        
+        if not search_results or 'results' not in search_results:
+            return f"No current web information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        
+        # Convert Tavily results to Document format for consistency
+        docs = []
+        for result in search_results['results']:
+            content = result.get('content', '').strip()
+            title = result.get('title', 'Web Result')
+            url = result.get('url', '')
+            
+            if content:
+                # Create Document object matching other tools
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        'source': url,
+                        'source_type': 'tavily',
+                        'title': title,
+                        'url': url
+                    }
+                )
+                docs.append(doc)
+        
+        if not docs:
+            return f"No relevant current information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        
+        # Use the same utility function as other tools for consistent formatting
+        result_text = _join_docs(docs, max_chars=1200)
+        
+        print(f"Tavily_Search: Found {len(search_results['results'])} web results, returned {len(result_text)} characters")
+        return result_text
+        
+    except Exception as e:
+        error_msg = f"Error searching web with Tavily: {str(e)}"
+        print(error_msg)
+        # Fallback to Wikipedia on error
+        return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+
+
+@tool
 def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> str:
     """
     Search internal vector database containing uploaded PDFs and URLs.
@@ -357,11 +454,80 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search(query)}"
 
 
+@tool
+def PostgreSQL_Diagnosis_Search(query: str) -> str:
+    """
+    Search PostgreSQL database for medical diagnosis information from p_diagnosis table.
+    
+    USE this tool when:
+    - User asks about specific medical diagnoses or conditions
+    - Query mentions diagnosis codes (ICD, medical codes)
+    - User wants information about available diagnoses in the database
+    - Query seeks specific diagnostic information from hospital/clinical records
+    - User asks "what diagnoses are available" or similar database queries
+    - Query contains words like "diagnosis", "diagnostic", "medical code", "condition code"
+    
+    DO NOT use this tool when:
+    - User asks for general medical information (use Wikipedia instead)
+    - Query is about treatment protocols or procedures
+    - User wants research papers or studies (use ArXiv instead) 
+    - Query is about current medical news (use Tavily instead)
+    - User asks about uploaded documents (use Internal_VectorDB instead)
+    
+    Args:
+        query: The search query for diagnosis information
+        
+    Returns:
+        Plain string with diagnosis information from database and sources footer
+    """
+    try:
+        print(f"PostgreSQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
+        
+        # Import the PostgreSQL tool
+        try:
+            from postgres_tool import enhanced_postgres_search
+        except ImportError:
+            return "PostgreSQL database tool not available. Please ensure psycopg2 is installed and database credentials are configured."
+        
+        # Search the diagnosis database
+        result = enhanced_postgres_search(query)
+        
+        # Use the enhanced formatting system like other tools
+        try:
+            from enhanced_tools import format_enhanced_response
+            return format_enhanced_response(result)
+        except ImportError:
+            # Fallback to simple formatting if enhanced_tools not available
+            response_parts = []
+            
+            # Add summary if available
+            if result.get('summary'):
+                response_parts.append(f"**Medical Summary:**\n{result['summary']}\n")
+            
+            # Add content
+            if result.get('content'):
+                response_parts.append(f"**Detailed Information:**\n{result['content']}\n")
+            
+            # Add sources
+            if result.get('citations'):
+                response_parts.append(f"**Sources:** {result['citations']}")
+            
+            return "\n".join(response_parts) if response_parts else 'No diagnosis information found.'
+        
+    except Exception as e:
+        error_msg = f"Error searching diagnosis database: {str(e)}"
+        print(error_msg)
+        # Fallback to Wikipedia for general medical information
+        return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search(query)}"
+
+
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'Wikipedia_Search': Wikipedia_Search,
     'ArXiv_Search': ArXiv_Search,
-    'Internal_VectorDB': Internal_VectorDB
+    'Tavily_Search': Tavily_Search,
+    'Internal_VectorDB': Internal_VectorDB,
+    'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search
 }
 
 
@@ -375,5 +541,7 @@ def get_tool_descriptions() -> Dict[str, str]:
     return {
         'Wikipedia_Search': "Search Wikipedia for factual, encyclopedic information, definitions, and general medical knowledge.",
         'ArXiv_Search': "Search arXiv for recent research papers, scientific studies, and cutting-edge findings.",
-        'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content."
+        'Tavily_Search': "Search current web information for real-time medical updates, guidelines, and breaking news.",
+        'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content.",
+        'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table."
     }

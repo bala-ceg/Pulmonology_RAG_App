@@ -41,6 +41,7 @@ glob2
 
 # Database
 psycopg
+psycopg2-binary
 
 # PDF generation
 reportlab
@@ -68,3 +69,6 @@ soundfile
 
 wikipedia
 arxiv
+
+# Tavily API for real-time web search
+tavily-python
