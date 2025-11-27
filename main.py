@@ -127,7 +127,8 @@ persist_directory = "./vector_db"
 llm = ChatOpenAI(
     api_key=os.getenv("openai_api_key"),
     base_url=os.getenv("base_url"),  # https://api.openai.com/v1
-    model_name=os.getenv("llm_model_name")  # gpt-3.5-turbo
+    model_name=os.getenv("llm_model_name"),  # gpt-4o-mini
+    request_timeout=30  # Add 30 second timeout
 )
 
 def create_contextual_llm(patient_context: str = None) -> ChatOpenAI:
@@ -152,7 +153,8 @@ def create_contextual_llm(patient_context: str = None) -> ChatOpenAI:
         api_key=os.getenv("openai_api_key"),
         base_url=os.getenv("base_url"),
         model_name=os.getenv("llm_model_name"),
-        temperature=0.1  # Lower temperature for medical advice
+        temperature=0.1,  # Lower temperature for medical advice
+        request_timeout=30  # Add 30 second timeout
     )
     
     # Store system message for use in chains
@@ -683,6 +685,195 @@ def transcribe():
         audio_file.save(temp.name)
         result = model.transcribe(temp.name)
     return jsonify({"text": result['text']})
+
+@app.route('/translate_audio', methods=['POST'])
+def translate_audio():
+    """
+    Transcribe audio in selected language, identify speakers (doctor/patient), and translate to English.
+    OPTIMIZED: Combined segmentation + translation in single LLM call
+    Expects: audio file, language code
+    Returns: segmented conversation with speaker roles and translations
+    """
+    from langchain.schema import HumanMessage, SystemMessage
+    import concurrent.futures
+    
+    try:
+        audio_file = request.files.get('audio')
+        language_code = request.form.get('language', 'es')  # Default to Spanish
+        
+        if not audio_file:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        # Language code mapping for Whisper
+        language_map = {
+            'es': 'spanish',
+            'zh': 'chinese',
+            'yue': 'chinese',  # Cantonese (use Chinese for Whisper)
+            'tl': 'tagalog',
+            'hi': 'hindi',
+            'te': 'telugu',
+            'ta': 'tamil',
+            'gu': 'gujarati',
+            'pa': 'punjabi'
+        }
+        
+        whisper_language = language_map.get(language_code, 'spanish')
+        
+        # Transcribe audio using Whisper with specified language
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+                temp_path = temp.name
+                audio_file.save(temp_path)
+                print(f"Translation audio file saved to: {temp_path}")
+                
+                # Transcribe with language hint
+                result = model.transcribe(temp_path, language=whisper_language)
+                original_text = result['text']
+                print(f"Transcription completed in {whisper_language}. Length: {len(original_text)} characters")
+                
+        except Exception as e:
+            print(f"Error during transcription: {str(e)}")
+            return jsonify({"error": f"Transcription failed: {str(e)}"}), 500
+        finally:
+            # Clean up temp file
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
+        
+        # OPTIMIZATION: Combine segmentation and translation in ONE LLM call
+        try:
+            needs_translation = (language_code != 'en' and whisper_language != 'english')
+            
+            if needs_translation:
+                # Combined prompt for segmentation + translation
+                combined_prompt = f"""Analyze this doctor-patient conversation in {whisper_language} and do TWO things:
+1. Segment it by speaker (doctor vs patient)
+2. Translate each segment to English
+
+Transcript:
+{original_text}
+
+Provide your response in this exact JSON format:
+{{
+  "segments": [
+    {{"speaker": "doctor", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "patient", "text": "original text", "translated_text": "English translation"}}
+  ]
+}}
+
+Rules:
+- Medical professionals use medical terminology, ask clinical questions, give advice
+- Patients describe symptoms, ask questions about their health
+- Provide accurate medical translations
+- Be precise in segmentation"""
+            else:
+                # English - only segmentation needed
+                combined_prompt = f"""Analyze this doctor-patient conversation and segment it by speaker.
+
+Transcript:
+{original_text}
+
+Provide your response in this exact JSON format:
+{{
+  "segments": [
+    {{"speaker": "doctor", "text": "the text spoken", "translated_text": "the text spoken"}},
+    {{"speaker": "patient", "text": "the text spoken", "translated_text": "the text spoken"}}
+  ]
+}}
+
+Rules:
+- Medical professionals use medical terminology, ask clinical questions, give advice
+- Patients describe symptoms, ask questions about their health"""
+            
+            messages = [
+                SystemMessage(content="You are an expert medical conversation analyzer and translator. Provide responses in valid JSON format only."),
+                HumanMessage(content=combined_prompt)
+            ]
+            
+            # Single LLM call with timeout
+            response = llm.invoke(messages)
+            result_content = response.content.strip()
+            
+            # Parse the JSON response
+            # Extract JSON from markdown code blocks if present
+            if "```json" in result_content:
+                result_content = result_content.split("```json")[1].split("```")[0].strip()
+            elif "```" in result_content:
+                result_content = result_content.split("```")[1].split("```")[0].strip()
+            
+            segments_data = json.loads(result_content)
+            segments = segments_data.get('segments', [])
+            
+            # Ensure all segments have translated_text
+            for segment in segments:
+                if 'translated_text' not in segment:
+                    segment['translated_text'] = segment.get('text', '')
+            
+            print(f"Completed: {len(segments)} segments identified and translated in single call")
+            
+            return jsonify({
+                "segments": segments,
+                "has_segments": True
+            })
+            
+        except json.JSONDecodeError as je:
+            print(f"JSON parsing error: {str(je)}")
+            print(f"Raw response: {result_content if 'result_content' in locals() else 'N/A'}")
+            
+            # Fallback: return as single segment
+            if needs_translation:
+                fallback_prompt = f"""Translate this {whisper_language} medical conversation to English. Provide only the translation.
+
+{original_text}"""
+                
+                messages = [
+                    SystemMessage(content="You are a professional medical translator."),
+                    HumanMessage(content=fallback_prompt)
+                ]
+                
+                response = llm.invoke(messages)
+                translated_text = response.content.strip()
+            else:
+                translated_text = original_text
+            
+            return jsonify({
+                "original_text": original_text,
+                "translated_text": translated_text,
+                "has_segments": False
+            })
+            
+        except Exception as e:
+            print(f"Error during segmentation/translation: {str(e)}")
+            traceback.print_exc()
+            
+            # Fallback: return as single segment without speaker identification
+            if needs_translation:
+                translation_prompt = f"""Translate the following {whisper_language} text to English.
+Provide only the English translation.
+
+Original text:
+{original_text}"""
+                
+                messages = [
+                    SystemMessage(content="You are a professional medical translator."),
+                    HumanMessage(content=translation_prompt)
+                ]
+                
+                response = llm.invoke(messages)
+                translated_text = response.content.strip()
+            else:
+                translated_text = original_text
+            
+            return jsonify({
+                "original_text": original_text,
+                "translated_text": translated_text,
+                "has_segments": False
+            })
+    
+    except Exception as e:
+        print(f"Unexpected error in translate_audio: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/transcribe_patient_notes', methods=['POST'])
 def transcribe_patient_notes():
@@ -3125,6 +3316,442 @@ def azure_storage_info():
         
     except Exception as e:
         return jsonify({"error": f"Failed to get Azure info: {str(e)}"}), 500
+
+
+# ============================================
+# RLHF (Reinforcement Learning from Human Feedback) Admin Routes
+# ============================================
+
+@app.route('/admin/rlhf')
+def admin_rlhf():
+    """Render the RLHF admin page"""
+    return render_template('admin_rlhf.html')
+
+
+@app.route('/api/rlhf/stats', methods=['GET'])
+def get_rlhf_stats():
+    """Get statistics about RLHF training data"""
+    try:
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                # Get total interactions
+                cur.execute("SELECT COUNT(*) FROM rlhf_interactions")
+                total_interactions = cur.fetchone()[0]
+                
+                # Get average rating
+                cur.execute("SELECT AVG(rating) FROM rlhf_interactions WHERE rating IS NOT NULL")
+                avg_rating_result = cur.fetchone()[0]
+                avg_rating = float(avg_rating_result) if avg_rating_result else 0.0
+                
+                # Get total sessions
+                cur.execute("SELECT COUNT(*) FROM rlhf_sessions")
+                total_sessions = cur.fetchone()[0]
+                
+                # Get bias count
+                cur.execute("SELECT COUNT(*) FROM rlhf_interactions WHERE bias_flag = TRUE")
+                bias_count = cur.fetchone()[0]
+                
+                return jsonify({
+                    "total_interactions": total_interactions,
+                    "avg_rating": avg_rating,
+                    "total_sessions": total_sessions,
+                    "bias_count": bias_count
+                })
+    except Exception as e:
+        print(f"Error getting RLHF stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/interactions', methods=['GET'])
+def get_rlhf_interactions():
+    """Get RLHF interactions with optional filters"""
+    try:
+        session_id = request.args.get('session_id', type=int)
+        min_rating = request.args.get('min_rating', type=int)
+        bias_only = request.args.get('bias_only', 'false').lower() == 'true'
+        limit = request.args.get('limit', type=int, default=50)
+        
+        query = """
+            SELECT interaction_id, session_id, user_prompt, ai_response, 
+                   rating, feedback_comment, bias_flag, created_dt, updated_dt
+            FROM rlhf_interactions
+            WHERE 1=1
+        """
+        params = []
+        
+        if session_id:
+            query += " AND session_id = %s"
+            params.append(session_id)
+        
+        if min_rating:
+            query += " AND rating >= %s"
+            params.append(min_rating)
+        
+        if bias_only:
+            query += " AND bias_flag = TRUE"
+        
+        query += " ORDER BY created_dt DESC LIMIT %s"
+        params.append(limit)
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                columns = [desc[0] for desc in cur.description]
+                results = cur.fetchall()
+                
+                interactions = []
+                for row in results:
+                    interaction = dict(zip(columns, row))
+                    # Convert datetime to string for JSON serialization
+                    if interaction.get('created_dt'):
+                        interaction['created_dt'] = interaction['created_dt'].isoformat()
+                    if interaction.get('updated_dt'):
+                        interaction['updated_dt'] = interaction['updated_dt'].isoformat()
+                    interactions.append(interaction)
+                
+                return jsonify(interactions)
+    except Exception as e:
+        print(f"Error getting RLHF interactions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/sessions', methods=['GET'])
+def get_rlhf_sessions():
+    """Get all RLHF training sessions"""
+    try:
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT session_id, user_id, model_version, session_start, 
+                           session_end, status, notes, created_dt
+                    FROM rlhf_sessions
+                    ORDER BY session_start DESC
+                """)
+                columns = [desc[0] for desc in cur.description]
+                results = cur.fetchall()
+                
+                sessions = []
+                for row in results:
+                    session = dict(zip(columns, row))
+                    # Convert datetime to string for JSON serialization
+                    if session.get('session_start'):
+                        session['session_start'] = session['session_start'].isoformat()
+                    if session.get('session_end'):
+                        session['session_end'] = session['session_end'].isoformat()
+                    if session.get('created_dt'):
+                        session['created_dt'] = session['created_dt'].isoformat()
+                    sessions.append(session)
+                
+                return jsonify(sessions)
+    except Exception as e:
+        print(f"Error getting RLHF sessions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/add_sample', methods=['POST'])
+def add_rlhf_sample():
+    """Add a new RLHF training sample"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required_fields = ['session_id', 'user_prompt', 'ai_response']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO rlhf_interactions 
+                    (session_id, user_prompt, ai_response, rating, feedback_comment, 
+                     bias_flag, created_by, updated_by, created_dt, updated_dt)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    RETURNING interaction_id
+                """, (
+                    data['session_id'],
+                    data['user_prompt'],
+                    data['ai_response'],
+                    data.get('rating', 3),
+                    data.get('feedback_comment', ''),
+                    data.get('bias_flag', False),
+                    1001,  # Default admin user
+                    1001
+                ))
+                interaction_id = cur.fetchone()[0]
+                conn.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "interaction_id": interaction_id,
+                    "message": "Training sample added successfully"
+                })
+    except Exception as e:
+        print(f"Error adding RLHF sample: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/generate_samples', methods=['POST'])
+def generate_rlhf_samples():
+    """Generate multiple sample RLHF training interactions"""
+    try:
+        # Sample medical training data
+        samples = [
+            {
+                "session_id": 1,
+                "user_prompt": "What are the current guidelines for managing Type 2 Diabetes?",
+                "ai_response": "According to ADA 2024 guidelines, Type 2 Diabetes management includes: 1) Metformin as first-line therapy, 2) HbA1c target <7% for most adults, 3) SGLT2 inhibitors or GLP-1 agonists for cardiovascular benefits, 4) Lifestyle modifications with diet and exercise.",
+                "rating": 5,
+                "feedback_comment": "Accurate and comprehensive response with latest guidelines",
+                "bias_flag": False
+            },
+            {
+                "session_id": 1,
+                "user_prompt": "What is the recommended treatment for community-acquired pneumonia?",
+                "ai_response": "For outpatient CAP treatment: 1) Amoxicillin 1g TID or Doxycycline 100mg BID for 5-7 days, 2) Add macrolide if atypical pathogens suspected, 3) Consider comorbidities and local resistance patterns.",
+                "rating": 4,
+                "feedback_comment": "Good response but could mention severity assessment criteria",
+                "bias_flag": False
+            },
+            {
+                "session_id": 2,
+                "user_prompt": "How do I interpret elevated troponin levels?",
+                "ai_response": "Elevated troponin indicates myocardial injury. Consider: 1) Acute MI (most common), 2) Myocarditis, 3) PE, 4) Renal failure, 5) Sepsis. Must correlate with clinical presentation, ECG changes, and cardiac imaging.",
+                "rating": 5,
+                "feedback_comment": "Excellent differential diagnosis approach",
+                "bias_flag": False
+            },
+            {
+                "session_id": 2,
+                "user_prompt": "What are the indications for starting statin therapy?",
+                "ai_response": "ACC/AHA 2023 guidelines recommend statins for: 1) LDL-C ≥190 mg/dL, 2) Diabetes (age 40-75) with LDL 70-189 mg/dL, 3) 10-year ASCVD risk ≥7.5%, 4) Clinical ASCVD.",
+                "rating": 5,
+                "feedback_comment": "Up-to-date guidelines accurately cited",
+                "bias_flag": False
+            },
+            {
+                "session_id": 3,
+                "user_prompt": "What is the first-line treatment for COPD exacerbation?",
+                "ai_response": "GOLD 2024 guidelines: 1) Short-acting bronchodilators (SABA/SAMA), 2) Systemic corticosteroids (Prednisone 40mg x 5 days), 3) Antibiotics if bacterial infection suspected (increased sputum purulence).",
+                "rating": 4,
+                "feedback_comment": "Correct but could elaborate on antibiotic selection",
+                "bias_flag": False
+            },
+            {
+                "session_id": 3,
+                "user_prompt": "When should I order a CT scan for suspected stroke?",
+                "ai_response": "Non-contrast CT head should be performed immediately for any suspected stroke to: 1) Rule out hemorrhage, 2) Exclude stroke mimics, 3) Determine eligibility for thrombolysis. CT angiography if large vessel occlusion suspected.",
+                "rating": 5,
+                "feedback_comment": "Critical time-sensitive information accurately provided",
+                "bias_flag": False
+            },
+            {
+                "session_id": 4,
+                "user_prompt": "What are the criteria for diagnosing rheumatoid arthritis?",
+                "ai_response": "ACR/EULAR 2010 criteria require ≥6 points from: 1) Joint involvement (0-5 points), 2) Serology (RF/anti-CCP, 0-3 points), 3) Acute phase reactants (ESR/CRP, 0-1 point), 4) Duration ≥6 weeks (1 point).",
+                "rating": 5,
+                "feedback_comment": "Comprehensive diagnostic criteria well explained",
+                "bias_flag": False
+            },
+            {
+                "session_id": 4,
+                "user_prompt": "How do you manage acute asthma exacerbation?",
+                "ai_response": "GINA 2024 approach: 1) High-dose SABA via spacer/nebulizer, 2) Oxygen to maintain SpO2 93-95%, 3) Systemic corticosteroids early, 4) Consider ipratropium bromide, 5) Assess severity and response continuously.",
+                "rating": 4,
+                "feedback_comment": "Good management outline, could add severity classification",
+                "bias_flag": False
+            },
+            {
+                "session_id": 5,
+                "user_prompt": "What are the red flags for low back pain?",
+                "ai_response": "Red flags requiring urgent evaluation: 1) Age <20 or >55, 2) History of cancer, 3) Constitutional symptoms, 4) Trauma, 5) Neurological deficits, 6) Saddle anesthesia, 7) Bowel/bladder dysfunction.",
+                "rating": 5,
+                "feedback_comment": "Essential red flags comprehensively listed",
+                "bias_flag": False
+            },
+            {
+                "session_id": 5,
+                "user_prompt": "What immunizations does an adult with diabetes need?",
+                "ai_response": "CDC recommendations for adults with diabetes: 1) Annual influenza vaccine, 2) Pneumococcal vaccines (PCV15/PCV20 or PPSV23), 3) Hepatitis B series, 4) Tdap/Td boosters, 5) COVID-19 vaccines, 6) Shingles vaccine (age ≥50).",
+                "rating": 5,
+                "feedback_comment": "Complete immunization schedule for diabetic patients",
+                "bias_flag": False
+            }
+        ]
+        
+        inserted_count = 0
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                for sample in samples:
+                    cur.execute("""
+                        INSERT INTO rlhf_interactions 
+                        (session_id, user_prompt, ai_response, rating, feedback_comment, 
+                         bias_flag, created_by, updated_by, created_dt, updated_dt)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """, (
+                        sample['session_id'],
+                        sample['user_prompt'],
+                        sample['ai_response'],
+                        sample['rating'],
+                        sample['feedback_comment'],
+                        sample['bias_flag'],
+                        1001,
+                        1001
+                    ))
+                    inserted_count += 1
+                conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "count": inserted_count,
+            "message": f"Successfully generated {inserted_count} training samples"
+        })
+    except Exception as e:
+        print(f"Error generating RLHF samples: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/update_rating', methods=['POST'])
+def update_rlhf_rating():
+    """Update rating for an existing interaction"""
+    try:
+        data = request.json
+        
+        if 'interaction_id' not in data or 'rating' not in data:
+            return jsonify({"error": "Missing interaction_id or rating"}), 400
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE rlhf_interactions 
+                    SET rating = %s, 
+                        feedback_comment = %s,
+                        bias_flag = %s,
+                        updated_by = %s,
+                        updated_dt = CURRENT_TIMESTAMP
+                    WHERE interaction_id = %s
+                """, (
+                    data['rating'],
+                    data.get('feedback_comment', ''),
+                    data.get('bias_flag', False),
+                    1001,
+                    data['interaction_id']
+                ))
+                conn.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "message": "Rating updated successfully"
+                })
+    except Exception as e:
+        print(f"Error updating RLHF rating: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/update_interaction', methods=['POST'])
+def update_rlhf_interaction():
+    """Update an entire RLHF interaction (prompt, response, rating, feedback, bias)"""
+    try:
+        data = request.json
+        
+        if 'interaction_id' not in data:
+            return jsonify({"error": "Missing interaction_id"}), 400
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE rlhf_interactions 
+                    SET user_prompt = %s,
+                        ai_response = %s,
+                        rating = %s, 
+                        feedback_comment = %s,
+                        bias_flag = %s,
+                        updated_by = %s,
+                        updated_dt = CURRENT_TIMESTAMP
+                    WHERE interaction_id = %s
+                """, (
+                    data.get('user_prompt'),
+                    data.get('ai_response'),
+                    data.get('rating', 3),
+                    data.get('feedback_comment', ''),
+                    data.get('bias_flag', False),
+                    1001,
+                    data['interaction_id']
+                ))
+                conn.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "message": "Interaction updated successfully"
+                })
+    except Exception as e:
+        print(f"Error updating RLHF interaction: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/delete_interaction', methods=['POST'])
+def delete_rlhf_interaction():
+    """Delete an RLHF interaction"""
+    try:
+        data = request.json
+        
+        if 'interaction_id' not in data:
+            return jsonify({"error": "Missing interaction_id"}), 400
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM rlhf_interactions 
+                    WHERE interaction_id = %s
+                """, (data['interaction_id'],))
+                conn.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "message": "Interaction deleted successfully"
+                })
+    except Exception as e:
+        print(f"Error deleting RLHF interaction: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/rlhf/update_session', methods=['POST'])
+def update_rlhf_session():
+    """Update an RLHF session"""
+    try:
+        data = request.json
+        
+        if 'session_id' not in data:
+            return jsonify({"error": "Missing session_id"}), 400
+        
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE rlhf_sessions 
+                    SET user_id = %s,
+                        model_version = %s,
+                        status = %s,
+                        notes = %s,
+                        updated_by = %s,
+                        updated_dt = CURRENT_TIMESTAMP
+                    WHERE session_id = %s
+                """, (
+                    data.get('user_id'),
+                    data.get('model_version'),
+                    data.get('status'),
+                    data.get('notes', ''),
+                    1001,
+                    data['session_id']
+                ))
+                conn.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "message": "Session updated successfully"
+                })
+    except Exception as e:
+        print(f"Error updating RLHF session: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

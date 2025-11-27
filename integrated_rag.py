@@ -47,8 +47,9 @@ class IntegratedMedicalRAG:
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
         self.llm = ChatOpenAI(
             openai_api_key=openai_api_key,
-            model="gpt-4",
-            temperature=0.1
+            model="gpt-4o-mini",
+            temperature=0.1,
+            request_timeout=30  # Add 30 second timeout
         )
         
         # Initialize RAG manager

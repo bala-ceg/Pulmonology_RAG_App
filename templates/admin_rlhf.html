@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RLHF Training Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .tab:hover {
+            background: #e8e8e8;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+            animation: fadeIn 0.5s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .interaction-card {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .interaction-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .interaction-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .interaction-id {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .session-badge {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+        }
+
+        .prompt-section, .response-section {
+            margin-bottom: 15px;
+        }
+
+        .section-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-label::before {
+            content: "▶";
+            margin-right: 8px;
+            color: #667eea;
+        }
+
+        .prompt-text, .response-text {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            line-height: 1.6;
+        }
+
+        .rating-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .rating-stars {
+            display: flex;
+            gap: 5px;
+        }
+
+        .star {
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #ddd;
+        }
+
+        .star.filled {
+            color: #ffd700;
+        }
+
+        .star:hover {
+            transform: scale(1.2);
+        }
+
+        .bias-flag {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .bias-flag.flagged {
+            background: #ff4444;
+            color: white;
+        }
+
+        .bias-flag.clear {
+            background: #4caf50;
+            color: white;
+        }
+
+        .feedback-text {
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #45a049;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .session-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .session-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .session-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .session-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .session-info {
+            font-size: 0.9em;
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .filter-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        .timestamp {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-edit {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-edit:hover {
+            background: #5568d3;
+        }
+
+        .btn-save {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #45a049;
+        }
+
+        .btn-cancel {
+            background: #999;
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: #888;
+        }
+
+        .btn-delete {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #dd3333;
+        }
+
+        .btn-toggle-bias {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-toggle-bias:hover {
+            background: #e68900;
+        }
+
+        .editable-text {
+            min-height: 60px;
+            padding: 10px;
+            border: 2px dashed transparent;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .editable-text.editing {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .editable-textarea {
+            width: 100%;
+            min-height: 60px;
+            padding: 10px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+            resize: vertical;
+        }
+
+        .edit-rating-stars {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+        }
+
+        .edit-rating-stars .star {
+            font-size: 2em;
+            cursor: pointer;
+        }
+
+        .session-card.editing {
+            border: 3px solid #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .edit-input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>RLHF Training Admin Panel</h1>
+            <p>Reinforcement Learning from Human Feedback - Medical AI Training</p>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('dashboard')">📊 Dashboard</div>
+            <div class="tab" onclick="showTab('interactions')">💬 Interactions</div>
+            <div class="tab" onclick="showTab('sessions')">📁 Sessions</div>
+            <div class="tab" onclick="showTab('add-sample')">➕ Add Sample</div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Interactions</h3>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Average Rating</h3>
+                    <div class="value" id="stat-avg-rating">0.0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Sessions</h3>
+                    <div class="value" id="stat-sessions">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Flagged for Bias</h3>
+                    <div class="value" id="stat-bias">0</div>
+                </div>
+            </div>
+
+            <h2 style="margin-bottom: 20px;">📈 Recent Activity</h2>
+            <div id="recent-interactions"></div>
+        </div>
+
+        <!-- Interactions Tab -->
+        <div id="interactions" class="tab-content">
+            <div class="filter-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3>🔍 Filters</h3>
+                    <button class="btn-small btn-cancel" onclick="forceResetEditState()" title="Click if you're stuck in edit mode">🔄 Reset Edit Mode</button>
+                </div>
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label>Session ID</label>
+                        <input type="number" id="filter-session" placeholder="Enter session ID">
+                    </div>
+                    <div class="form-group">
+                        <label>Minimum Rating</label>
+                        <select id="filter-rating">
+                            <option value="">All Ratings</option>
+                            <option value="1">⭐ 1+</option>
+                            <option value="2">⭐ 2+</option>
+                            <option value="3">⭐ 3+</option>
+                            <option value="4">⭐ 4+</option>
+                            <option value="5">⭐ 5</option>
+                        </select>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="filter-bias">
+                        <label for="filter-bias">Show Only Flagged</label>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" onclick="loadInteractions()">Apply Filters</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="interactions-list"></div>
+        </div>
+
+        <!-- Sessions Tab -->
+        <div id="sessions" class="tab-content">
+            <h2 style="margin-bottom: 20px;">📁 Training Sessions</h2>
+            <div id="sessions-list" class="session-list"></div>
+        </div>
+
+        <!-- Add Sample Tab -->
+        <div id="add-sample" class="tab-content">
+            <div id="add-alert" class="alert"></div>
+            
+            <h2 style="margin-bottom: 20px;">➕ Add Training Sample</h2>
+            
+            <form onsubmit="addSample(event)">
+                <div class="form-group">
+                    <label>Session ID</label>
+                    <input type="number" id="new-session-id" required>
+                </div>
+
+                <div class="form-group">
+                    <label>User Prompt (Medical Question)</label>
+                    <textarea id="new-prompt" required placeholder="Enter the patient's question or medical query..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>AI Response</label>
+                    <textarea id="new-response" required placeholder="Enter the AI's response to the query..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Rating (1-5)</label>
+                    <div class="rating-stars" id="new-rating-stars">
+                        <span class="star" data-rating="1" onclick="setRating(1)">★</span>
+                        <span class="star" data-rating="2" onclick="setRating(2)">★</span>
+                        <span class="star" data-rating="3" onclick="setRating(3)">★</span>
+                        <span class="star" data-rating="4" onclick="setRating(4)">★</span>
+                        <span class="star" data-rating="5" onclick="setRating(5)">★</span>
+                    </div>
+                    <input type="hidden" id="new-rating" value="3">
+                </div>
+
+                <div class="form-group">
+                    <label>Feedback Comment</label>
+                    <textarea id="new-feedback" placeholder="Optional: Add feedback about accuracy, bias, or quality..."></textarea>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="new-bias-flag">
+                    <label for="new-bias-flag">Flag for Bias</label>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <button type="submit" class="btn btn-primary">Add Training Sample</button>
+                    <button type="button" class="btn btn-success" onclick="addMultipleSamples()" style="margin-left: 10px;">Generate Sample Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentRating = 3;
+
+        function showTab(tabName) {
+            // Clear any editing states when switching tabs
+            editingInteractionId = null;
+            editingSessionId = null;
+            originalInteractionData = {};
+            originalSessionData = {};
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            // Load data for the tab
+            if (tabName === 'dashboard') {
+                loadDashboard();
+            } else if (tabName === 'interactions') {
+                loadInteractions();
+            } else if (tabName === 'sessions') {
+                loadSessions();
+            }
+        }
+
+        function setRating(rating) {
+            currentRating = rating;
+            document.getElementById('new-rating').value = rating;
+            
+            // Update star display
+            document.querySelectorAll('#new-rating-stars .star').forEach((star, index) => {
+                if (index < rating) {
+                    star.classList.add('filled');
+                } else {
+                    star.classList.remove('filled');
+                }
+            });
+        }
+
+        async function loadDashboard() {
+            // Reset editing states when loading dashboard
+            editingInteractionId = null;
+            editingSessionId = null;
+            
+            try {
+                const response = await fetch('/api/rlhf/stats');
+                const data = await response.json();
+                
+                document.getElementById('stat-total').textContent = data.total_interactions || 0;
+                document.getElementById('stat-avg-rating').textContent = (data.avg_rating || 0).toFixed(1);
+                document.getElementById('stat-sessions').textContent = data.total_sessions || 0;
+                document.getElementById('stat-bias').textContent = data.bias_count || 0;
+
+                // Load recent interactions
+                const interactionsResponse = await fetch('/api/rlhf/interactions?limit=5');
+                const interactions = await interactionsResponse.json();
+                displayInteractions(interactions, 'recent-interactions');
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        async function loadInteractions() {
+            // Don't reset editing state automatically - only reset when explicitly needed
+            // editingInteractionId = null; // Removed to preserve edit state
+            
+            const sessionId = document.getElementById('filter-session').value;
+            const rating = document.getElementById('filter-rating').value;
+            const biasOnly = document.getElementById('filter-bias').checked;
+
+            let url = '/api/rlhf/interactions?';
+            if (sessionId) url += `session_id=${sessionId}&`;
+            if (rating) url += `min_rating=${rating}&`;
+            if (biasOnly) url += `bias_only=true&`;
+
+            try {
+                const response = await fetch(url);
+                const interactions = await response.json();
+                displayInteractions(interactions, 'interactions-list');
+            } catch (error) {
+                console.error('Error loading interactions:', error);
+            }
+        }
+
+        function displayInteractions(interactions, containerId) {
+            const container = document.getElementById(containerId);
+            
+            if (!interactions || interactions.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No interactions found</p>';
+                return;
+            }
+
+            container.innerHTML = interactions.map(interaction => {
+                // Properly encode interaction data to avoid JSON parsing issues
+                const interactionData = JSON.stringify(interaction).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                return `
+                <div class="interaction-card" id="interaction-${interaction.interaction_id}" data-interaction="${interactionData}">
+                    <div class="interaction-header">
+                        <span class="interaction-id">Interaction #${interaction.interaction_id}</span>
+                        <span class="session-badge">Session ${interaction.session_id}</span>
+                    </div>
+                    
+                    <div class="prompt-section">
+                        <div class="section-label">User Prompt</div>
+                        <div class="prompt-text editable-text" id="prompt-${interaction.interaction_id}">${interaction.user_prompt}</div>
+                    </div>
+                    
+                    <div class="response-section">
+                        <div class="section-label">AI Response</div>
+                        <div class="response-text editable-text" id="response-${interaction.interaction_id}">${interaction.ai_response}</div>
+                    </div>
+                    
+                    <div class="rating-section" id="rating-section-${interaction.interaction_id}">
+                        <div class="rating-stars" id="rating-display-${interaction.interaction_id}">
+                            ${'★'.repeat(interaction.rating || 0).split('').map(() => '<span class="star filled">★</span>').join('')}
+                            ${'★'.repeat(5 - (interaction.rating || 0)).split('').map(() => '<span class="star">★</span>').join('')}
+                        </div>
+                        <span class="bias-flag ${interaction.bias_flag ? 'flagged' : 'clear'}" id="bias-badge-${interaction.interaction_id}">
+                            ${interaction.bias_flag ? '⚠️ Bias Flagged' : '✓ Clear'}
+                        </span>
+                        <span class="timestamp">${new Date(interaction.created_dt).toLocaleString()}</span>
+                    </div>
+                    
+                    <div class="feedback-text" id="feedback-${interaction.interaction_id}" style="${interaction.feedback_comment ? '' : 'display: none;'}">
+                        💬 <span id="feedback-text-${interaction.interaction_id}">${interaction.feedback_comment || ''}</span>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn-small btn-edit" onclick="return editInteraction(${interaction.interaction_id}, event)">✏️ Edit</button>
+                        <button class="btn-small btn-toggle-bias" onclick="return toggleBias(${interaction.interaction_id}, ${interaction.bias_flag}, event)">
+                            ${interaction.bias_flag ? '✓ Clear Bias' : '⚠️ Flag Bias'}
+                        </button>
+                        <button class="btn-small btn-delete" onclick="return deleteInteraction(${interaction.interaction_id}, event)">🗑️ Delete</button>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        async function loadSessions() {
+            // Reset editing state when loading sessions
+            editingSessionId = null;
+            
+            try {
+                const response = await fetch('/api/rlhf/sessions');
+                const sessions = await response.json();
+                
+                const container = document.getElementById('sessions-list');
+                
+                if (!sessions || sessions.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No sessions found</p>';
+                    return;
+                }
+
+                container.innerHTML = sessions.map(session => {
+                    const sessionData = JSON.stringify(session).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                    return `
+                    <div class="session-card" id="session-${session.session_id}" data-session="${sessionData}">
+                        <h3>Session #${session.session_id}</h3>
+                        <div class="session-info" id="session-user-${session.session_id}">👤 User ID: <span class="edit-value">${session.user_id}</span></div>
+                        <div class="session-info" id="session-model-${session.session_id}">🤖 Model: <span class="edit-value">${session.model_version}</span></div>
+                        <div class="session-info" id="session-status-${session.session_id}">📊 Status: <span class="edit-value">${session.status}</span></div>
+                        <div class="session-info">📅 ${new Date(session.session_start).toLocaleDateString()}</div>
+                        <div class="session-info" id="session-notes-${session.session_id}" style="margin-top: 10px; font-style: italic;">📝 <span class="edit-value">${session.notes || 'No notes'}</span></div>
+                        <div class="action-buttons">
+                            <button class="btn-small btn-edit" onclick="editSession(${session.session_id})">✏️ Edit</button>
+                            <button class="btn-small btn-primary" onclick="filterBySession(${session.session_id})">👁️ View Interactions</button>
+                        </div>
+                    </div>
+                `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
+        function filterBySession(sessionId) {
+            document.getElementById('filter-session').value = sessionId;
+            showTab('interactions');
+            setTimeout(() => loadInteractions(), 100);
+        }
+
+        async function addSample(event) {
+            event.preventDefault();
+            
+            const data = {
+                session_id: parseInt(document.getElementById('new-session-id').value),
+                user_prompt: document.getElementById('new-prompt').value,
+                ai_response: document.getElementById('new-response').value,
+                rating: parseInt(document.getElementById('new-rating').value),
+                feedback_comment: document.getElementById('new-feedback').value,
+                bias_flag: document.getElementById('new-bias-flag').checked
+            };
+
+            try {
+                const response = await fetch('/api/rlhf/add_sample', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('✅ Training sample added successfully!', 'success');
+                    event.target.reset();
+                    setRating(3);
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error adding sample: ' + error.message, 'error');
+            }
+        }
+
+        async function addMultipleSamples() {
+            if (!confirm('This will generate 10 sample training interactions. Continue?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/rlhf/generate_samples', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`✅ Successfully generated ${result.count} sample interactions!`, 'success');
+                    loadDashboard();
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error generating samples: ' + error.message, 'error');
+            }
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('add-alert');
+            alert.className = `alert alert-${type} show`;
+            alert.textContent = message;
+            
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // ============================================
+        // Edit Interaction Functions
+        // ============================================
+        
+        let editingInteractionId = null;
+        let originalInteractionData = {};
+
+        function forceResetEditState() {
+            console.log('Force resetting edit state');
+            editingInteractionId = null;
+            editingSessionId = null;
+            originalInteractionData = {};
+            originalSessionData = {};
+            alert('✅ Edit mode reset! You can now edit any interaction or session.');
+            loadInteractions();
+        }
+
+        function editInteraction(interactionId, event) {
+            // Prevent event propagation and default behavior
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            console.log('Edit clicked for interaction:', interactionId);
+            console.log('Current editing ID:', editingInteractionId);
+            
+            // If already editing this interaction, do nothing
+            if (editingInteractionId === interactionId) {
+                console.log('Already editing this interaction, ignoring click');
+                return false;
+            }
+            
+            // If editing a different interaction, warn user
+            if (editingInteractionId && editingInteractionId !== interactionId) {
+                alert('Please save or cancel the current edit first. Currently editing: ' + editingInteractionId);
+                return false;
+            }
+
+            editingInteractionId = interactionId;
+            const card = document.getElementById(`interaction-${interactionId}`);
+            if (!card) {
+                console.error('Card not found for interaction:', interactionId);
+                return;
+            }
+            
+            const dataAttr = card.getAttribute('data-interaction');
+            if (!dataAttr) {
+                console.error('No data-interaction attribute found');
+                return;
+            }
+            
+            let data;
+            try {
+                // Decode HTML entities before parsing JSON
+                const decodedData = dataAttr.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+                data = JSON.parse(decodedData);
+                originalInteractionData = {...data};
+            } catch (e) {
+                console.error('Error parsing interaction data:', e);
+                console.error('Data attribute value:', dataAttr);
+                alert('Error loading interaction data. Please refresh the page.');
+                return;
+            }
+
+            // Make prompt editable
+            const promptEl = document.getElementById(`prompt-${interactionId}`);
+            if (!promptEl) {
+                console.error('Prompt element not found:', `prompt-${interactionId}`);
+                alert('Error: Could not find prompt element');
+                editingInteractionId = null;
+                return;
+            }
+            const promptText = promptEl.textContent;
+            console.log('Making prompt editable, text length:', promptText.length);
+            promptEl.innerHTML = `<textarea class="editable-textarea" id="edit-prompt-${interactionId}">${promptText}</textarea>`;
+
+            // Make response editable
+            const responseEl = document.getElementById(`response-${interactionId}`);
+            if (!responseEl) {
+                console.error('Response element not found:', `response-${interactionId}`);
+                alert('Error: Could not find response element');
+                editingInteractionId = null;
+                return;
+            }
+            const responseText = responseEl.textContent;
+            console.log('Making response editable, text length:', responseText.length);
+            responseEl.innerHTML = `<textarea class="editable-textarea" id="edit-response-${interactionId}">${responseText}</textarea>`;
+
+            // Make rating editable
+            const ratingSection = document.getElementById(`rating-section-${interactionId}`);
+            if (!ratingSection) {
+                console.error('Rating section not found:', `rating-section-${interactionId}`);
+                alert('Error: Could not find rating section');
+                editingInteractionId = null;
+                return;
+            }
+            const currentRating = data.rating || 3;
+            console.log('Setting up rating editor, current rating:', currentRating);
+            ratingSection.innerHTML = `
+                <div>
+                    <strong>Rating:</strong>
+                    <div class="edit-rating-stars" id="edit-rating-${interactionId}">
+                        ${[1,2,3,4,5].map(r => `<span class="star ${r <= currentRating ? 'filled' : ''}" onclick="setEditRating(${interactionId}, ${r})">★</span>`).join('')}
+                    </div>
+                </div>
+            `;
+
+            // Make feedback editable
+            const feedbackEl = document.getElementById(`feedback-${interactionId}`);
+            if (!feedbackEl) {
+                console.error('Feedback element not found:', `feedback-${interactionId}`);
+                alert('Error: Could not find feedback element');
+                editingInteractionId = null;
+                return;
+            }
+            feedbackEl.style.display = 'block';
+            const feedbackText = data.feedback_comment || '';
+            console.log('Setting up feedback editor');
+            feedbackEl.innerHTML = `
+                <strong>💬 Feedback:</strong><br>
+                <textarea class="editable-textarea" id="edit-feedback-${interactionId}" placeholder="Add feedback...">${feedbackText}</textarea>
+            `;
+
+            // Update action buttons
+            const actionButtons = card.querySelector('.action-buttons');
+            if (!actionButtons) {
+                console.error('Action buttons not found');
+                alert('Error: Could not find action buttons');
+                editingInteractionId = null;
+                return;
+            }
+            console.log('Updating action buttons to Save/Cancel');
+            actionButtons.innerHTML = `
+                <button class="btn-small btn-save" onclick="return saveInteraction(${interactionId}, event)">💾 Save</button>
+                <button class="btn-small btn-cancel" onclick="return cancelEditInteraction(${interactionId}, event)">❌ Cancel</button>
+            `;
+
+            promptEl.classList.add('editing');
+            responseEl.classList.add('editing');
+            card.classList.add('editing');
+            
+            console.log('✅ Edit mode successfully activated for interaction:', interactionId);
+            return false; // Prevent any default action
+        }
+
+        function setEditRating(interactionId, rating) {
+            const stars = document.querySelectorAll(`#edit-rating-${interactionId} .star`);
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.classList.add('filled');
+                } else {
+                    star.classList.remove('filled');
+                }
+            });
+            originalInteractionData.rating = rating;
+        }
+
+        async function saveInteraction(interactionId, event) {
+            // Prevent event propagation
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            console.log('Saving interaction:', interactionId);
+            
+            const promptEl = document.getElementById(`edit-prompt-${interactionId}`);
+            const responseEl = document.getElementById(`edit-response-${interactionId}`);
+            const feedbackEl = document.getElementById(`edit-feedback-${interactionId}`);
+            
+            if (!promptEl || !responseEl || !feedbackEl) {
+                console.error('Could not find edit elements');
+                alert('Error: Could not find edit fields. Please try again.');
+                return false;
+            }
+            
+            const promptText = promptEl.value;
+            const responseText = responseEl.value;
+            const feedbackText = feedbackEl.value;
+            const rating = originalInteractionData.rating;
+            const biasFlag = originalInteractionData.bias_flag;
+            
+            console.log('Submitting update with rating:', rating, 'bias:', biasFlag);
+
+            try {
+                const response = await fetch('/api/rlhf/update_interaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        interaction_id: interactionId,
+                        user_prompt: promptText,
+                        ai_response: responseText,
+                        rating: rating,
+                        feedback_comment: feedbackText,
+                        bias_flag: biasFlag
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('✅ Interaction updated successfully!', 'success');
+                    editingInteractionId = null;
+                    originalInteractionData = {};
+                    loadInteractions();
+                    loadDashboard();
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error saving interaction:', error);
+                showAlert('❌ Error updating interaction: ' + error.message, 'error');
+            }
+            
+            return false;
+        }
+
+        function cancelEditInteraction(interactionId, event) {
+            // Prevent event propagation
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            console.log('Canceling edit for interaction:', interactionId);
+            editingInteractionId = null;
+            originalInteractionData = {};
+            loadInteractions();
+            
+            return false;
+        }
+
+        async function deleteInteraction(interactionId, event) {
+            // Prevent event propagation
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            if (!confirm('Are you sure you want to delete this interaction? This cannot be undone.')) {
+                return false;
+            }
+
+            try {
+                const response = await fetch('/api/rlhf/delete_interaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interaction_id: interactionId })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('✅ Interaction deleted successfully!', 'success');
+                    if (editingInteractionId === interactionId) {
+                        editingInteractionId = null;
+                        originalInteractionData = {};
+                    }
+                    loadInteractions();
+                    loadDashboard();
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting interaction:', error);
+                showAlert('❌ Error deleting interaction: ' + error.message, 'error');
+            }
+            
+            return false;
+        }
+
+        async function toggleBias(interactionId, currentBiasFlag, event) {
+            // Prevent event propagation
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            const newBiasFlag = !currentBiasFlag;
+            const action = newBiasFlag ? 'flag for bias' : 'clear bias flag';
+            
+            if (!confirm(`Are you sure you want to ${action} this interaction?`)) {
+                return false;
+            }
+
+            try {
+                const card = document.getElementById(`interaction-${interactionId}`);
+                const dataAttr = card.getAttribute('data-interaction');
+                const decodedData = dataAttr.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+                const data = JSON.parse(decodedData);
+
+                const response = await fetch('/api/rlhf/update_interaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        interaction_id: interactionId,
+                        user_prompt: data.user_prompt,
+                        ai_response: data.ai_response,
+                        rating: data.rating,
+                        feedback_comment: data.feedback_comment,
+                        bias_flag: newBiasFlag
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`✅ Bias flag ${newBiasFlag ? 'set' : 'cleared'} successfully!`, 'success');
+                    loadInteractions();
+                    loadDashboard();
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error updating bias flag:', error);
+                showAlert('❌ Error updating bias flag: ' + error.message, 'error');
+            }
+            
+            return false;
+        }
+
+        // ============================================
+        // Edit Session Functions
+        // ============================================
+        
+        let editingSessionId = null;
+        let originalSessionData = {};
+
+        function editSession(sessionId) {
+            if (editingSessionId && editingSessionId !== sessionId) {
+                alert('Please save or cancel the current edit first.');
+                return;
+            }
+
+            editingSessionId = sessionId;
+            const card = document.getElementById(`session-${sessionId}`);
+            
+            try {
+                // Decode HTML entities before parsing JSON
+                const dataAttr = card.getAttribute('data-session');
+                const decodedData = dataAttr.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+                const data = JSON.parse(decodedData);
+                originalSessionData = {...data};
+            } catch (e) {
+                console.error('Error parsing session data:', e);
+                alert('Error loading session data. Please refresh the page.');
+                return;
+            }
+            
+            const data = originalSessionData;
+
+            card.classList.add('editing');
+
+            // Make fields editable
+            document.getElementById(`session-user-${sessionId}`).innerHTML = `
+                👤 User ID: <input type="number" class="edit-input" id="edit-user-${sessionId}" value="${data.user_id}">
+            `;
+
+            document.getElementById(`session-model-${sessionId}`).innerHTML = `
+                🤖 Model: <input type="text" class="edit-input" id="edit-model-${sessionId}" value="${data.model_version}">
+            `;
+
+            document.getElementById(`session-status-${sessionId}`).innerHTML = `
+                📊 Status: 
+                <select class="edit-input" id="edit-status-${sessionId}">
+                    <option value="ACTIVE" ${data.status === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option>
+                    <option value="COMPLETED" ${data.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
+                    <option value="CANCELLED" ${data.status === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
+                </select>
+            `;
+
+            document.getElementById(`session-notes-${sessionId}`).innerHTML = `
+                📝 <textarea class="edit-input" id="edit-notes-${sessionId}" placeholder="Session notes...">${data.notes || ''}</textarea>
+            `;
+
+            // Update action buttons
+            const actionButtons = card.querySelector('.action-buttons');
+            actionButtons.innerHTML = `
+                <button class="btn-small btn-save" onclick="saveSession(${sessionId})">💾 Save</button>
+                <button class="btn-small btn-cancel" onclick="cancelEditSession(${sessionId})">❌ Cancel</button>
+            `;
+        }
+
+        async function saveSession(sessionId) {
+            const userId = document.getElementById(`edit-user-${sessionId}`).value;
+            const modelVersion = document.getElementById(`edit-model-${sessionId}`).value;
+            const status = document.getElementById(`edit-status-${sessionId}`).value;
+            const notes = document.getElementById(`edit-notes-${sessionId}`).value;
+
+            try {
+                const response = await fetch('/api/rlhf/update_session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        user_id: parseInt(userId),
+                        model_version: modelVersion,
+                        status: status,
+                        notes: notes
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('✅ Session updated successfully!', 'success');
+                    editingSessionId = null;
+                    loadSessions();
+                    loadDashboard();
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error updating session: ' + error.message, 'error');
+            }
+        }
+
+        function cancelEditSession(sessionId) {
+            editingSessionId = null;
+            loadSessions();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboard();
+            setRating(3); // Set default rating
+        });
+    </script>
+</body>
+</html>

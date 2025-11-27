@@ -10,6 +10,8 @@ This module provides enhanced versions of the medical tools that include:
 
 import os
 import re
+import threading
+from contextlib import contextmanager
 from typing import List, Dict, Optional, Tuple
 from langchain.schema import Document
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
@@ -17,6 +19,37 @@ from langchain_openai import ChatOpenAI
 
 # Import original functions
 from tools import _join_docs, guarded_retrieve, _is_generic_content
+
+# Timeout handler for API calls using threading (works better than signal in Flask/WSGI)
+class TimeoutException(Exception):
+    pass
+
+def run_with_timeout(func, args=(), kwargs={}, timeout_duration=30):
+    """
+    Run a function with a timeout using threading.
+    More reliable than signal-based timeout, especially in Flask/WSGI contexts.
+    """
+    result = [TimeoutException(f"Operation timed out after {timeout_duration} seconds")]
+    
+    def target():
+        try:
+            result[0] = func(*args, **kwargs)
+        except Exception as e:
+            result[0] = e
+    
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_duration)
+    
+    if thread.is_alive():
+        # Thread is still running, timeout occurred
+        raise TimeoutException(f"Operation timed out after {timeout_duration} seconds")
+    
+    if isinstance(result[0], Exception):
+        raise result[0]
+    
+    return result[0]
 
 
 def enhanced_tavily_search(query: str, patient_context: str = None) -> Dict[str, str]:
@@ -337,8 +370,9 @@ def get_llm_instance():
         return ChatOpenAI(
             api_key=os.getenv('openai_api_key'),
             base_url=os.getenv('base_url'),
-            model_name=os.getenv('llm_model_name', 'gpt-3.5-turbo'),
-            temperature=0.1
+            model_name=os.getenv('llm_model_name', 'gpt-4o-mini'),
+            temperature=0.1,
+            request_timeout=30  # Add 30 second timeout
         )
     except:
         return None
@@ -391,8 +425,18 @@ Provide a 2-3 sentence summary that directly addresses the user's query."""
             return str(response).strip()
             
     except Exception as e:
+        error_str = str(e)
         print(f"Error generating summary: {e}")
-        return ""
+        
+        # Check for specific error types
+        if "insufficient_quota" in error_str.lower() or "429" in error_str:
+            print("⚠️ OpenAI quota exceeded - summary generation skipped")
+            return "[Summary unavailable: OpenAI quota exceeded. Please add credits to your OpenAI account.]"
+        elif "timeout" in error_str.lower():
+            print("⏱️ Summary generation timed out")
+            return "[Summary unavailable: Request timed out]"
+        else:
+            return ""
 
 def format_citations_html(docs: List[Document], source_type: str) -> str:
     """Format citations as HTML with proper links and formatting"""
@@ -467,9 +511,23 @@ def enhanced_wikipedia_search(query: str, patient_context: str = None) -> Dict[s
         processed_query = preprocess_medical_query(query)
         print(f"Enhanced Wikipedia_Search: Processed query: '{processed_query}'")
         
-        # Load Wikipedia documents with processed query
-        loader = WikipediaLoader(query=processed_query, load_max_docs=3)
-        docs = loader.load()
+        # Load Wikipedia documents with processed query with timeout
+        print(f"Enhanced Wikipedia_Search: Loading documents (30s timeout)...")
+        try:
+            def load_wikipedia():
+                loader = WikipediaLoader(query=processed_query, load_max_docs=3)
+                return loader.load()
+            
+            docs = run_with_timeout(load_wikipedia, timeout_duration=30)
+            print(f"Enhanced Wikipedia_Search: Loaded {len(docs)} documents")
+        except TimeoutException as te:
+            print(f"⏱️ Wikipedia search timed out: {te}")
+            return {
+                'content': f"Wikipedia search timed out after 30 seconds for query '{query}'. The service may be experiencing delays or the topic may require more specific terminology.",
+                'summary': "Wikipedia search timed out. Please try a more specific query or try again later.",
+                'citations': "",
+                'tool_info': format_tool_routing_html("Wikipedia_Search", "medium", ["Wikipedia_Search"], "Search operation timed out")
+            }
         
         if not docs:
             return {
@@ -525,11 +583,24 @@ def enhanced_arxiv_search(query: str, patient_context: str = None) -> Dict[str, 
     """Enhanced ArXiv search with LLM summary and HTML formatting"""
     
     try:
-        print(f"Enhanced ArXiv_Search: Searching for '{query}'")
+        print(f"Enhanced ArXiv_Search: Searching for '{query}' (30s timeout)...")
         
-        # Load arXiv documents
-        loader = ArxivLoader(query=query, load_max_docs=3)
-        docs = loader.load()
+        # Load arXiv documents with timeout
+        try:
+            def load_arxiv():
+                loader = ArxivLoader(query=query, load_max_docs=3)
+                return loader.load()
+            
+            docs = run_with_timeout(load_arxiv, timeout_duration=30)
+            print(f"Enhanced ArXiv_Search: Loaded {len(docs)} documents")
+        except TimeoutException as te:
+            print(f"⏱️ ArXiv search timed out: {te}")
+            return {
+                'content': f"ArXiv search timed out after 30 seconds for query '{query}'. The service may be experiencing delays.",
+                'summary': "ArXiv search timed out. Please try again later or use a different search term.",
+                'citations': "",
+                'tool_info': format_tool_routing_html("ArXiv_Search", "medium", ["ArXiv_Search"], "Search operation timed out")
+            }
         
         if not docs:
             return {
