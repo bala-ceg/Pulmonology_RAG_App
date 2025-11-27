@@ -3,8 +3,8 @@ flask
 
 # LangChain core
 langchain
-langchain_openai
-langchain_community
+langchain-openai
+langchain-community
 langchain-chroma
 langchain-text-splitters
 
@@ -36,16 +36,14 @@ selenium
 # ChromeDriver manager (optional, for easier handling in Docker)
 webdriver-manager
 
-# Utilities
-glob2
-
-# Database
-psycopg
-psycopg2-binary
+# Database (choose one based on your needs)
+psycopg  # PostgreSQL driver v3 (used in your code)
+# psycopg2-binary  # Alternative PostgreSQL driver v2 (comment out if not needed)
 
 # PDF generation
 reportlab
 
+# Apify web scraping
 apify-client
 
 # Azure Storage for cloud uploads
@@ -60,13 +58,14 @@ torchaudio
 # OpenAI for role assignment
 openai
 
-# Additional Python packages found in the codebase
+# Additional Python packages
 numpy
 pandas
 pydub
 librosa
 soundfile
 
+# External knowledge sources
 wikipedia
 arxiv
 
