@@ -1656,6 +1656,14 @@
                 </div>
             </div>
             
+            <div class="name-field" id="conversation-language-field" style="display: none;">
+                <label for="conversation-language">Language:</label>
+                <select id="conversation-language" style="padding: 10px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc; background-color: white; width: 100%;">
+                    <option value="en">English (Default)</option>
+                    <option value="es">Spanish</option>
+                </select>
+            </div>
+            
             <div class="name-input-buttons">
                 <button type="button" class="btn-secondary" onclick="cancelNameInput()">Cancel</button>
                 <button type="button" class="btn-primary" onclick="confirmNameInput()">Start Recording</button>
@@ -1760,13 +1768,10 @@
                 <h3>Processing Information</h3>
                 <div class="session-details">
                     <div class="session-item">
-                        <strong>Voice Diarization:</strong> OpenAI-based Speaker Separation
+                        <strong>Voice Diarization:</strong> OpenAI-based Speaker Separation  <strong>Transcription Engine:</strong> Whisper
                     </div>
                     <div class="session-item">
-                        <strong>Transcription Engine:</strong> Whisper
-                    </div>
-                    <div class="session-item">
-                        <strong>Total Segments:</strong> <span id="conv-total-segments">0</span>
+                        <strong>Language Majorly Spoken:</strong> <span id="conv-language">English</span> <strong>Total Segments:</strong> <span id="conv-total-segments">0</span>
                     </div>
                 </div>
             </div>
@@ -2170,22 +2175,29 @@
             // Update modal title and button text based on operation
             const modalTitle = document.querySelector('#name-input-modal h3');
             const confirmButton = document.querySelector('#name-input-modal .btn-primary');
+            const languageField = document.getElementById('conversation-language-field');
             
             if (operation === 'chat_save') {
                 modalTitle.textContent = 'Enter Names for PDF Save';
                 confirmButton.textContent = 'Save PDF';
                 // Make patient name optional for chat save
                 document.getElementById('patient-name-input').placeholder = 'Patient name (optional)';
+                languageField.style.display = 'none';
             } else if (operation === 'conversation_recording') {
                 modalTitle.textContent = 'Enter Names for Conversation Recording';
                 confirmButton.textContent = 'Start Recording';
                 // Make patient name required for conversation recording
                 document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
+                // Show language dropdown for conversation recording
+                languageField.style.display = 'block';
+                // Reset language to default
+                document.getElementById('conversation-language').value = 'en';
             } else {
                 modalTitle.textContent = 'Enter Names for Recording';
                 confirmButton.textContent = 'Start Recording';
                 // Make patient name required for recording
                 document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
+                languageField.style.display = 'none';
             }
             
             setupAutocomplete();
@@ -3421,6 +3433,10 @@ Generated on: ${new Date().toLocaleString()}
                 formData.append('doctor_name', doctorName);
                 formData.append('patient_name', patientName);
                 
+                // Get selected language
+                const language = document.getElementById('conversation-language').value;
+                formData.append('language', language);
+                
                 showToast('Processing conversation with voice diarization...');
                 
                 const response = await fetch('/transcribe_doctor_patient_conversation', {
@@ -3460,6 +3476,23 @@ Generated on: ${new Date().toLocaleString()}
             document.getElementById('conv-patient-name').textContent = conversationData.patient_name || 'Patient';
             document.getElementById('conv-date').textContent = new Date(conversationData.session_date).toLocaleString();
             document.getElementById('conv-total-segments').textContent = conversationData.transcript ? conversationData.transcript.length : 0;
+            
+            // Language display mapping
+            const languageDisplay = {
+                'en': 'English',
+                'es': 'Spanish',
+                'zh': 'Chinese',
+                'yue': 'Cantonese',
+                'tl': 'Tagalog',
+                'hi': 'Hindi',
+                'te': 'Telugu',
+                'ta': 'Tamil',
+                'gu': 'Gujarati',
+                'pa': 'Punjabi'
+            };
+            const languageCode = conversationData.language || 'en';
+            const languageName = languageDisplay[languageCode] || languageCode.charAt(0).toUpperCase() + languageCode.slice(1);
+            document.getElementById('conv-language').textContent = languageName;
             
             // Populate segments
             const segmentsContainer = document.getElementById('segments-container');
@@ -3529,7 +3562,9 @@ Generated on: ${new Date().toLocaleString()}
                 conclusion: document.getElementById('conv-conclusion').value,
                 processingInfo: {
                     engine: 'OpenAI Voice Diarization + Whisper',
-                    totalSegments: currentConversationData.transcript ? currentConversationData.transcript.length : 0
+                    totalSegments: currentConversationData.transcript ? currentConversationData.transcript.length : 0,
+                    language: currentConversationData.language || 'en',
+                    translated: currentConversationData.translated || false
                 }
             };
             

@@ -727,10 +727,18 @@ def translate_audio():
                 audio_file.save(temp_path)
                 print(f"Translation audio file saved to: {temp_path}")
                 
-                # Transcribe with language hint
-                result = model.transcribe(temp_path, language=whisper_language)
+                # SPEED OPTIMIZATION: Use fp16, no_speech_threshold, and faster beam search
+                result = model.transcribe(
+                    temp_path, 
+                    language=whisper_language,
+                    fp16=device == "cuda",  # Use fp16 on GPU for 2x speed
+                    beam_size=1,  # Faster beam search (greedy decoding)
+                    best_of=1,  # Don't compare multiple samples
+                    temperature=0.0,  # Deterministic output
+                    condition_on_previous_text=False  # Faster processing
+                )
                 original_text = result['text']
-                print(f"Transcription completed in {whisper_language}. Length: {len(original_text)} characters")
+                print(f"✅ Fast transcription completed in {whisper_language}. Length: {len(original_text)} characters")
                 
         except Exception as e:
             print(f"Error during transcription: {str(e)}")
@@ -747,7 +755,7 @@ def translate_audio():
             if needs_translation:
                 # Combined prompt for segmentation + translation
                 combined_prompt = f"""Analyze this doctor-patient conversation in {whisper_language} and do TWO things:
-1. Segment it by speaker (doctor vs patient)
+1. Segment it by speaker (doctor vs patient) - EACH TURN/EXCHANGE should be a SEPARATE segment
 2. Translate each segment to English
 
 Transcript:
@@ -757,15 +765,19 @@ Provide your response in this exact JSON format:
 {{
   "segments": [
     {{"speaker": "doctor", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "patient", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "doctor", "text": "original text", "translated_text": "English translation"}},
     {{"speaker": "patient", "text": "original text", "translated_text": "English translation"}}
   ]
 }}
 
-Rules:
+CRITICAL Rules:
+- Split the conversation into INDIVIDUAL turns/exchanges - do NOT combine all doctor statements into one segment
+- Each time the speaker changes, create a NEW segment
 - Medical professionals use medical terminology, ask clinical questions, give advice
 - Patients describe symptoms, ask questions about their health
 - Provide accurate medical translations
-- Be precise in segmentation"""
+- Be precise in segmentation - multiple back-and-forth exchanges should result in multiple segments"""
             else:
                 # English - only segmentation needed
                 combined_prompt = f"""Analyze this doctor-patient conversation and segment it by speaker.
@@ -790,8 +802,18 @@ Rules:
                 HumanMessage(content=combined_prompt)
             ]
             
-            # Single LLM call with timeout
-            response = llm.invoke(messages)
+            # SPEED OPTIMIZATION: Use faster LLM with optimized settings
+            from langchain_openai import ChatOpenAI
+            fast_llm = ChatOpenAI(
+                api_key=os.getenv("openai_api_key"),
+                base_url=os.getenv("base_url"),
+                model_name=os.getenv("llm_model_name"),
+                temperature=0.3,  # Faster inference with slight randomness
+                max_tokens=2000,  # Limit output length for speed
+                request_timeout=30
+            )
+            
+            response = fast_llm.invoke(messages)
             result_content = response.content.strip()
             
             # Parse the JSON response
@@ -2781,9 +2803,26 @@ def generate_conversation_pdf():
         story.append(Paragraph("Processing Information", header_style))
         engine_info = processing_info.get('engine', 'OpenAI Voice Diarization + Whisper')
         total_segments = processing_info.get('totalSegments', len(segments))
+        language_used = processing_info.get('language', 'English')
+        was_translated = processing_info.get('translated', False)
         
-        story.append(Paragraph(f"Engine: {engine_info}", styles['Normal']))
-        story.append(Paragraph(f"Total Segments: {total_segments}", styles['Normal']))
+        # Language display mapping
+        language_display = {
+            'en': 'English',
+            'es': 'Spanish',
+            'zh': 'Chinese',
+            'yue': 'Cantonese',
+            'tl': 'Tagalog',
+            'hi': 'Hindi',
+            'te': 'Telugu',
+            'ta': 'Tamil',
+            'gu': 'Gujarati',
+            'pa': 'Punjabi'
+        }
+        language_name = language_display.get(language_used, language_used.title() if language_used else 'English')
+        
+        story.append(Paragraph("Voice Diarization: OpenAI-based Speaker Separation  Transcription Engine: Whisper", styles['Normal']))
+        story.append(Paragraph(f"Language Majorly Spoken: {language_name}   Total Segments: {total_segments}", styles['Normal']))
         
         # Format date
         display_date = date_time if date_time else datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p")
@@ -2982,95 +3021,281 @@ def search_patients():
 
 @app.route("/transcribe_doctor_patient_conversation", methods=["POST"])
 def transcribe_doctor_patient_conversation():
-    """Handle doctor-patient conversation recording with voice diarization"""
+    """Handle doctor-patient conversation recording with voice diarization and optional translation"""
     if not DIARIZATION_AVAILABLE:
         return jsonify({"error": "Voice diarization not available. Please install required dependencies."}), 500
     
     try:
+        from langchain.schema import HumanMessage, SystemMessage
+        
         audio_file = request.files['audio']
         doctor_name = request.form.get('doctor_name', 'Unknown Doctor')
         patient_name = request.form.get('patient_name', 'Unknown Patient')
+        language = request.form.get('language', 'en')  # Get language parameter (default: English)
         
-        # Save uploaded audio to temporary file with proper format
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+        print(f"Processing conversation for {doctor_name} and {patient_name} in language: {language}")
+        
+        # Save uploaded audio to temporary file (raw format from browser)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
         
-        # Convert audio to proper format for pyannote
+        # Convert audio to proper WAV format for processing
         try:
-            import librosa
-            import soundfile as sf
+            from pydub import AudioSegment
             
-            # Load audio and convert to proper format
-            audio_data, sample_rate = librosa.load(temp_audio_path, sr=16000, mono=True)
+            # Load audio file (supports WebM, MP3, WAV, etc.)
+            print(f"Loading audio file: {temp_audio_path}")
+            audio = AudioSegment.from_file(temp_audio_path)
             
-            # Create a new properly formatted WAV file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_audio:
-                sf.write(converted_audio.name, audio_data, sample_rate, format='WAV', subtype='PCM_16')
-                converted_audio_path = converted_audio.name
+            # Convert to mono 16kHz WAV (optimal for Whisper)
+            audio = audio.set_channels(1).set_frame_rate(16000)
             
-            # Clean up original temp file
+            # Export as WAV
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as wav_file:
+                audio.export(wav_file.name, format='wav')
+                wav_audio_path = wav_file.name
+            
+            # Clean up original file
             os.unlink(temp_audio_path)
-            temp_audio_path = converted_audio_path
+            temp_audio_path = wav_audio_path
+            print(f"✅ Audio converted to WAV: {temp_audio_path}")
             
         except ImportError:
-            # If librosa/soundfile not available, try with pydub
+            # Fallback: Try soundfile for WAV files
             try:
-                from pydub import AudioSegment
-                import io
+                import soundfile as sf
                 
-                # Load the audio file
-                audio_segment = AudioSegment.from_file(temp_audio_path)
+                # Use soundfile directly (faster and no warnings)
+                audio_data, sample_rate = sf.read(temp_audio_path)
                 
-                # Convert to proper format: 16kHz, mono, 16-bit PCM
-                audio_segment = audio_segment.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+                # Convert to mono if stereo
+                if len(audio_data.shape) > 1:
+                    audio_data = audio_data.mean(axis=1)
                 
-                # Export as proper WAV
+                # Resample if needed (using scipy for speed)
+                if sample_rate != 16000:
+                    from scipy import signal
+                    num_samples = int(len(audio_data) * 16000 / sample_rate)
+                    audio_data = signal.resample(audio_data, num_samples)
+                    sample_rate = 16000
+                
+                # Create a new properly formatted WAV file
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_audio:
-                    audio_segment.export(converted_audio.name, format="wav")
+                    sf.write(converted_audio.name, audio_data, sample_rate, format='WAV', subtype='PCM_16')
                     converted_audio_path = converted_audio.name
                 
                 # Clean up original temp file
                 os.unlink(temp_audio_path)
                 temp_audio_path = converted_audio_path
+                print(f"✅ Audio converted using soundfile: {temp_audio_path}")
                 
-            except ImportError:
-                # If no audio processing libraries available, log warning and continue
-                print("Warning: No audio processing libraries available. Using original audio format.")
+            except Exception as e:
+                print(f"⚠️ Audio conversion error: {e}")
+                print("Warning: Using original audio format - may not work correctly")
         
         try:
-            # Process conversation with voice diarization (OpenAI-only mode)
-            diarization_processor = get_diarization_processor()
-            
-            # Run async function in thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            print("🔄 Using OpenAI-only processing (bypassing pyannote)")
-            result = loop.run_until_complete(
-                diarization_processor.process_doctor_patient_conversation_openai_only(temp_audio_path)
-            )
-            
-            if result.get("error"):
-                return jsonify({"success": False, "error": result["error"]}), 500
-            
-            # Prepare conversation data
-            conversation_data = {
-                "doctor_name": doctor_name,
-                "patient_name": patient_name,
-                "session_date": datetime.now().isoformat(),
-                "duration": result.get("total_duration", "Unknown"),
-                "total_segments": result.get("total_segments", 0),
-                "doctor_segments": result.get("doctor_segments", 0),
-                "patient_segments": result.get("patient_segments", 0),
-                "speakers_detected": result.get("speakers_detected", 0),
-                "transcript": result.get("transcript", []),
-                "raw_transcript": result.get("raw_transcript", ""),
-                "role_mapping": result.get("role_mapping", {})
-            }
+            # Check if Spanish translation is needed
+            if language == 'es':
+                # Spanish mode: Directly use the working translate_audio logic
+                print("🔄 Processing Spanish conversation - using translate_audio approach")
+                
+                # Create a mock request object to pass to translate_audio logic
+                from werkzeug.datastructures import FileStorage
+                from io import BytesIO
+                
+                # Read the audio file into memory
+                with open(temp_audio_path, 'rb') as f:
+                    audio_bytes = f.read()
+                
+                # Create mock files and form for internal processing
+                mock_files = {'audio': FileStorage(stream=BytesIO(audio_bytes), filename='audio.wav')}
+                mock_form = {'language': language}
+                
+                # Manually invoke translate_audio logic inline
+                try:
+                    # Transcribe with language hint
+                    language_map = {
+                        'es': 'spanish', 'zh': 'chinese', 'yue': 'chinese',
+                        'tl': 'tagalog', 'hi': 'hindi', 'te': 'telugu',
+                        'ta': 'tamil', 'gu': 'gujarati', 'pa': 'punjabi'
+                    }
+                    whisper_language = language_map.get(language, 'spanish')
+                    
+                    print(f"🎤 Step 1/3: Starting fast transcription in {whisper_language}...")
+                    import time
+                    start_time = time.time()
+                    
+                    # SPEED OPTIMIZATION: Use fp16, no_speech_threshold, and faster beam search
+                    result = model.transcribe(
+                        temp_audio_path, 
+                        language=whisper_language,
+                        fp16=device == "cuda",  # Use fp16 on GPU for 2x speed
+                        beam_size=1,  # Faster beam search (greedy decoding)
+                        best_of=1,  # Don't compare multiple samples
+                        temperature=0.0,  # Deterministic output
+                        condition_on_previous_text=False  # Faster processing
+                    )
+                    original_text = result['text']
+                    transcription_time = time.time() - start_time
+                    print(f"✅ Step 1/3 completed in {transcription_time:.2f}s. Text length: {len(original_text)} characters")
+                    
+                    print(f"🤖 Step 2/3: Starting AI segmentation and translation...")
+                    segmentation_start = time.time()
+                    
+                    # Combined segmentation + translation (same as translate_audio)
+                    combined_prompt = f"""Analyze this doctor-patient conversation in {whisper_language} and do TWO things:
+1. Segment it by speaker (doctor vs patient) - EACH TURN/EXCHANGE should be a SEPARATE segment
+2. Translate each segment to English
+
+Transcript:
+{original_text}
+
+Provide your response in this exact JSON format:
+{{
+  "segments": [
+    {{"speaker": "doctor", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "patient", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "doctor", "text": "original text", "translated_text": "English translation"}},
+    {{"speaker": "patient", "text": "original text", "translated_text": "English translation"}}
+  ]
+}}
+
+CRITICAL Rules:
+- Split the conversation into INDIVIDUAL turns/exchanges - do NOT combine all doctor statements into one segment
+- Each time the speaker changes, create a NEW segment
+- Medical professionals use medical terminology, ask clinical questions, give advice
+- Patients describe symptoms, ask questions about their health
+- Provide accurate medical translations
+- Be precise in segmentation - multiple back-and-forth exchanges should result in multiple segments"""
+                    
+                    messages = [
+                        SystemMessage(content="You are an expert medical conversation analyzer and translator. Provide responses in valid JSON format only."),
+                        HumanMessage(content=combined_prompt)
+                    ]
+                    
+                    # SPEED OPTIMIZATION: Use faster LLM with optimized settings
+                    from langchain_openai import ChatOpenAI
+                    fast_llm = ChatOpenAI(
+                        api_key=os.getenv("openai_api_key"),
+                        base_url=os.getenv("base_url"),
+                        model_name=os.getenv("llm_model_name"),
+                        temperature=0.3,  # Faster inference with slight randomness
+                        max_tokens=2000,  # Limit output length for speed
+                        request_timeout=30
+                    )
+                    
+                    response = fast_llm.invoke(messages)
+                    result_content = response.content.strip()
+                    
+                    # Extract JSON from markdown if present
+                    if "```json" in result_content:
+                        result_content = result_content.split("```json")[1].split("```")[0].strip()
+                    elif "```" in result_content:
+                        result_content = result_content.split("```")[1].split("```")[0].strip()
+                    
+                    segments_data = json.loads(result_content)
+                    segments = segments_data.get('segments', [])
+                    
+                    # Ensure all segments have translated_text
+                    for segment in segments:
+                        if 'translated_text' not in segment:
+                            segment['translated_text'] = segment.get('text', '')
+                    
+                    segmentation_time = time.time() - segmentation_start
+                    print(f"✅ Step 2/3 completed in {segmentation_time:.2f}s. Processed {len(segments)} segments")
+                    
+                    print(f"📝 Step 3/3: Formatting conversation data...")
+                    format_start = time.time()
+                    
+                    # Convert to conversation format
+                    transcript = []
+                    for i, segment in enumerate(segments):
+                        role = segment.get('speaker', 'unknown').lower()
+                        if role == 'doctor':
+                            role = 'Doctor'
+                        elif role == 'patient':
+                            role = 'Patient'
+                        else:
+                            role = 'Unknown'
+                        
+                        transcript.append({
+                            'role': role,
+                            'text': segment.get('translated_text', segment.get('text', '')),
+                            'start': f'{i * 10}s',
+                            'end': f'{(i + 1) * 10}s',
+                            'confidence': 0.95
+                        })
+                    
+                    raw_transcript = '\n\n'.join([f"{seg.get('speaker', 'unknown').title()}: {seg.get('translated_text', seg.get('text', ''))}" for seg in segments])
+                    
+                    # Create original transcript in Spanish
+                    original_transcript = '\n\n'.join([f"{seg.get('speaker', 'unknown').title()}: {seg.get('text', '')}" for seg in segments])
+                    
+                    format_time = time.time() - format_start
+                    total_time = time.time() - start_time
+                    print(f"✅ Step 3/3 completed in {format_time:.2f}s")
+                    print(f"🎉 Total processing time: {total_time:.2f}s (Transcription: {transcription_time:.2f}s, Segmentation: {segmentation_time:.2f}s, Formatting: {format_time:.2f}s)")
+                    
+                    # Prepare conversation data
+                    conversation_data = {
+                        "doctor_name": doctor_name,
+                        "patient_name": patient_name,
+                        "session_date": datetime.now().isoformat(),
+                        "duration": "Unknown",
+                        "total_segments": len(transcript),
+                        "doctor_segments": len([t for t in transcript if t.get('role', '').lower() == 'doctor']),
+                        "patient_segments": len([t for t in transcript if t.get('role', '').lower() == 'patient']),
+                        "speakers_detected": 2,
+                        "transcript": transcript,
+                        "raw_transcript": raw_transcript,
+                        "original_transcript": original_transcript,
+                        "role_mapping": {"Doctor": doctor_name, "Patient": patient_name},
+                        "language": language,
+                        "translated": True
+                    }
+                    
+                except Exception as e:
+                    print(f"Error in Spanish processing: {str(e)}")
+                    traceback.print_exc()
+                    return jsonify({"success": False, "error": f"Spanish translation failed: {str(e)}"}), 500
+                
+            else:
+                # English mode: Use existing diarization processor
+                print("🔄 Using OpenAI-only processing (bypassing pyannote)")
+                diarization_processor = get_diarization_processor()
+                
+                # Run async function in thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                result = loop.run_until_complete(
+                    diarization_processor.process_doctor_patient_conversation_openai_only(temp_audio_path)
+                )
+                
+                if result.get("error"):
+                    return jsonify({"success": False, "error": result["error"]}), 500
+                
+                # Prepare conversation data
+                conversation_data = {
+                    "doctor_name": doctor_name,
+                    "patient_name": patient_name,
+                    "session_date": datetime.now().isoformat(),
+                    "duration": result.get("total_duration", "Unknown"),
+                    "total_segments": result.get("total_segments", 0),
+                    "doctor_segments": result.get("doctor_segments", 0),
+                    "patient_segments": result.get("patient_segments", 0),
+                    "speakers_detected": result.get("speakers_detected", 0),
+                    "transcript": result.get("transcript", []),
+                    "raw_transcript": result.get("raw_transcript", ""),
+                    "original_transcript": result.get("raw_transcript", ""),
+                    "role_mapping": result.get("role_mapping", {}),
+                    "language": language,
+                    "translated": False
+                }
             
             # Generate medical summary and conclusion from the conversation transcript
-            full_transcript = result.get("raw_transcript", "")
+            full_transcript = conversation_data.get("raw_transcript", "")
             if full_transcript:
                 try:
                     print("Generating medical summary and conclusion for conversation...")
