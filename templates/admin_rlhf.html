@@ -524,6 +524,8 @@
             <div class="tab active" onclick="showTab('dashboard')">📊 Dashboard</div>
             <div class="tab" onclick="showTab('interactions')">💬 Interactions</div>
             <div class="tab" onclick="showTab('sessions')">📁 Sessions</div>
+            <div class="tab" onclick="showTab('training')">🎓 Model Training</div>
+            <div class="tab" onclick="showTab('test-model')">🧪 Test Model</div>
             <div class="tab" onclick="showTab('add-sample')">➕ Add Sample</div>
         </div>
 
@@ -592,6 +594,174 @@
         <div id="sessions" class="tab-content">
             <h2 style="margin-bottom: 20px;">📁 Training Sessions</h2>
             <div id="sessions-list" class="session-list"></div>
+        </div>
+
+        <!-- Model Training Tab -->
+        <div id="training" class="tab-content">
+            <h2 style="margin-bottom: 20px;">🎓 RLHF Model Training</h2>
+            
+            <div id="training-alert" class="alert"></div>
+            
+            <!-- Training Status Section -->
+            <div class="stats-grid" style="margin-bottom: 30px;">
+                <div class="stat-card">
+                    <h3>Training Data</h3>
+                    <div class="value" id="training-data-count">-</div>
+                    <p style="font-size: 0.9em; margin-top: 10px;" id="training-data-status">Loading...</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Model Status</h3>
+                    <div class="value" id="model-status">-</div>
+                    <p style="font-size: 0.9em; margin-top: 10px;" id="model-info">Loading...</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Last Accuracy</h3>
+                    <div class="value" id="last-accuracy">-</div>
+                    <p style="font-size: 0.9em; margin-top: 10px;" id="last-training-date">Never trained</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Training Threshold</h3>
+                    <div class="value" id="min-samples">20</div>
+                    <p style="font-size: 0.9em; margin-top: 10px;">Minimum samples needed</p>
+                </div>
+            </div>
+
+            <!-- Training Controls -->
+            <div style="background: #f5f5f5; padding: 30px; border-radius: 10px; margin-bottom: 30px;">
+                <h3 style="margin-bottom: 20px;">🚀 Train Reward Model</h3>
+                
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px;">What is RLHF Model Training?</h4>
+                    <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                        The RLHF (Reinforcement Learning from Human Feedback) model learns from SME ratings to predict answer quality. 
+                        It uses <strong>SBERT embeddings</strong> and <strong>Logistic Regression</strong> to score and re-rank candidate answers.
+                    </p>
+                    <p style="color: #666; line-height: 1.6;">
+                        <strong>Training Process:</strong> The model analyzes rated interactions, learns patterns, and improves response selection accuracy.
+                    </p>
+                </div>
+
+                <div id="training-progress" style="display: none; background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <h3>Training in Progress...</h3>
+                        <p style="color: #666;">This may take 1-2 minutes. Please wait.</p>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <button id="train-btn" class="btn btn-primary" onclick="trainModel()" style="font-size: 1.1em; padding: 15px 40px;">
+                        🎯 Train Model Now
+                    </button>
+                    <button class="btn" onclick="refreshTrainingStatus()" style="background: #f0f0f0; color: #333;">
+                        🔄 Refresh Status
+                    </button>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffc107;">
+                    <strong>⚠️ Note:</strong> Training requires at least <span id="min-samples-text">20</span> rated interactions. 
+                    The model will automatically improve as you collect more feedback and retrain.
+                </div>
+            </div>
+
+            <!-- Training Results -->
+            <div id="training-results" style="display: none; background: #d4edda; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h3 style="color: #155724; margin-bottom: 15px;">✅ Training Completed Successfully!</h3>
+                <div id="training-metrics" style="color: #155724;"></div>
+            </div>
+
+            <!-- Training History -->
+            <div style="background: white; padding: 20px; border-radius: 10px;">
+                <h3 style="margin-bottom: 15px;">📊 Latest Training Info</h3>
+                <div id="training-history" style="color: #666;">
+                    <p>No training history available yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Model Tab -->
+        <div id="test-model" class="tab-content">
+            <h2 style="margin-bottom: 20px;">🧪 Test Reward Model</h2>
+            
+            <div id="test-alert" class="alert"></div>
+            
+            <!-- Model Status -->
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+                <h3 style="margin-bottom: 15px;">📊 Model Information</h3>
+                <div id="model-test-status" style="padding: 15px; background: white; border-radius: 8px;">
+                    <p>Loading model status...</p>
+                </div>
+            </div>
+
+            <!-- Single Answer Scoring -->
+            <div style="background: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+                <h3 style="margin-bottom: 20px;">🎯 Score Single Answer</h3>
+                <p style="color: #666; margin-bottom: 20px;">Test how the model scores a single prompt-response pair. Higher scores indicate better predicted quality.</p>
+                
+                <div class="form-group">
+                    <label>Medical Question / Prompt</label>
+                    <textarea id="test-prompt" rows="3" placeholder="Enter a medical question or patient query...">What are the symptoms of pneumonia?</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>AI Response / Answer</label>
+                    <textarea id="test-response" rows="4" placeholder="Enter the AI's response to evaluate...">Pneumonia symptoms include cough, fever, chest pain, and difficulty breathing.</textarea>
+                </div>
+
+                <button class="btn btn-primary" onclick="scoreAnswer()" style="font-size: 1.1em; padding: 12px 30px;">
+                    📊 Score Answer
+                </button>
+
+                <div id="score-result" style="display: none; margin-top: 25px; padding: 20px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                    <h4 style="margin-bottom: 10px; color: #1976d2;">Score Result</h4>
+                    <div id="score-details" style="font-size: 1.1em;"></div>
+                </div>
+            </div>
+
+            <!-- Multiple Answer Re-ranking -->
+            <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+                <h3 style="margin-bottom: 20px;">🏆 Re-rank Multiple Answers</h3>
+                <p style="color: #666; margin-bottom: 20px;">Test how the model ranks multiple candidate answers. Answers will be sorted by predicted quality.</p>
+                
+                <div class="form-group">
+                    <label>Medical Question</label>
+                    <textarea id="rerank-prompt" rows="3" placeholder="Enter a medical question...">What medications are used to treat asthma?</textarea>
+                </div>
+
+                <button class="btn btn-success" onclick="generateCandidates()" style="margin-bottom: 20px; font-size: 1em; padding: 10px 25px;">
+                    🤖 Generate Candidates
+                </button>
+                <span id="generate-loading" style="display: none; margin-left: 10px; color: #666;">
+                    <span class="spinner" style="display: inline-block; width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></span>
+                    Generating...
+                </span>
+
+                <div id="candidate-answers-section" style="display: none;">
+                    <div class="form-group">
+                        <label>Candidate Answer 1</label>
+                        <textarea id="candidate-1" rows="3" placeholder="First answer option..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Candidate Answer 2</label>
+                        <textarea id="candidate-2" rows="3" placeholder="Second answer option..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Candidate Answer 3</label>
+                        <textarea id="candidate-3" rows="3" placeholder="Third answer option (optional)..."></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="rerankAnswers()" style="font-size: 1.1em; padding: 12px 30px;">
+                        🏆 Rank Answers
+                    </button>
+                </div>
+
+                <div id="rerank-result" style="display: none; margin-top: 25px;">
+                    <h4 style="margin-bottom: 15px; color: #1976d2;">Ranked Results (Best to Worst)</h4>
+                    <div id="ranked-list" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Add Sample Tab -->
@@ -675,6 +845,10 @@
                 loadInteractions();
             } else if (tabName === 'sessions') {
                 loadSessions();
+            } else if (tabName === 'training') {
+                loadTrainingStatus();
+            } else if (tabName === 'test-model') {
+                loadModelTestStatus();
             }
         }
 
@@ -1324,11 +1498,427 @@
             loadSessions();
         }
 
+        // ========================================
+        // RLHF Model Training Functions
+        // ========================================
+
+        async function loadTrainingStatus() {
+            try {
+                const response = await fetch('/api/rlhf/training_status');
+                const data = await response.json();
+                
+                console.log('Training status response:', data);
+                
+                if (!data.success) {
+                    console.error('Error loading training status:', data.error);
+                    return;
+                }
+
+                // Update training data count
+                const ratedCount = data.training_data.rated_count;
+                const minRequired = data.training_data.min_required;
+                const readyToTrain = data.training_data.ready_to_train;
+
+                document.getElementById('training-data-count').textContent = ratedCount;
+                document.getElementById('min-samples').textContent = minRequired;
+                document.getElementById('min-samples-text').textContent = minRequired;
+                
+                const statusText = readyToTrain 
+                    ? `✅ Ready to train (${ratedCount}/${minRequired})` 
+                    : `⚠️ Need ${minRequired - ratedCount} more samples`;
+                document.getElementById('training-data-status').textContent = statusText;
+                document.getElementById('training-data-status').style.color = readyToTrain ? '#4caf50' : '#ff9800';
+
+                // Update model status
+                if (data.model && data.model.exists) {
+                    document.getElementById('model-status').textContent = '✅ Trained';
+                    document.getElementById('model-status').style.color = '#4caf50';
+                    
+                    const lastModified = new Date(data.model.last_modified);
+                    document.getElementById('model-info').textContent = 
+                        `Last updated: ${lastModified.toLocaleDateString()} ${lastModified.toLocaleTimeString()}`;
+                } else {
+                    document.getElementById('model-status').textContent = '❌ Not Trained';
+                    document.getElementById('model-status').style.color = '#ff4444';
+                    document.getElementById('model-info').textContent = 'No model file found';
+                }
+
+                // Update last training info
+                if (data.latest_training && data.latest_training.trained_at) {
+                    const accuracy = data.latest_training.accuracy;
+                    const trainedAt = new Date(data.latest_training.trained_at);
+                    
+                    // Convert accuracy to number if it exists
+                    const accuracyNum = accuracy != null ? Number(accuracy) : null;
+                    const avgRewardNum = data.latest_training.avg_reward != null ? Number(data.latest_training.avg_reward) : null;
+                    
+                    // Update Last Accuracy card
+                    document.getElementById('last-accuracy').textContent = 
+                        accuracyNum != null && !isNaN(accuracyNum) ? `${accuracyNum.toFixed(2)}%` : 'N/A';
+                    document.getElementById('last-training-date').textContent = 
+                        `Trained: ${trainedAt.toLocaleDateString()} ${trainedAt.toLocaleTimeString()}`;
+                    
+                    // Show training history section with all details
+                    const historyHtml = [];
+                    if (data.latest_training.model_version) {
+                        historyHtml.push(`<p><strong>Model Version:</strong> ${data.latest_training.model_version}</p>`);
+                    }
+                    if (data.latest_training.total_interactions) {
+                        historyHtml.push(`<p><strong>Training Samples:</strong> ${data.latest_training.total_interactions}</p>`);
+                    }
+                    if (accuracyNum != null && !isNaN(accuracyNum)) {
+                        historyHtml.push(`<p><strong>Accuracy:</strong> ${accuracyNum.toFixed(2)}%</p>`);
+                    }
+                    if (avgRewardNum != null && !isNaN(avgRewardNum)) {
+                        historyHtml.push(`<p><strong>Average Reward:</strong> ${avgRewardNum.toFixed(4)}</p>`);
+                    }
+                    historyHtml.push(`<p><strong>Trained At:</strong> ${trainedAt.toLocaleString()}</p>`);
+                    
+                    document.getElementById('training-history').innerHTML = historyHtml.length > 0 
+                        ? historyHtml.join('') 
+                        : '<p>Training completed but no detailed metrics available.</p>';
+                } else {
+                    document.getElementById('last-accuracy').textContent = 'N/A';
+                    document.getElementById('last-training-date').textContent = 'Never trained';
+                    document.getElementById('training-history').innerHTML = '<p style="color: #999;">No training history available yet. Train the model to see results here.</p>';
+                }
+
+                // Enable/disable training button
+                const trainBtn = document.getElementById('train-btn');
+                if (readyToTrain) {
+                    trainBtn.disabled = false;
+                    trainBtn.style.opacity = '1';
+                    trainBtn.style.cursor = 'pointer';
+                } else {
+                    trainBtn.disabled = true;
+                    trainBtn.style.opacity = '0.5';
+                    trainBtn.style.cursor = 'not-allowed';
+                }
+
+            } catch (error) {
+                console.error('Error loading training status:', error);
+                showTrainingAlert('❌ Error loading training status: ' + error.message, 'error');
+            }
+        }
+
+        async function refreshTrainingStatus() {
+            showTrainingAlert('🔄 Refreshing status...', 'success');
+            await loadTrainingStatus();
+            setTimeout(() => {
+                const alert = document.getElementById('training-alert');
+                alert.classList.remove('show');
+            }, 2000);
+        }
+
+        async function trainModel() {
+            // Confirm action
+            if (!confirm('Start training the RLHF reward model? This will take 1-2 minutes.')) {
+                return;
+            }
+
+            // Show progress
+            document.getElementById('training-progress').style.display = 'block';
+            document.getElementById('training-results').style.display = 'none';
+            document.getElementById('train-btn').disabled = true;
+
+            try {
+                const response = await fetch('/api/rlhf/train_model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const result = await response.json();
+
+                // Hide progress
+                document.getElementById('training-progress').style.display = 'none';
+                document.getElementById('train-btn').disabled = false;
+
+                if (result.success) {
+                    // Show success results
+                    document.getElementById('training-results').style.display = 'block';
+                    
+                    const metrics = result.metrics;
+                    let metricsHtml = `
+                        <p><strong>✅ Training completed successfully!</strong></p>
+                        <p><strong>Total Samples:</strong> ${metrics.total_samples}</p>
+                    `;
+                    
+                    if (metrics.accuracy !== null) {
+                        metricsHtml += `<p><strong>Test Accuracy:</strong> ${(metrics.accuracy * 100).toFixed(2)}%</p>`;
+                    }
+                    
+                    if (metrics.auc !== null) {
+                        metricsHtml += `<p><strong>AUC-ROC:</strong> ${metrics.auc.toFixed(4)}</p>`;
+                    }
+                    
+                    metricsHtml += `<p><strong>Trained At:</strong> ${new Date(metrics.trained_at).toLocaleString()}</p>`;
+                    metricsHtml += `<p style="margin-top: 15px;"><em>The model is now ready to use for re-ranking candidate answers!</em></p>`;
+                    
+                    document.getElementById('training-metrics').innerHTML = metricsHtml;
+                    
+                    showTrainingAlert('✅ Model trained successfully!', 'success');
+                    
+                    // Refresh status after 3 seconds
+                    setTimeout(() => {
+                        loadTrainingStatus();
+                        loadDashboard(); // Refresh dashboard stats too
+                    }, 3000);
+                    
+                } else {
+                    showTrainingAlert('❌ Training failed: ' + result.error, 'error');
+                    
+                    // Show error details if available
+                    if (result.output) {
+                        console.error('Training output:', result.output);
+                    }
+                }
+
+            } catch (error) {
+                document.getElementById('training-progress').style.display = 'none';
+                document.getElementById('train-btn').disabled = false;
+                showTrainingAlert('❌ Error during training: ' + error.message, 'error');
+                console.error('Training error:', error);
+            }
+        }
+
+        function showTrainingAlert(message, type) {
+            const alert = document.getElementById('training-alert');
+            alert.textContent = message;
+            alert.className = `alert alert-${type} show`;
+            
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // ========================================
+        // Model Testing Functions
+        // ========================================
+
+        async function loadModelTestStatus() {
+            try {
+                const response = await fetch('/api/rlhf/model_info');
+                const data = await response.json();
+                
+                if (!data.success) {
+                    document.getElementById('model-test-status').innerHTML = 
+                        '<p style="color: #ff4444;">❌ ' + data.error + '</p>';
+                    return;
+                }
+
+                const status = data.model_ready ? '✅ Ready' : '❌ Not Available';
+                const statusColor = data.model_ready ? '#4caf50' : '#ff4444';
+                
+                document.getElementById('model-test-status').innerHTML = `
+                    <p><strong>Status:</strong> <span style="color: ${statusColor};">${status}</span></p>
+                    ${data.model_path ? `<p><strong>Model Path:</strong> ${data.model_path}</p>` : ''}
+                    ${data.embedding_model ? `<p><strong>Embedding Model:</strong> ${data.embedding_model}</p>` : ''}
+                    ${data.message ? `<p style="color: #666; margin-top: 10px;"><em>${data.message}</em></p>` : ''}
+                `;
+            } catch (error) {
+                document.getElementById('model-test-status').innerHTML = 
+                    '<p style="color: #ff4444;">❌ Error loading model status: ' + error.message + '</p>';
+            }
+        }
+
+        async function scoreAnswer() {
+            const prompt = document.getElementById('test-prompt').value.trim();
+            const response = document.getElementById('test-response').value.trim();
+
+            if (!prompt || !response) {
+                showTestAlert('❌ Please enter both a prompt and response', 'error');
+                return;
+            }
+
+            try {
+                const result = await fetch('/api/rlhf/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, answer: response })
+                });
+
+                const data = await result.json();
+
+                if (!data.success) {
+                    showTestAlert('❌ Error: ' + data.error, 'error');
+                    return;
+                }
+
+                const score = data.score;
+                const scorePercent = (score * 100).toFixed(1);
+                const scoreColor = score > 0.7 ? '#4caf50' : score > 0.5 ? '#ff9800' : '#ff4444';
+                const scoreLabel = score > 0.7 ? 'High Quality' : score > 0.5 ? 'Medium Quality' : 'Low Quality';
+
+                document.getElementById('score-result').style.display = 'block';
+                document.getElementById('score-details').innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 15px;">
+                        <div style="font-size: 3em; font-weight: bold; color: ${scoreColor};">
+                            ${scorePercent}%
+                        </div>
+                        <div>
+                            <p style="font-size: 1.3em; font-weight: bold; color: ${scoreColor}; margin: 0;">
+                                ${scoreLabel}
+                            </p>
+                            <p style="color: #666; margin: 5px 0 0 0;">
+                                Probability: ${score.toFixed(4)}
+                            </p>
+                        </div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin-top: 15px;">
+                        <p style="margin: 0; color: #666;">
+                            <strong>Interpretation:</strong> 
+                            ${score > 0.7 
+                                ? 'This response is predicted to be high quality based on SME ratings.' 
+                                : score > 0.5 
+                                ? 'This response is predicted to be moderate quality. Consider improvements.' 
+                                : 'This response is predicted to be low quality. Significant improvements needed.'}
+                        </p>
+                    </div>
+                `;
+
+                showTestAlert('✅ Score calculated successfully!', 'success');
+            } catch (error) {
+                showTestAlert('❌ Error scoring answer: ' + error.message, 'error');
+            }
+        }
+
+        async function generateCandidates() {
+            const prompt = document.getElementById('rerank-prompt').value.trim();
+            
+            if (!prompt) {
+                showTestAlert('❌ Please enter a medical question first', 'error');
+                return;
+            }
+
+            // Show loading state
+            document.getElementById('generate-loading').style.display = 'inline-block';
+            document.querySelector('button[onclick="generateCandidates()"]').disabled = true;
+
+            try {
+                const result = await fetch('/api/rlhf/generate_candidates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+
+                const data = await result.json();
+
+                if (!data.success) {
+                    showTestAlert('❌ Error: ' + data.error, 'error');
+                    return;
+                }
+
+                // Populate candidate fields
+                document.getElementById('candidate-1').value = data.candidates[0] || '';
+                document.getElementById('candidate-2').value = data.candidates[1] || '';
+                document.getElementById('candidate-3').value = data.candidates[2] || '';
+
+                // Show the candidate answers section
+                document.getElementById('candidate-answers-section').style.display = 'block';
+
+                showTestAlert('✅ Candidates generated successfully!', 'success');
+            } catch (error) {
+                showTestAlert('❌ Error generating candidates: ' + error.message, 'error');
+            } finally {
+                // Hide loading state
+                document.getElementById('generate-loading').style.display = 'none';
+                document.querySelector('button[onclick="generateCandidates()"]').disabled = false;
+            }
+        }
+
+        async function rerankAnswers() {
+            const prompt = document.getElementById('rerank-prompt').value.trim();
+            const candidates = [
+                document.getElementById('candidate-1').value.trim(),
+                document.getElementById('candidate-2').value.trim(),
+                document.getElementById('candidate-3').value.trim()
+            ].filter(c => c.length > 0);
+
+            if (!prompt) {
+                showTestAlert('❌ Please enter a prompt', 'error');
+                return;
+            }
+
+            if (candidates.length < 2) {
+                showTestAlert('❌ Please enter at least 2 candidate answers', 'error');
+                return;
+            }
+
+            try {
+                const result = await fetch('/api/rlhf/rerank', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, candidates })
+                });
+
+                const data = await result.json();
+
+                if (!data.success) {
+                    showTestAlert('❌ Error: ' + data.error, 'error');
+                    return;
+                }
+
+                const rankedList = document.getElementById('ranked-list');
+                rankedList.innerHTML = '';
+
+                data.ranked.forEach((item, index) => {
+                    const rank = index + 1;
+                    const score = item.score;
+                    const scorePercent = (score * 100).toFixed(1);
+                    const scoreColor = score > 0.7 ? '#4caf50' : score > 0.5 ? '#ff9800' : '#ff4444';
+                    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+
+                    const card = document.createElement('div');
+                    card.style.cssText = 'padding: 20px; background: white; border-radius: 8px; border-left: 5px solid ' + scoreColor + '; box-shadow: 0 2px 5px rgba(0,0,0,0.1);';
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="margin: 0; color: #333;">
+                                ${medal} Rank #${rank}
+                            </h4>
+                            <div style="text-align: right;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: ${scoreColor};">
+                                    ${scorePercent}%
+                                </div>
+                                <div style="font-size: 0.9em; color: #666;">
+                                    Score: ${score.toFixed(4)}
+                                </div>
+                            </div>
+                        </div>
+                        <p style="color: #666; margin: 10px 0 0 0; line-height: 1.6;">
+                            ${item.answer}
+                        </p>
+                    `;
+                    rankedList.appendChild(card);
+                });
+
+                document.getElementById('rerank-result').style.display = 'block';
+                showTestAlert('✅ Answers ranked successfully!', 'success');
+            } catch (error) {
+                showTestAlert('❌ Error ranking answers: ' + error.message, 'error');
+            }
+        }
+
+        function showTestAlert(message, type) {
+            const alert = document.getElementById('test-alert');
+            alert.textContent = message;
+            alert.className = `alert alert-${type} show`;
+            
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboard();
             setRating(3); // Set default rating
         });
     </script>
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </body>
 </html>

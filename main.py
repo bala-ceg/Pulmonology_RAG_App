@@ -3979,5 +3979,514 @@ def update_rlhf_session():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/rlhf/train_model', methods=['POST'])
+def train_rlhf_model():
+    """
+    Train the RLHF reward model using current feedback data.
+    This endpoint runs the training pipeline and returns results.
+    """
+    try:
+        import subprocess
+        import threading
+        import time
+        from datetime import datetime
+        
+        # Check if there's enough training data
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM rlhf_interactions WHERE rating IS NOT NULL")
+                rated_count = cur.fetchone()[0]
+        
+        min_samples = int(os.getenv("MIN_SAMPLES_TO_TRAIN", "20"))
+        
+        if rated_count < min_samples:
+            return jsonify({
+                "success": False,
+                "error": f"Insufficient training data. Found {rated_count} rated samples, need at least {min_samples}.",
+                "rated_count": rated_count,
+                "min_required": min_samples
+            }), 400
+        
+        # Run training in a separate thread to avoid blocking
+        training_output = {"status": "running", "output": "", "error": None}
+        
+        def run_training():
+            try:
+                # Run the training script
+                result = subprocess.run(
+                    ["python", "train_reward_sbert.py"],
+                    cwd=os.path.dirname(os.path.abspath(__file__)),
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                training_output["status"] = "completed" if result.returncode == 0 else "failed"
+                training_output["output"] = result.stdout
+                training_output["error"] = result.stderr if result.returncode != 0 else None
+                training_output["return_code"] = result.returncode
+                
+            except subprocess.TimeoutExpired:
+                training_output["status"] = "timeout"
+                training_output["error"] = "Training exceeded 5 minute timeout"
+            except Exception as e:
+                training_output["status"] = "error"
+                training_output["error"] = str(e)
+        
+        # Start training in background thread
+        thread = threading.Thread(target=run_training)
+        thread.start()
+        
+        # Wait up to 120 seconds for training to complete
+        thread.join(timeout=120)
+        
+        if thread.is_alive():
+            # Training still running after 2 minutes
+            return jsonify({
+                "success": False,
+                "error": "Training is taking longer than expected. Please check server logs.",
+                "status": "timeout"
+            }), 408
+        
+        # Training completed
+        if training_output["status"] == "completed":
+            # Parse training output for metrics
+            output_lines = training_output["output"]
+            
+            # Extract key metrics from output
+            accuracy = None
+            auc = None
+            total_samples = rated_count
+            
+            for line in output_lines.split('\n'):
+                if 'Accuracy:' in line:
+                    try:
+                        accuracy = float(line.split('Accuracy:')[1].strip())
+                    except:
+                        pass
+                if 'AUC-ROC:' in line or 'AUC:' in line:
+                    try:
+                        auc = float(line.split(':')[1].strip())
+                    except:
+                        pass
+            
+            return jsonify({
+                "success": True,
+                "message": "Model trained successfully!",
+                "metrics": {
+                    "total_samples": total_samples,
+                    "accuracy": accuracy,
+                    "auc": auc,
+                    "trained_at": datetime.now().isoformat()
+                },
+                "output": output_lines[-500:] if len(output_lines) > 500 else output_lines  # Last 500 chars
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": training_output.get("error", "Training failed"),
+                "status": training_output["status"],
+                "output": training_output.get("output", "")
+            }), 500
+            
+    except Exception as e:
+        print(f"Error training RLHF model: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/rlhf/training_status', methods=['GET'])
+def get_training_status():
+    """
+    Get current training model status and statistics.
+    """
+    try:
+        import os
+        from datetime import datetime
+        
+        # Check if model file exists
+        model_path = os.getenv("REWARD_MODEL_PATH", "reward_model.joblib")
+        model_exists = os.path.exists(model_path)
+        
+        # Get model file timestamp if it exists
+        model_info = None
+        if model_exists:
+            stat = os.stat(model_path)
+            model_info = {
+                "exists": True,
+                "path": model_path,
+                "size_kb": round(stat.st_size / 1024, 2),
+                "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+            }
+        
+        # Get training data count
+        with psycopg.connect(**db_config) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM rlhf_interactions WHERE rating IS NOT NULL")
+                rated_count = cur.fetchone()[0]
+                
+                # Get latest training run from database if table exists
+                training_history = None
+                try:
+                    cur.execute("""
+                        SELECT model_version, total_interactions, accuracy, avg_reward, created_dt 
+                        FROM rlhf_reward_model_training 
+                        ORDER BY created_dt DESC 
+                        LIMIT 1
+                    """)
+                    latest_training = cur.fetchone()
+                    
+                    if latest_training:
+                        training_history = {
+                            "model_version": latest_training[0],
+                            "total_interactions": latest_training[1],
+                            "accuracy": latest_training[2],
+                            "avg_reward": latest_training[3],
+                            "trained_at": latest_training[4].isoformat() if latest_training[4] else None
+                        }
+                        print(f"✅ Found training history: {training_history}")
+                    else:
+                        print("⚠️ No training history found in database")
+                except Exception as e:
+                    print(f"⚠️ Error fetching training history: {e}")
+                    training_history = None
+        
+        min_samples = int(os.getenv("MIN_SAMPLES_TO_TRAIN", "20"))
+        
+        return jsonify({
+            "success": True,
+            "model": model_info,
+            "training_data": {
+                "rated_count": rated_count,
+                "min_required": min_samples,
+                "ready_to_train": rated_count >= min_samples
+            },
+            "latest_training": training_history
+        })
+        
+    except Exception as e:
+        print(f"Error getting training status: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/rlhf/model_info', methods=['GET'])
+def get_model_info():
+    """
+    Get information about the RLHF reward model.
+    """
+    try:
+        from rlhf_reranker import get_model_info, is_model_ready
+        
+        model_ready = is_model_ready()
+        info = get_model_info()
+        
+        return jsonify({
+            "success": True,
+            "model_ready": model_ready,
+            **info
+        })
+    except Exception as e:
+        print(f"Error getting model info: {e}")
+        return jsonify({
+            "success": False,
+            "model_ready": False,
+            "error": str(e),
+            "message": "Model not available. Please train the model first."
+        })
+
+
+@app.route('/api/rlhf/score', methods=['POST'])
+def score_answer():
+    """
+    Score a single prompt-answer pair using the RLHF reward model.
+    
+    Request body:
+        {
+            "prompt": "What are the symptoms of pneumonia?",
+            "answer": "Pneumonia symptoms include..."
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "score": 0.8734,
+            "prompt": "...",
+            "answer": "..."
+        }
+    """
+    try:
+        data = request.json
+        prompt = data.get('prompt', '')
+        answer = data.get('answer', '')
+        
+        if not prompt or not answer:
+            return jsonify({
+                "success": False,
+                "error": "Both 'prompt' and 'answer' are required"
+            }), 400
+        
+        from rlhf_reranker import score_text_pair, is_model_ready
+        
+        if not is_model_ready():
+            return jsonify({
+                "success": False,
+                "error": "Model not available. Please train the model first."
+            }), 503
+        
+        score = score_text_pair(prompt, answer)
+        
+        return jsonify({
+            "success": True,
+            "score": float(score),
+            "prompt": prompt,
+            "answer": answer
+        })
+        
+    except Exception as e:
+        print(f"Error scoring answer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/rlhf/generate_candidates', methods=['POST'])
+def generate_candidates():
+    """
+    Generate multiple candidate answers for a given question using LLM.
+    Creates high-quality, medium-quality, and low-quality responses for testing.
+    
+    Request body:
+        {
+            "prompt": "What medications are used to treat asthma?"
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "candidates": [
+                "Comprehensive answer...",
+                "Adequate answer...",
+                "Brief answer..."
+            ]
+        }
+    """
+    try:
+        data = request.json
+        prompt = data.get('prompt', '').strip()
+        
+        if not prompt:
+            return jsonify({
+                "success": False,
+                "error": "'prompt' is required"
+            }), 400
+        
+        from langchain.schema import HumanMessage, SystemMessage
+        
+        # Generate three different quality levels of answers
+        generation_prompt = f"""Given this medical question: "{prompt}"
+
+Generate THREE different quality answer variations for testing an AI quality assessment model:
+
+1. HIGH-QUALITY ANSWER (5/5 stars): 
+   - Comprehensive and detailed
+   - Evidence-based with specific medication names, mechanisms, dosages
+   - Includes treatment guidelines and clinical recommendations
+   - Well-structured and thorough
+   
+2. MEDIUM-QUALITY ANSWER (3/5 stars):
+   - Covers main points adequately
+   - Mentions key medications but with less detail
+   - Some specifics but not comprehensive
+   - Acceptable but not exceptional
+   
+3. LOW-QUALITY ANSWER (1-2/5 stars):
+   - Very brief and incomplete
+   - Vague or overly general
+   - Missing important details
+   - May contain minimal useful information
+
+Provide ONLY the three answers without any labels, numbering, or extra commentary. Separate each answer with "|||" delimiter.
+
+Format: [Answer 1]|||[Answer 2]|||[Answer 3]"""
+        
+        # Use the LLM to generate candidates with a simpler, more direct prompt
+        simple_prompt = f"""Question: {prompt}
+
+Generate exactly 3 answers of varying quality:
+
+Answer 1:
+[Write a detailed, comprehensive answer with specific medications, dosages, and treatment guidelines]
+
+Answer 2:
+[Write a good but less detailed answer covering main points]
+
+Answer 3:
+[Write a very brief, vague answer]"""
+        
+        response = llm.invoke([
+            SystemMessage(content="You are a medical expert. Generate 3 answer variations of different quality levels."),
+            HumanMessage(content=simple_prompt)
+        ])
+        
+        # Parse the response
+        response_text = response.content.strip()
+        print(f"DEBUG - Raw LLM Response:\n{response_text}\n")
+        
+        candidates = []
+        
+        # Try multiple parsing strategies
+        # Strategy 1: Split by "Answer X" markers
+        import re
+        answer_pattern = r'Answer\s+(\d+)[:\s\(]'
+        matches = list(re.finditer(answer_pattern, response_text, re.IGNORECASE))
+        
+        if len(matches) >= 2:
+            for i in range(len(matches)):
+                start_pos = matches[i].end()
+                end_pos = matches[i+1].start() if i+1 < len(matches) else len(response_text)
+                answer_text = response_text[start_pos:end_pos].strip()
+                # Clean up
+                answer_text = re.sub(r'^\[.*?\]\s*', '', answer_text)  # Remove [description]
+                answer_text = answer_text.split('\n\n')[0].strip()  # Take first paragraph
+                if answer_text and len(answer_text) > 10:
+                    candidates.append(answer_text)
+        
+        # Strategy 2: If not enough candidates, try ||| delimiter
+        if len(candidates) < 3 and "|||" in response_text:
+            candidates = [ans.strip() for ans in response_text.split("|||") if ans.strip()]
+        
+        # Strategy 3: Split by double newlines and filter
+        if len(candidates) < 3:
+            paragraphs = [p.strip() for p in response_text.split("\n\n") if p.strip() and len(p.strip()) > 20]
+            # Remove lines that are just headers/labels
+            filtered = []
+            for p in paragraphs:
+                if not re.match(r'^(Answer\s+\d+|HIGH|MEDIUM|LOW|Question:)', p, re.IGNORECASE):
+                    # Clean up any inline labels
+                    p = re.sub(r'^(Answer\s+\d+[:\s\(].*?[\):]?\s*)', '', p, flags=re.IGNORECASE)
+                    if p.strip() and len(p.strip()) > 10:
+                        filtered.append(p.strip())
+            candidates = filtered[:3]
+        
+        print(f"DEBUG - Parsed {len(candidates)} candidates")
+        for i, c in enumerate(candidates):
+            print(f"Candidate {i+1}: {c[:100]}...")
+        
+        # Ensure we have exactly 3 candidates with quality-appropriate fallbacks
+        if len(candidates) < 1:
+            candidates.append(f"Comprehensive treatment for {prompt.lower().replace('what', '').replace('?', '').strip()} includes multiple evidence-based approaches with specific medications and clinical guidelines.")
+        if len(candidates) < 2:
+            candidates.append(f"Treatment typically involves standard medications and therapies.")
+        if len(candidates) < 3:
+            candidates.append(f"Use medications.")
+        
+        # Clean up any remaining formatting artifacts
+        cleaned_candidates = []
+        for candidate in candidates[:3]:
+            # Remove markdown/formatting
+            candidate = re.sub(r'^\*\*.*?\*\*\s*', '', candidate)
+            candidate = re.sub(r'^#+\s+', '', candidate)
+            candidate = candidate.strip()
+            cleaned_candidates.append(candidate)
+        
+        candidates = cleaned_candidates
+        
+        return jsonify({
+            "success": True,
+            "prompt": prompt,
+            "candidates": candidates[:3]  # Return exactly 3
+        })
+        
+    except Exception as e:
+        print(f"Error generating candidates: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/rlhf/rerank', methods=['POST'])
+def rerank_answers():
+    """
+    Re-rank multiple candidate answers using the RLHF reward model.
+    
+    Request body:
+        {
+            "prompt": "What medications treat asthma?",
+            "candidates": [
+                "Inhalers like albuterol...",
+                "Long-term control medications...",
+                "Try breathing exercises..."
+            ]
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "ranked": [
+                {"answer": "Long-term control...", "score": 0.92, "rank": 1},
+                {"answer": "Inhalers like...", "score": 0.78, "rank": 2},
+                {"answer": "Try breathing...", "score": 0.45, "rank": 3}
+            ]
+        }
+    """
+    try:
+        data = request.json
+        prompt = data.get('prompt', '')
+        candidates = data.get('candidates', [])
+        
+        if not prompt:
+            return jsonify({
+                "success": False,
+                "error": "'prompt' is required"
+            }), 400
+        
+        if not candidates or len(candidates) < 2:
+            return jsonify({
+                "success": False,
+                "error": "At least 2 candidate answers are required"
+            }), 400
+        
+        from rlhf_reranker import rerank_candidates, is_model_ready
+        
+        if not is_model_ready():
+            return jsonify({
+                "success": False,
+                "error": "Model not available. Please train the model first."
+            }), 503
+        
+        ranked_raw = rerank_candidates(prompt, candidates)
+        
+        # Transform response to match frontend expectations
+        ranked = []
+        for idx, item in enumerate(ranked_raw, 1):
+            ranked.append({
+                "answer": item.get("text", ""),
+                "score": item.get("_score", 0.0),
+                "rank": idx
+            })
+        
+        return jsonify({
+            "success": True,
+            "prompt": prompt,
+            "ranked": ranked
+        })
+        
+    except Exception as e:
+        print(f"Error reranking answers: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=3000, use_reloader=False)

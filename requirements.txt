@@ -15,8 +15,17 @@ chromadb
 pypdf
 tiktoken
 
-# Scikit-learn for TF-IDF gate
+# Scikit-learn for TF-IDF gate and RLHF reward model
 scikit-learn
+
+# Sentence Transformers for RLHF embeddings
+sentence-transformers
+
+# SQLAlchemy for RLHF database operations
+sqlalchemy
+
+# Joblib for model serialization (usually comes with scikit-learn)
+joblib
 
 # Environment variable support
 python-dotenv
