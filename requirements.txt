@@ -45,9 +45,9 @@ selenium
 # ChromeDriver manager (optional, for easier handling in Docker)
 webdriver-manager
 
-# Database (choose one based on your needs)
+# Database (both are needed for compatibility)
 psycopg  # PostgreSQL driver v3 (used in your code)
-# psycopg2-binary  # Alternative PostgreSQL driver v2 (comment out if not needed)
+psycopg2-binary  # PostgreSQL driver v2 (used in postgres_tool.py and other files)
 
 # PDF generation
 reportlab
