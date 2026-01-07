@@ -3544,6 +3544,106 @@ def azure_storage_info():
 
 
 # ============================================
+# Multilingual Audio Processing Routes
+# ============================================
+
+@app.route('/api/transcribe-multilingual', methods=['POST'])
+def transcribe_multilingual():
+    """
+    Transcribe doctor-patient conversation in Indian languages
+    Supports: Hindi, Tamil, Telugu, Malayalam, Kannada, English, and more
+    """
+    try:
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        language = request.form.get('language')  # Optional: 'hi', 'ta', 'te', 'ml', 'kn', etc.
+        
+        # Save audio file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+            audio_file.save(temp_file.name)
+            temp_path = temp_file.name
+        
+        try:
+            # Get diarization processor
+            if DIARIZATION_AVAILABLE:
+                from voice_diarization import get_diarization_processor
+                processor = get_diarization_processor(model_size="large")
+                
+                # Process multilingual conversation
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(
+                    processor.process_multilingual_conversation(temp_path, language)
+                )
+                loop.close()
+                
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "error": "Voice diarization not available. Install dependencies: pip install pyannote.audio torch openai-whisper"
+                }), 500
+                
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    except Exception as e:
+        print(f"Error in multilingual transcription: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/supported-languages', methods=['GET'])
+def get_supported_languages():
+    """Get list of supported Indian languages for voice transcription"""
+    try:
+        if DIARIZATION_AVAILABLE:
+            from voice_diarization import get_diarization_processor
+            processor = get_diarization_processor()
+            
+            supported_langs = processor.get_supported_languages()
+            
+            return jsonify({
+                "success": True,
+                "supported_languages": supported_langs,
+                "language_regions": {
+                    "south": {
+                        "name": "South Indian Languages",
+                        "languages": ["Tamil", "Telugu", "Malayalam", "Kannada"],
+                        "codes": ["ta", "te", "ml", "kn"]
+                    },
+                    "north": {
+                        "name": "North Indian Languages",
+                        "languages": ["Hindi", "Punjabi"],
+                        "codes": ["hi", "pa"]
+                    },
+                    "west": {
+                        "name": "West Indian Languages",
+                        "languages": ["Gujarati", "Marathi"],
+                        "codes": ["gu", "mr"]
+                    },
+                    "east": {
+                        "name": "East Indian Languages",
+                        "languages": ["Bengali"],
+                        "codes": ["bn"]
+                    }
+                },
+                "recommended_model": "large or large-v2 for best accuracy with Indian languages"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Voice diarization not available"
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================
 # RLHF (Reinforcement Learning from Human Feedback) Admin Routes
 # ============================================
 

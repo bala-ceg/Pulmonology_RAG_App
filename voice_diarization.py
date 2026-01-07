@@ -16,10 +16,33 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VoiceDiarization:
-    def __init__(self):
-        """Initialize voice diarization with required models"""
+    # Supported Indian languages with their codes
+    SUPPORTED_LANGUAGES = {
+        'hindi': 'hi',
+        'tamil': 'ta',
+        'telugu': 'te',
+        'malayalam': 'ml',
+        'kannada': 'kn',
+        'english': 'en',
+        'spanish': 'es',
+        'bengali': 'bn',
+        'marathi': 'mr',
+        'gujarati': 'gu',
+        'punjabi': 'pa'
+    }
+    
+    def __init__(self, model_size="large"):
+        """
+        Initialize voice diarization with required models
+        
+        Args:
+            model_size: Whisper model size ('medium', 'large', 'large-v2', 'large-v3')
+                       'large' or larger recommended for Indian languages
+        """
         self.openai_api_key = os.getenv('OPENAI_API_KEY') or os.getenv('openai_api_key')
         self.hf_token = os.getenv('HUGGINGFACE_TOKEN')
+        self.model_size = model_size
+        self.whisper_model = None  # Lazy load
         
         if not self.openai_api_key:
             logger.warning("OpenAI API key not found. Voice role assignment may not work.")
@@ -27,31 +50,61 @@ class VoiceDiarization:
         if not self.hf_token:
             logger.warning("Hugging Face token not found. Speaker diarization may not work.")
     
+    def _load_whisper_model(self):
+        """Lazy load Whisper model"""
+        if self.whisper_model is None:
+            try:
+                import whisper
+                logger.info(f"Loading Whisper model: {self.model_size}...")
+                self.whisper_model = whisper.load_model(self.model_size)
+                logger.info("Whisper model loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load Whisper model: {e}")
+                raise
+        return self.whisper_model
+    
     def format_timedelta(self, td: float) -> str:
         """Format time duration for display"""
         return str(timedelta(seconds=int(td)))
     
-    async def transcribe_with_whisper(self, audio_file_path: str) -> Dict:
+    async def transcribe_with_whisper(self, audio_file_path: str, language: str = None) -> Dict:
         """
-        Transcribe audio using Whisper
+        Transcribe audio using Whisper with optional language specification
+        
+        Supported languages:
+        - Hindi (hi), Tamil (ta), Telugu (te), Malayalam (ml), Kannada (kn)
+        - English (en), Bengali (bn), Marathi (mr), Gujarati (gu), Punjabi (pa)
         
         Args:
             audio_file_path: Path to audio file
+            language: Optional language code ('hi', 'ta', 'te', 'ml', 'kn', etc.) or name
             
         Returns:
             Dictionary containing transcription results
         """
         try:
-            # Import whisper here to avoid import errors if not installed
-            import whisper
+            # Load Whisper model
+            whisper_model = self._load_whisper_model()
             
-            logger.info("Loading Whisper model...")
-            whisper_model = whisper.load_model("small")
+            # Convert language name to code if needed
+            if language and language.lower() in self.SUPPORTED_LANGUAGES:
+                language = self.SUPPORTED_LANGUAGES[language.lower()]
             
-            logger.info("Transcribing audio...")
-            whisper_result = whisper_model.transcribe(audio_file_path)
+            logger.info(f"Transcribing audio with language: {language or 'auto-detect'}...")
             
-            logger.info("Whisper transcription completed")
+            # Transcribe with or without language specification
+            transcribe_params = {
+                "verbose": False,
+                "word_timestamps": True
+            }
+            
+            if language:
+                transcribe_params["language"] = language
+                transcribe_params["task"] = "transcribe"
+            
+            whisper_result = whisper_model.transcribe(audio_file_path, **transcribe_params)
+            
+            logger.info(f"Whisper transcription completed. Detected language: {whisper_result.get('language', 'unknown')}")
             return whisper_result
             
         except ImportError:
@@ -727,13 +780,239 @@ Transcript:
             print(f"📚 DEBUG: Full traceback:\n{traceback.format_exc()}")
             logger.error(f"Conversation processing failed: {e}")
             return {"error": str(e)}
+    
+    async def process_multilingual_conversation(self, audio_file_path: str, language: str = None) -> Dict:
+        """
+        Process a multilingual doctor-patient conversation
+        Supports Hindi, Tamil, Telugu, Malayalam, Kannada, and other Indian languages
+        
+        Args:
+            audio_file_path: Path to audio file
+            language: Optional language code ('hi', 'ta', 'te', 'ml', 'kn') or name
+        
+        Returns:
+            Dictionary with speaker-separated multilingual transcriptions
+        """
+        try:
+            logger.info(f"Starting multilingual conversation processing with language: {language or 'auto-detect'}...")
+            
+            # Step 1: Transcribe with specified or detected language
+            whisper_result = await self.transcribe_with_whisper(audio_file_path, language)
+            
+            if not whisper_result.get("segments"):
+                logger.error("No transcription segments found")
+                return {"error": "Transcription failed"}
+            
+            detected_lang = whisper_result.get("language", "unknown")
+            lang_probability = whisper_result.get("language_probability", 0.0)
+            
+            # Step 2: Speaker diarization
+            diarization_segments = await self.perform_diarization(audio_file_path)
+            
+            if not diarization_segments:
+                logger.warning("Speaker diarization failed, using single speaker mode")
+                total_duration = whisper_result.get("segments", [])
+                if total_duration:
+                    start_time = min([seg["start"] for seg in total_duration])
+                    end_time = max([seg["end"] for seg in total_duration])
+                    diarization_segments = [{
+                        "start": start_time,
+                        "end": end_time,
+                        "speaker": "Speaker_1"
+                    }]
+            
+            # Step 3: Align transcription with diarization
+            structured_transcript = self.align_transcription_with_diarization(
+                whisper_result, diarization_segments
+            )
+            
+            if not structured_transcript:
+                logger.error("Failed to align transcription with diarization")
+                structured_transcript = []
+                for seg in whisper_result.get("segments", []):
+                    structured_transcript.append({
+                        "speaker": "Speaker_1",
+                        "start": self.format_timedelta(seg["start"]),
+                        "end": self.format_timedelta(seg["end"]),
+                        "start_seconds": seg["start"],
+                        "end_seconds": seg["end"],
+                        "text": seg["text"]
+                    })
+            
+            # Step 4: Assign roles
+            unique_speakers = set([seg["speaker"] for seg in structured_transcript])
+            role_mapping = {}
+            
+            if len(unique_speakers) > 1:
+                role_mapping = await self.assign_roles_with_openai(structured_transcript)
+            else:
+                role_mapping = {"Speaker_1": "Mixed (Doctor & Patient)"}
+            
+            # Step 5: Create final transcript
+            final_transcript = []
+            for seg in structured_transcript:
+                role = role_mapping.get(seg["speaker"], seg["speaker"])
+                final_transcript.append({
+                    "role": role,
+                    "speaker_id": seg["speaker"],
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "start_seconds": seg["start_seconds"],
+                    "end_seconds": seg["end_seconds"],
+                    "text": seg["text"]
+                })
+            
+            # Calculate statistics
+            total_duration = max([seg["end_seconds"] for seg in structured_transcript]) if structured_transcript else 0
+            
+            # Step 6: Format conversation for LLM (without timestamps for cleaner format)
+            formatted_conversation = self.format_conversation_for_llm(final_transcript, include_timestamps=False)
+            formatted_conversation_with_time = self.format_conversation_for_llm(final_transcript, include_timestamps=True)
+            
+            # Step 7: Translate to English if not already in English
+            translation_result = None
+            if detected_lang != 'en':
+                logger.info(f"Detected non-English language ({detected_lang}), translating...")
+                translation_result = await self.translate_to_english(formatted_conversation, detected_lang)
+                translated_conversation = translation_result.get('translated', formatted_conversation)
+            else:
+                translated_conversation = formatted_conversation
+                translation_result = {
+                    "original": formatted_conversation,
+                    "translated": formatted_conversation,
+                    "source_language": "English"
+                }
+            
+            return {
+                "success": True,
+                "detected_language": detected_lang,
+                "language_probability": float(lang_probability),
+                "language_name": self._get_language_name(detected_lang),
+                "total_duration": self.format_timedelta(total_duration),
+                "total_duration_seconds": total_duration,
+                "total_segments": len(final_transcript),
+                "role_mapping": role_mapping,
+                "transcript": final_transcript,
+                "raw_transcript": whisper_result.get("text", ""),
+                "speakers_detected": len(set([seg["speaker_id"] for seg in final_transcript])),
+                "formatted_conversation": formatted_conversation,
+                "formatted_conversation_with_timestamps": formatted_conversation_with_time,
+                "translated_conversation": translated_conversation,
+                "translation": translation_result,
+                "is_translated": detected_lang != 'en'
+            }
+            
+        except Exception as e:
+            logger.error(f"Multilingual conversation processing failed: {e}")
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            return {"error": str(e)}
+    
+    def _get_language_name(self, language_code: str) -> str:
+        """Get language name from code"""
+        lang_map = {v: k.title() for k, v in self.SUPPORTED_LANGUAGES.items()}
+        return lang_map.get(language_code, language_code)
+    
+    async def translate_to_english(self, text: str, source_language: str) -> Dict[str, str]:
+        """
+        Translate text to English using OpenAI
+        
+        Args:
+            text: Text to translate
+            source_language: Source language code or name
+            
+        Returns:
+            Dictionary with 'original' and 'translated' text
+        """
+        try:
+            # Skip translation if already in English
+            if source_language in ['en', 'english']:
+                return {
+                    "original": text,
+                    "translated": text,
+                    "source_language": "English"
+                }
+            
+            from openai import OpenAI
+            client = OpenAI(api_key=self.openai_api_key)
+            
+            lang_name = self._get_language_name(source_language)
+            
+            prompt = f"""Translate the following medical conversation from {lang_name} to English. 
+Maintain the medical context and terminology accurately.
+
+Text to translate:
+{text}
+
+Provide ONLY the English translation without any additional commentary."""
+            
+            logger.info(f"Translating text from {lang_name} to English...")
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a professional medical translator. Translate accurately while preserving medical terminology."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3
+            )
+            
+            translated_text = response.choices[0].message.content.strip()
+            
+            logger.info(f"Translation completed: {len(translated_text)} characters")
+            
+            return {
+                "original": text,
+                "translated": translated_text,
+                "source_language": lang_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Translation failed: {e}")
+            return {
+                "original": text,
+                "translated": text,  # Fallback to original
+                "source_language": source_language,
+                "error": str(e)
+            }
+    
+    def format_conversation_for_llm(self, transcript: List[Dict], include_timestamps: bool = False) -> str:
+        """
+        Format conversation transcript for LLM consumption
+        
+        Args:
+            transcript: List of conversation segments with role, text, etc.
+            include_timestamps: Whether to include timestamps in output
+            
+        Returns:
+            Formatted conversation string
+        """
+        formatted_lines = []
+        
+        for segment in transcript:
+            role = segment.get('role', 'Speaker')
+            text = segment.get('text', '').strip()
+            
+            if include_timestamps:
+                start = segment.get('start', '00:00:00')
+                line = f"[{start}] {role}: {text}"
+            else:
+                line = f"{role}: {text}"
+            
+            formatted_lines.append(line)
+        
+        return "\n".join(formatted_lines)
+    
+    def get_supported_languages(self) -> Dict[str, str]:
+        """Return dictionary of supported languages"""
+        return self.SUPPORTED_LANGUAGES.copy()
 
 # Global diarization instance
 diarization_processor = None
 
-def get_diarization_processor():
+def get_diarization_processor(model_size="large"):
     """Get or create diarization processor instance"""
     global diarization_processor
     if diarization_processor is None:
-        diarization_processor = VoiceDiarization()
+        diarization_processor = VoiceDiarization(model_size=model_size)
     return diarization_processor

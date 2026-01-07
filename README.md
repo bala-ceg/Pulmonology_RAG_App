@@ -21,6 +21,8 @@ This application provides an AI-powered medical assistant that combines multiple
 - **Reward Model Training**: Uses sentence transformers and logistic regression for response ranking
 - **Voice Diarization**: Separates doctor and patient voices in audio recordings
 - **Audio Transcription**: Whisper-based transcription for medical conversations
+- **Multilingual Audio Support**: Transcribe conversations in Hindi, Tamil, Telugu, Malayalam, Kannada, and 10+ Indian languages
+- **Language Auto-Detection**: Automatically detect the spoken language in audio recordings
 - **Azure Blob Storage Integration**: Cloud storage for PDFs and audio files
 - **PostgreSQL Database Tool**: Queries medical diagnosis data from structured databases
 - **Real-time Web Search**: Tavily API integration for up-to-date medical information
@@ -233,6 +235,18 @@ The Flask server will start on `http://localhost:5000`
 - Upload audio files for transcription and diarization
 - Separates doctor and patient voices
 - Returns structured conversation transcript
+- **NEW**: Supports multilingual transcription in 10+ Indian languages
+
+**POST /api/transcribe-multilingual**
+- Transcribe audio in Hindi, Tamil, Telugu, Malayalam, Kannada, and more
+- Automatic language detection or manual language selection
+- Speaker separation with role assignment (Doctor/Patient)
+- Returns timestamped segments with language confidence scores
+
+**GET /api/supported-languages**
+- Get list of supported languages for audio transcription
+- Returns language codes, names, and regional groupings
+- Includes model recommendations for best accuracy
 
 #### RLHF Administration
 
@@ -244,6 +258,83 @@ The Flask server will start on `http://localhost:5000`
 **POST /train_reward_model**
 - Train a new reward model using collected feedback
 - Updates the model for improved response ranking
+
+## Multilingual Audio Support
+
+The application now supports transcription and analysis of doctor-patient conversations in multiple Indian languages:
+
+### Supported Languages
+- **Hindi** (हिन्दी) - `hi`
+- **Tamil** (தமிழ்) - `ta`
+- **Telugu** (తెలుగు) - `te`
+- **Malayalam** (മലയാളം) - `ml`
+- **Kannada** (ಕನ್ನಡ) - `kn`
+- **Bengali** (বাংলা) - `bn`
+- **Marathi** (मराठी) - `mr`
+- **Gujarati** (ગુજરાતી) - `gu`
+- **Punjabi** (ਪੰਜਾਬੀ) - `pa`
+- **English** - `en`
+
+### Features
+- Automatic language detection with confidence scores
+- Manual language selection for better accuracy
+- Speaker separation (Doctor vs Patient)
+- Role assignment using AI
+- Support for code-mixed conversations (e.g., Hinglish, Tanglish)
+- Timestamped conversation segments
+- High accuracy with Whisper's large model
+
+### Usage
+
+#### Web UI
+1. Navigate to the conversation recording section
+2. Select language from the dropdown (or use Auto-detect)
+3. Record the doctor-patient conversation
+4. View transcription with speaker separation
+
+#### API
+```bash
+# Auto-detect language
+curl -X POST http://localhost:5000/api/transcribe-multilingual \
+  -F "audio=@conversation.wav"
+
+# Specify Hindi
+curl -X POST http://localhost:5000/api/transcribe-multilingual \
+  -F "audio=@conversation.wav" \
+  -F "language=hi"
+```
+
+#### Python
+```python
+import requests
+
+url = "http://localhost:5000/api/transcribe-multilingual"
+files = {'audio': open('conversation.wav', 'rb')}
+data = {'language': 'hi'}  # Hindi
+
+response = requests.post(url, files=files, data=data)
+result = response.json()
+
+print(f"Language: {result['language_name']}")
+print(f"Transcript: {result['raw_transcript']}")
+```
+
+### Testing
+```bash
+# Quick test
+python test_multilingual_audio_quick.py
+
+# Test with audio file
+python test_multilingual_audio_quick.py recording.wav hi
+
+# Interactive test suite
+python test_multilingual_audio.py
+```
+
+### Documentation
+- **Complete Guide**: See `MULTILINGUAL_AUDIO_GUIDE.md`
+- **Quick Reference**: See `MULTILINGUAL_QUICK_REFERENCE.md`
+- **Implementation Details**: See `MULTILINGUAL_IMPLEMENTATION_SUMMARY.md`
 
 ## RLHF System
 

@@ -1656,11 +1656,21 @@
                 </div>
             </div>
             
-            <div class="name-field" id="conversation-language-field" style="display: none;">
+            <div class="name-field" id="conversation-language-field">
                 <label for="conversation-language">Language:</label>
                 <select id="conversation-language" style="padding: 10px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc; background-color: white; width: 100%;">
-                    <option value="en">English (Default)</option>
-                    <option value="es">Spanish</option>
+                    <option value="">Auto-detect</option>
+                    <option value="en">English</option>
+                    <option value="es">Spanish (Español)</option>
+                    <option value="hi">Hindi (हिन्दी)</option>
+                    <option value="ta">Tamil (தமிழ்)</option>
+                    <option value="te">Telugu (తెలుగు)</option>
+                    <option value="ml">Malayalam (മലയാളം)</option>
+                    <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                    <option value="bn">Bengali (বাংলা)</option>
+                    <option value="mr">Marathi (मराठी)</option>
+                    <option value="gu">Gujarati (ગુજરાતી)</option>
+                    <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
                 </select>
             </div>
             
@@ -1786,9 +1796,16 @@
 
             <!-- Full Transcript Section -->
             <div class="transcription-section">
-                <label for="conv-full-transcript">Complete Transcript (Editable):</label>
-                <div class="edit-prompt">Doctor, please edit accordingly</div>
-                <textarea id="conv-full-transcript" placeholder="Complete conversation transcript will appear here..." title="You can edit this transcript"></textarea>
+                <label for="conv-full-transcript">Complete Transcript (Original Language):</label>
+                <div class="edit-prompt">Original transcription in detected language</div>
+                <textarea id="conv-full-transcript" placeholder="Complete conversation transcript will appear here..." title="Original transcript" readonly style="background-color: #f8f9fa;"></textarea>
+            </div>
+
+            <!-- English Translation Section (shown only for non-English) -->
+            <div class="transcription-section" id="conv-translation-section" style="display: none;">
+                <label for="conv-english-translation">English Translation (Editable):</label>
+                <div class="edit-prompt">Translated to English - Doctor, please edit accordingly</div>
+                <textarea id="conv-english-translation" placeholder="English translation will appear here..." title="You can edit this translation"></textarea>
                 
                 <!-- Generate Summary Button -->
                 <div class="generate-section">
@@ -1796,6 +1813,13 @@
                         Generate Medical Summary & Recommendations
                     </button>
                 </div>
+            </div>
+
+            <!-- Generate Summary Button for English-only -->
+            <div class="generate-section" id="conv-generate-english-only" style="display: none;">
+                <button class="generate-summary-btn" onclick="generateConversationSummaryFromTranscript()" id="conv-generate-summary-btn-english">
+                    Generate Medical Summary & Recommendations
+                </button>
             </div>
 
             <!-- Summary Section -->
@@ -2190,8 +2214,8 @@
                 document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
                 // Show language dropdown for conversation recording
                 languageField.style.display = 'block';
-                // Reset language to default
-                document.getElementById('conversation-language').value = 'en';
+                // Reset language to auto-detect
+                document.getElementById('conversation-language').value = '';
             } else {
                 modalTitle.textContent = 'Enter Names for Recording';
                 confirmButton.textContent = 'Start Recording';
@@ -3434,12 +3458,18 @@ Generated on: ${new Date().toLocaleString()}
                 formData.append('patient_name', patientName);
                 
                 // Get selected language
-                const language = document.getElementById('conversation-language').value;
-                formData.append('language', language);
+                const languageSelect = document.getElementById('conversation-language');
+                const language = languageSelect ? languageSelect.value : '';
+                if (language) {
+                    formData.append('language', language);
+                }
                 
                 showToast('Processing conversation with voice diarization...');
                 
-                const response = await fetch('/transcribe_doctor_patient_conversation', {
+                // Use the new multilingual endpoint if language is selected
+                const endpoint = language ? '/api/transcribe-multilingual' : '/transcribe_doctor_patient_conversation';
+                
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData
                 });
@@ -3448,7 +3478,30 @@ Generated on: ${new Date().toLocaleString()}
                 
                 if (result.success) {
                     hideToast();
-                    showConversationModal(result.conversation_data);
+                    // Format result for the modal if using multilingual endpoint
+                    if (language && result.transcript) {
+                        const formattedResult = {
+                            conversation_data: {
+                                doctor_name: doctorName,
+                                patient_name: patientName,
+                                session_date: new Date().toISOString(),
+                                transcript: result.transcript,
+                                raw_transcript: result.raw_transcript,
+                                detected_language: result.detected_language,
+                                language_name: result.language_name,
+                                language_probability: result.language_probability,
+                                total_segments: result.total_segments,
+                                role_mapping: result.role_mapping,
+                                formatted_conversation: result.formatted_conversation,
+                                translated_conversation: result.translated_conversation,
+                                is_translated: result.is_translated,
+                                translation: result.translation
+                            }
+                        };
+                        showConversationModal(formattedResult.conversation_data);
+                    } else {
+                        showConversationModal(result.conversation_data);
+                    }
                 } else {
                     hideToast();
                     showToast(`Error: ${result.error}`);
@@ -3480,6 +3533,15 @@ Generated on: ${new Date().toLocaleString()}
             // Language display mapping
             const languageDisplay = {
                 'en': 'English',
+                'hi': 'Hindi (हिन्दी)',
+                'ta': 'Tamil (தமிழ்)',
+                'te': 'Telugu (తెలుగు)',
+                'ml': 'Malayalam (മലയാളം)',
+                'kn': 'Kannada (ಕನ್ನಡ)',
+                'bn': 'Bengali (বাংলা)',
+                'mr': 'Marathi (मराठी)',
+                'gu': 'Gujarati (ગુજરાતી)',
+                'pa': 'Punjabi (ਪੰਜਾਬੀ)',
                 'es': 'Spanish',
                 'zh': 'Chinese',
                 'yue': 'Cantonese',
@@ -3529,6 +3591,30 @@ Generated on: ${new Date().toLocaleString()}
                 : conversationData.raw_transcript || 'No transcript available';
             
             document.getElementById('conv-full-transcript').value = fullTranscript;
+            
+            // Handle translation if available
+            const translationSection = document.getElementById('conv-translation-section');
+            const generateEnglishOnly = document.getElementById('conv-generate-english-only');
+            const englishTranslation = document.getElementById('conv-english-translation');
+            
+            if (conversationData.is_translated && conversationData.translated_conversation) {
+                // Show translation section for non-English
+                translationSection.style.display = 'block';
+                generateEnglishOnly.style.display = 'none';
+                englishTranslation.value = conversationData.translated_conversation;
+                
+                // Store translation info for later use
+                window.currentTranslatedText = conversationData.translated_conversation;
+                window.currentOriginalLanguage = conversationData.language_name || 'Unknown';
+            } else {
+                // Hide translation section for English
+                translationSection.style.display = 'none';
+                generateEnglishOnly.style.display = 'block';
+                
+                // Use original text for English
+                window.currentTranslatedText = fullTranscript;
+                window.currentOriginalLanguage = 'English';
+            }
             
             // Clear summary and conclusion fields - they should be generated by clicking the button
             document.getElementById('conv-summary').value = '';
@@ -3700,22 +3786,37 @@ ${data.conclusion}
 
         // Function to generate medical summary and recommendations for conversation transcript
         function generateConversationSummaryFromTranscript() {
-            const transcriptionText = document.getElementById('conv-full-transcript').value.trim();
+            // Use translated text if available, otherwise use original
+            let transcriptionText = window.currentTranslatedText || document.getElementById('conv-full-transcript').value.trim();
+            
+            // If translation section is visible, get the (possibly edited) translation
+            const translationSection = document.getElementById('conv-translation-section');
+            if (translationSection.style.display !== 'none') {
+                const editedTranslation = document.getElementById('conv-english-translation').value.trim();
+                if (editedTranslation) {
+                    transcriptionText = editedTranslation;
+                }
+            }
+            
             const doctorName = currentConversationData?.doctor_name || 'Unknown Doctor';
             const patientName = currentConversationData?.patient_name || 'Unknown Patient';
+            const originalLanguage = window.currentOriginalLanguage || 'Unknown';
             
             if (!transcriptionText) {
                 alert('Please ensure there is conversation transcript text available to generate a summary.');
                 return;
             }
 
-            // Show loading state
-            const generateBtn = document.getElementById('conv-generate-summary-btn');
+            // Show loading state - handle both button IDs
+            const generateBtn = document.getElementById('conv-generate-summary-btn') || document.getElementById('conv-generate-summary-btn-english');
+            if (!generateBtn) return;
+            
             const originalText = generateBtn.innerHTML;
             generateBtn.innerHTML = 'Generating Summary...';
             generateBtn.disabled = true;
 
-            showToast('🤖 Generating medical summary and recommendations from conversation...');
+            const translationNote = originalLanguage !== 'English' ? ` (Translated from ${originalLanguage})` : '';
+            showToast(`🤖 Generating medical summary and recommendations${translationNote}...`);
 
             // Call the backend to generate summary
             fetch('/generate_summary', {
