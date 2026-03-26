@@ -1,0 +1,90 @@
+# Flask web server
+flask
+
+# LangChain core
+langchain
+langchain-openai
+langchain-community
+langchain-chroma
+langchain-text-splitters
+
+# Vector database
+chromadb
+
+# Document processing
+pypdf
+tiktoken
+
+# Scikit-learn for TF-IDF gate and RLHF reward model
+scikit-learn
+
+# Sentence Transformers for RLHF embeddings
+sentence-transformers
+
+# SQLAlchemy for RLHF database operations
+sqlalchemy
+
+# Joblib for model serialization (usually comes with scikit-learn)
+joblib
+
+# Environment variable support
+python-dotenv
+
+# Whisper model
+openai-whisper
+
+# PDF parsing
+PyMuPDF==1.23.26
+pdfplumber
+
+# Web scraping
+beautifulsoup4
+requests
+selenium
+
+# ChromeDriver manager (optional, for easier handling in Docker)
+webdriver-manager
+
+# Database (both are needed for compatibility)
+psycopg[pool]  # PostgreSQL driver v3 + connection pool (used in main.py)
+psycopg2-binary  # PostgreSQL driver v2 (used in postgres_tool.py and other files)
+
+# PDF generation
+reportlab
+
+# Apify web scraping
+apify-client
+
+# Azure Storage for cloud uploads
+azure-storage-blob
+azure-core
+
+# Voice diarization and processing
+pyannote.audio
+torch
+torchaudio
+
+# OpenAI for role assignment
+openai
+
+# Additional Python packages
+numpy
+pandas
+pydub
+librosa
+soundfile
+
+# External knowledge sources
+wikipedia
+arxiv
+
+# Tavily API for real-time web search
+tavily-python
+
+# SFT fine-tuning (pces_rlhf_experiments integration)
+transformers
+peft
+trl
+datasets
+accelerate
+safetensors

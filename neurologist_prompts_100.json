@@ -1,0 +1,402 @@
+[
+  {
+    "id": 1,
+    "prompt": "I am evaluating a 65-year-old Latino female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 2,
+    "prompt": "I am evaluating a 71-year-old South Asian male from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 3,
+    "prompt": "I am evaluating a 78-year-old South Asian female from the Northeast who drinks occasionally and has a history of drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 4,
+    "prompt": "I am evaluating a 36-year-old South Asian female from the Texas who drinks regularly and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 5,
+    "prompt": "I am evaluating a 34-year-old Australian female from the West Coast who drinks occasionally and denies drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 6,
+    "prompt": "I am evaluating a 76-year-old Australian male from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 7,
+    "prompt": "I am evaluating a 82-year-old African American male from the South who does not drink and denies drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 8,
+    "prompt": "I am evaluating a 86-year-old African American female from the Northeast who does not drink and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 9,
+    "prompt": "I am evaluating a 70-year-old Caucasian male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 10,
+    "prompt": "I am evaluating a 47-year-old Latino female from the Florida who drinks regularly and has a history of drug abuse. The patient presents with sudden weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate stroke or TIA and what diagnostic approach should I take?"
+  },
+  {
+    "id": 11,
+    "prompt": "I am evaluating a 71-year-old Latino male from the Mountain Ranges who drinks occasionally and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 12,
+    "prompt": "I am evaluating a 34-year-old South Asian male from the West Coast who does not drink and denies drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 13,
+    "prompt": "I am evaluating a 75-year-old Asian female from the West Coast who does not drink and has a history of drug abuse. The patient presents with numbness and visual disturbance. Symptoms have progressed or changed over recent weeks or months. Could this indicate multiple sclerosis and what diagnostic approach should I take?"
+  },
+  {
+    "id": 14,
+    "prompt": "I am evaluating a 24-year-old Hispanic male from the West Coast who drinks regularly and denies drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 15,
+    "prompt": "I am evaluating a 64-year-old South Asian female from the Florida who does not drink and denies drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 16,
+    "prompt": "I am evaluating a 47-year-old Asian male from the West Coast who drinks occasionally and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 17,
+    "prompt": "I am evaluating a 65-year-old African American female from the South who drinks regularly and has a history of drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 18,
+    "prompt": "I am evaluating a 46-year-old Middle Eastern female from the Great Lakes who drinks occasionally and denies drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 19,
+    "prompt": "I am evaluating a 57-year-old Asian male from the Northeast who does not drink and has a history of drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 20,
+    "prompt": "I am evaluating a 24-year-old Asian female from the West Coast who drinks regularly and denies drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 21,
+    "prompt": "I am evaluating a 71-year-old Latino male from the Texas who does not drink and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 22,
+    "prompt": "I am evaluating a 75-year-old Australian female from the Midwest who does not drink and has a history of drug abuse. The patient presents with numbness and visual disturbance. Symptoms have progressed or changed over recent weeks or months. Could this indicate multiple sclerosis and what diagnostic approach should I take?"
+  },
+  {
+    "id": 23,
+    "prompt": "I am evaluating a 22-year-old South Asian male from the Mid Atlantic who drinks regularly and has a history of drug abuse. The patient presents with loss of consciousness episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate syncope vs seizures and what diagnostic approach should I take?"
+  },
+  {
+    "id": 24,
+    "prompt": "I am evaluating a 84-year-old Australian female from the Northeast who does not drink and denies drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 25,
+    "prompt": "I am evaluating a 48-year-old Hispanic female from the Texas who drinks regularly and denies drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 26,
+    "prompt": "I am evaluating a 82-year-old Caucasian male from the Northeast who drinks regularly and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 27,
+    "prompt": "I am evaluating a 88-year-old African American male from the West Coast who drinks regularly and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 28,
+    "prompt": "I am evaluating a 64-year-old Middle Eastern female from the Texas who drinks occasionally and denies drug abuse. The patient presents with numbness and visual disturbance. Symptoms have progressed or changed over recent weeks or months. Could this indicate multiple sclerosis and what diagnostic approach should I take?"
+  },
+  {
+    "id": 29,
+    "prompt": "I am evaluating a 84-year-old Asian female from the West Coast who drinks regularly and denies drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 30,
+    "prompt": "I am evaluating a 32-year-old Latino female from the South who does not drink and has a history of drug abuse. The patient presents with loss of consciousness episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate syncope vs seizures and what diagnostic approach should I take?"
+  },
+  {
+    "id": 31,
+    "prompt": "I am evaluating a 85-year-old Caucasian female from the Mountain Ranges who drinks occasionally and has a history of drug abuse. The patient presents with new-onset seizures. Symptoms have progressed or changed over recent weeks or months. Could this indicate epilepsy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 32,
+    "prompt": "I am evaluating a 27-year-old South Asian female from the Mountain Ranges who drinks occasionally and has a history of drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 33,
+    "prompt": "I am evaluating a 68-year-old South Asian female from the Texas who drinks regularly and has a history of drug abuse. The patient presents with chronic headaches and insomnia. Symptoms have progressed or changed over recent weeks or months. Could this indicate sleep disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 34,
+    "prompt": "I am evaluating a 68-year-old Hispanic female from the Texas who does not drink and denies drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 35,
+    "prompt": "I am evaluating a 31-year-old Latino female from the Florida who does not drink and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 36,
+    "prompt": "I am evaluating a 40-year-old Latino male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with sudden weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate stroke or TIA and what diagnostic approach should I take?"
+  },
+  {
+    "id": 37,
+    "prompt": "I am evaluating a 71-year-old Middle Eastern male from the Mountain Ranges who drinks regularly and has a history of drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 38,
+    "prompt": "I am evaluating a 74-year-old Hispanic female from the Florida who does not drink and has a history of drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 39,
+    "prompt": "I am evaluating a 84-year-old South Asian female from the Texas who does not drink and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 40,
+    "prompt": "I am evaluating a 47-year-old Australian male from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 41,
+    "prompt": "I am evaluating a 83-year-old Latino female from the West Coast who drinks occasionally and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 42,
+    "prompt": "I am evaluating a 37-year-old South Asian male from the Northeast who drinks regularly and has a history of drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 43,
+    "prompt": "I am evaluating a 85-year-old Asian female from the Great Lakes who drinks regularly and has a history of drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 44,
+    "prompt": "I am evaluating a 67-year-old South Asian female from the Texas who drinks regularly and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 45,
+    "prompt": "I am evaluating a 71-year-old African American female from the Mid Atlantic who drinks occasionally and has a history of drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 46,
+    "prompt": "I am evaluating a 46-year-old Caucasian male from the Mountain Ranges who does not drink and has a history of drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 47,
+    "prompt": "I am evaluating a 57-year-old Asian male from the Texas who does not drink and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 48,
+    "prompt": "I am evaluating a 47-year-old Australian male from the Midwest who does not drink and has a history of drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 49,
+    "prompt": "I am evaluating a 79-year-old Hispanic male from the Great Lakes who drinks occasionally and has a history of drug abuse. The patient presents with numbness and visual disturbance. Symptoms have progressed or changed over recent weeks or months. Could this indicate multiple sclerosis and what diagnostic approach should I take?"
+  },
+  {
+    "id": 50,
+    "prompt": "I am evaluating a 85-year-old Middle Eastern female from the Mid Atlantic who drinks regularly and has a history of drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 51,
+    "prompt": "I am evaluating a 56-year-old Caucasian male from the West Coast who does not drink and denies drug abuse. The patient presents with new-onset seizures. Symptoms have progressed or changed over recent weeks or months. Could this indicate epilepsy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 52,
+    "prompt": "I am evaluating a 85-year-old African American male from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 53,
+    "prompt": "I am evaluating a 55-year-old Hispanic female from the South who does not drink and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 54,
+    "prompt": "I am evaluating a 64-year-old Asian female from the Great Lakes who drinks occasionally and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 55,
+    "prompt": "I am evaluating a 46-year-old Hispanic male from the Northeast who drinks regularly and denies drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 56,
+    "prompt": "I am evaluating a 78-year-old Latino female from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with sudden weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate stroke or TIA and what diagnostic approach should I take?"
+  },
+  {
+    "id": 57,
+    "prompt": "I am evaluating a 37-year-old African American female from the Texas who drinks regularly and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 58,
+    "prompt": "I am evaluating a 71-year-old African American female from the Great Lakes who drinks occasionally and has a history of drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 59,
+    "prompt": "I am evaluating a 21-year-old Australian female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 60,
+    "prompt": "I am evaluating a 34-year-old African American male from the Florida who drinks regularly and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 61,
+    "prompt": "I am evaluating a 39-year-old Middle Eastern female from the Mid Atlantic who drinks occasionally and denies drug abuse. The patient presents with sudden weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate stroke or TIA and what diagnostic approach should I take?"
+  },
+  {
+    "id": 62,
+    "prompt": "I am evaluating a 69-year-old African American female from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 63,
+    "prompt": "I am evaluating a 46-year-old Australian female from the Great Lakes who does not drink and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 64,
+    "prompt": "I am evaluating a 31-year-old Asian female from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 65,
+    "prompt": "I am evaluating a 77-year-old Middle Eastern female from the Northeast who does not drink and has a history of drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 66,
+    "prompt": "I am evaluating a 61-year-old Australian male from the Mid Atlantic who drinks occasionally and denies drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 67,
+    "prompt": "I am evaluating a 65-year-old Latino male from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 68,
+    "prompt": "I am evaluating a 81-year-old Latino female from the Mid Atlantic who drinks occasionally and has a history of drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 69,
+    "prompt": "I am evaluating a 46-year-old Middle Eastern male from the Mountain Ranges who drinks occasionally and denies drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 70,
+    "prompt": "I am evaluating a 55-year-old Australian female from the Texas who does not drink and denies drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 71,
+    "prompt": "I am evaluating a 23-year-old Caucasian female from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with new-onset seizures. Symptoms have progressed or changed over recent weeks or months. Could this indicate epilepsy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 72,
+    "prompt": "I am evaluating a 16-year-old Hispanic male from the Texas who does not drink and has a history of drug abuse. The patient presents with chronic headaches and insomnia. Symptoms have progressed or changed over recent weeks or months. Could this indicate sleep disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 73,
+    "prompt": "I am evaluating a 15-year-old Middle Eastern female from the Northeast who does not drink and denies drug abuse. The patient presents with sudden weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate stroke or TIA and what diagnostic approach should I take?"
+  },
+  {
+    "id": 74,
+    "prompt": "I am evaluating a 64-year-old Hispanic female from the Florida who does not drink and has a history of drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 75,
+    "prompt": "I am evaluating a 60-year-old Australian male from the Great Lakes who does not drink and denies drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 76,
+    "prompt": "I am evaluating a 71-year-old Caucasian female from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with vertigo episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate vestibular disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 77,
+    "prompt": "I am evaluating a 41-year-old Middle Eastern female from the Northeast who drinks regularly and denies drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 78,
+    "prompt": "I am evaluating a 32-year-old Caucasian female from the Great Lakes who does not drink and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 79,
+    "prompt": "I am evaluating a 78-year-old Australian female from the Florida who drinks regularly and has a history of drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 80,
+    "prompt": "I am evaluating a 36-year-old Caucasian female from the West Coast who drinks occasionally and has a history of drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 81,
+    "prompt": "I am evaluating a 81-year-old Caucasian male from the Mountain Ranges who drinks regularly and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 82,
+    "prompt": "I am evaluating a 45-year-old African American female from the West Coast who drinks occasionally and has a history of drug abuse. The patient presents with new-onset seizures. Symptoms have progressed or changed over recent weeks or months. Could this indicate epilepsy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 83,
+    "prompt": "I am evaluating a 72-year-old South Asian male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with tremors and motor difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinson\u2019s disease and what diagnostic approach should I take?"
+  },
+  {
+    "id": 84,
+    "prompt": "I am evaluating a 64-year-old Latino male from the South who does not drink and denies drug abuse. The patient presents with chronic headaches and insomnia. Symptoms have progressed or changed over recent weeks or months. Could this indicate sleep disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 85,
+    "prompt": "I am evaluating a 20-year-old Hispanic female from the West Coast who does not drink and denies drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 86,
+    "prompt": "I am evaluating a 85-year-old Caucasian female from the Mid Atlantic who drinks occasionally and has a history of drug abuse. The patient presents with loss of consciousness episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate syncope vs seizures and what diagnostic approach should I take?"
+  },
+  {
+    "id": 87,
+    "prompt": "I am evaluating a 19-year-old Caucasian male from the Northeast who drinks regularly and denies drug abuse. The patient presents with numbness and visual disturbance. Symptoms have progressed or changed over recent weeks or months. Could this indicate multiple sclerosis and what diagnostic approach should I take?"
+  },
+  {
+    "id": 88,
+    "prompt": "I am evaluating a 51-year-old Caucasian male from the Great Lakes who drinks occasionally and denies drug abuse. The patient presents with burning sensation in feet. Symptoms have progressed or changed over recent weeks or months. Could this indicate neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 89,
+    "prompt": "I am evaluating a 18-year-old Caucasian male from the Great Lakes who drinks regularly and has a history of drug abuse. The patient presents with loss of consciousness episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate syncope vs seizures and what diagnostic approach should I take?"
+  },
+  {
+    "id": 90,
+    "prompt": "I am evaluating a 29-year-old Caucasian female from the Midwest who drinks regularly and has a history of drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 91,
+    "prompt": "I am evaluating a 43-year-old African American male from the Texas who does not drink and denies drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 92,
+    "prompt": "I am evaluating a 87-year-old South Asian male from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 93,
+    "prompt": "I am evaluating a 48-year-old Australian male from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with vision loss. Symptoms have progressed or changed over recent weeks or months. Could this indicate optic neuropathy and what diagnostic approach should I take?"
+  },
+  {
+    "id": 94,
+    "prompt": "I am evaluating a 40-year-old Latino male from the Florida who drinks occasionally and denies drug abuse. The patient presents with bradykinesia and rigidity. Symptoms have progressed or changed over recent weeks or months. Could this indicate Parkinsonism and what diagnostic approach should I take?"
+  },
+  {
+    "id": 95,
+    "prompt": "I am evaluating a 50-year-old Asian female from the Florida who does not drink and denies drug abuse. The patient presents with memory decline and confusion. Symptoms have progressed or changed over recent weeks or months. Could this indicate neurodegenerative disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 96,
+    "prompt": "I am evaluating a 36-year-old Caucasian female from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with speech difficulty. Symptoms have progressed or changed over recent weeks or months. Could this indicate aphasia and what diagnostic approach should I take?"
+  },
+  {
+    "id": 97,
+    "prompt": "I am evaluating a 81-year-old Caucasian male from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with recurrent headaches with aura. Symptoms have progressed or changed over recent weeks or months. Could this indicate migraine disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 98,
+    "prompt": "I am evaluating a 51-year-old Caucasian male from the South who drinks occasionally and denies drug abuse. The patient presents with gait instability and slurred speech. Symptoms have progressed or changed over recent weeks or months. Could this indicate cerebellar disorder and what diagnostic approach should I take?"
+  },
+  {
+    "id": 99,
+    "prompt": "I am evaluating a 66-year-old Caucasian female from the Great Lakes who does not drink and has a history of drug abuse. The patient presents with progressive limb weakness. Symptoms have progressed or changed over recent weeks or months. Could this indicate ALS and what diagnostic approach should I take?"
+  },
+  {
+    "id": 100,
+    "prompt": "I am evaluating a 39-year-old Latino male from the Great Lakes who does not drink and denies drug abuse. The patient presents with loss of consciousness episodes. Symptoms have progressed or changed over recent weeks or months. Could this indicate syncope vs seizures and what diagnostic approach should I take?"
+  }
+]

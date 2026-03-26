@@ -1,0 +1,1694 @@
+{
+  "phase1_cardiology": {
+    "1": {
+      "entry_id": 310,
+      "group_id": "e7b22b02"
+    },
+    "2": {
+      "entry_id": 311,
+      "group_id": "09ba39be"
+    },
+    "3": {
+      "entry_id": 312,
+      "group_id": "3eb57259"
+    },
+    "4": {
+      "entry_id": 313,
+      "group_id": "5d249050"
+    },
+    "5": {
+      "entry_id": 314,
+      "group_id": "ddb22241"
+    },
+    "6": {
+      "entry_id": 315,
+      "group_id": "b27cfd6b"
+    },
+    "7": {
+      "entry_id": 316,
+      "group_id": "5c1d387a"
+    },
+    "8": {
+      "entry_id": 317,
+      "group_id": "ba087836"
+    },
+    "9": {
+      "entry_id": 318,
+      "group_id": "6801cd3c"
+    },
+    "10": {
+      "entry_id": 319,
+      "group_id": "d6457891"
+    },
+    "11": {
+      "entry_id": 320,
+      "group_id": "2afd8548"
+    },
+    "12": {
+      "entry_id": 321,
+      "group_id": "373123a5"
+    },
+    "13": {
+      "entry_id": 322,
+      "group_id": "30893eee"
+    },
+    "15": {
+      "entry_id": 323,
+      "group_id": "0e771102"
+    },
+    "17": {
+      "entry_id": 324,
+      "group_id": "8bb94e92"
+    },
+    "14": {
+      "entry_id": 325,
+      "group_id": "9f7cfcf1"
+    },
+    "16": {
+      "entry_id": 326,
+      "group_id": "14c1770f"
+    },
+    "20": {
+      "entry_id": 327,
+      "group_id": "eb85b6c5"
+    },
+    "18": {
+      "entry_id": 328,
+      "group_id": "b423e010"
+    },
+    "19": {
+      "entry_id": 329,
+      "group_id": "74dfa664"
+    },
+    "21": {
+      "entry_id": 330,
+      "group_id": "15026844"
+    },
+    "23": {
+      "entry_id": 331,
+      "group_id": "e5375836"
+    },
+    "26": {
+      "entry_id": 332,
+      "group_id": "f899dbd0"
+    },
+    "22": {
+      "entry_id": 333,
+      "group_id": "04aa9c35"
+    },
+    "29": {
+      "entry_id": 334,
+      "group_id": "31e41463"
+    },
+    "25": {
+      "entry_id": 335,
+      "group_id": "fc77fc4b"
+    },
+    "24": {
+      "entry_id": 336,
+      "group_id": "3c6dd82b"
+    },
+    "27": {
+      "entry_id": 337,
+      "group_id": "f0d89946"
+    },
+    "28": {
+      "entry_id": 338,
+      "group_id": "2566433d"
+    },
+    "30": {
+      "entry_id": 339,
+      "group_id": "788dca06"
+    },
+    "31": {
+      "entry_id": 340,
+      "group_id": "609c2173"
+    },
+    "34": {
+      "entry_id": 341,
+      "group_id": "6d119bad"
+    },
+    "35": {
+      "entry_id": 342,
+      "group_id": "d3a37569"
+    },
+    "37": {
+      "entry_id": 343,
+      "group_id": "9c4a6b94"
+    },
+    "33": {
+      "entry_id": 344,
+      "group_id": "b1796d8c"
+    },
+    "32": {
+      "entry_id": 345,
+      "group_id": "c7dfb876"
+    },
+    "36": {
+      "entry_id": 346,
+      "group_id": "64168b32"
+    },
+    "41": {
+      "entry_id": 347,
+      "group_id": "ff8902a4"
+    },
+    "38": {
+      "entry_id": 348,
+      "group_id": "fab71189"
+    },
+    "42": {
+      "entry_id": 349,
+      "group_id": "1d0d51f1"
+    },
+    "39": {
+      "entry_id": 350,
+      "group_id": "2bd46bac"
+    },
+    "43": {
+      "entry_id": 351,
+      "group_id": "5edc9296"
+    },
+    "45": {
+      "entry_id": 352,
+      "group_id": "fa5c4084"
+    },
+    "44": {
+      "entry_id": 353,
+      "group_id": "5dfb68ce"
+    },
+    "47": {
+      "entry_id": 354,
+      "group_id": "632d7716"
+    },
+    "40": {
+      "entry_id": 355,
+      "group_id": "6e910ea8"
+    },
+    "48": {
+      "entry_id": 356,
+      "group_id": "0d394521"
+    },
+    "46": {
+      "entry_id": 357,
+      "group_id": "42a74e3c"
+    },
+    "49": {
+      "entry_id": 358,
+      "group_id": "00f1f433"
+    },
+    "51": {
+      "entry_id": 359,
+      "group_id": "ff64172a"
+    },
+    "52": {
+      "entry_id": 360,
+      "group_id": "e99c4351"
+    },
+    "50": {
+      "entry_id": 361,
+      "group_id": "ed3dcb44"
+    },
+    "54": {
+      "entry_id": 362,
+      "group_id": "91ba67a6"
+    },
+    "53": {
+      "entry_id": 363,
+      "group_id": "3a4c4fb5"
+    },
+    "55": {
+      "entry_id": 364,
+      "group_id": "c4025e5f"
+    },
+    "56": {
+      "entry_id": 365,
+      "group_id": "82268cbb"
+    },
+    "58": {
+      "entry_id": 366,
+      "group_id": "e2b06fa9"
+    },
+    "57": {
+      "entry_id": 367,
+      "group_id": "22654060"
+    },
+    "61": {
+      "entry_id": 368,
+      "group_id": "e1adaf58"
+    },
+    "59": {
+      "entry_id": 369,
+      "group_id": "9125835b"
+    },
+    "60": {
+      "entry_id": 370,
+      "group_id": "ce026006"
+    },
+    "62": {
+      "entry_id": 371,
+      "group_id": "88b00cea"
+    },
+    "63": {
+      "entry_id": 372,
+      "group_id": "bc029496"
+    },
+    "64": {
+      "entry_id": 373,
+      "group_id": "3004a96f"
+    },
+    "66": {
+      "entry_id": 374,
+      "group_id": "ed0f2ca3"
+    },
+    "65": {
+      "entry_id": 375,
+      "group_id": "bbf503c7"
+    },
+    "67": {
+      "entry_id": 376,
+      "group_id": "d94da927"
+    },
+    "72": {
+      "entry_id": 377,
+      "group_id": "999c8bcb"
+    },
+    "70": {
+      "entry_id": 378,
+      "group_id": "6f1cc349"
+    },
+    "71": {
+      "entry_id": 379,
+      "group_id": "c1dfe170"
+    },
+    "74": {
+      "entry_id": 380,
+      "group_id": "eb276368"
+    },
+    "73": {
+      "entry_id": 381,
+      "group_id": "7042d2a4"
+    },
+    "68": {
+      "entry_id": 382,
+      "group_id": "0fb9fda7"
+    },
+    "69": {
+      "entry_id": 383,
+      "group_id": "ee71bff8"
+    },
+    "77": {
+      "entry_id": 384,
+      "group_id": "6467272a"
+    },
+    "78": {
+      "entry_id": 385,
+      "group_id": "c50260ea"
+    },
+    "76": {
+      "entry_id": 386,
+      "group_id": "ee833f7f"
+    },
+    "75": {
+      "entry_id": 387,
+      "group_id": "fe2d483d"
+    },
+    "80": {
+      "entry_id": 388,
+      "group_id": "c48c52c3"
+    },
+    "79": {
+      "entry_id": 389,
+      "group_id": "6664189a"
+    },
+    "81": {
+      "entry_id": 390,
+      "group_id": "141fedf1"
+    },
+    "82": {
+      "entry_id": 391,
+      "group_id": "7bd34e73"
+    },
+    "83": {
+      "entry_id": 392,
+      "group_id": "892c9b29"
+    },
+    "86": {
+      "entry_id": 393,
+      "group_id": "85d7e167"
+    },
+    "85": {
+      "entry_id": 394,
+      "group_id": "88d6709e"
+    },
+    "87": {
+      "entry_id": 395,
+      "group_id": "6b5db57f"
+    },
+    "84": {
+      "entry_id": 396,
+      "group_id": "8ba04703"
+    },
+    "89": {
+      "entry_id": 397,
+      "group_id": "90834800"
+    },
+    "90": {
+      "entry_id": 398,
+      "group_id": "514e5601"
+    },
+    "91": {
+      "entry_id": 399,
+      "group_id": "a7c1e8de"
+    },
+    "92": {
+      "entry_id": 400,
+      "group_id": "dcf6bcdd"
+    },
+    "88": {
+      "entry_id": 401,
+      "group_id": "ff556568"
+    },
+    "93": {
+      "entry_id": 402,
+      "group_id": "25d8cb7d"
+    },
+    "94": {
+      "entry_id": 403,
+      "group_id": "534bb11c"
+    },
+    "96": {
+      "entry_id": 404,
+      "group_id": "3830f38c"
+    },
+    "95": {
+      "entry_id": 405,
+      "group_id": "9241405a"
+    },
+    "99": {
+      "entry_id": 406,
+      "group_id": "ae7b0128"
+    },
+    "98": {
+      "entry_id": 407,
+      "group_id": "cb7ab685"
+    },
+    "97": {
+      "entry_id": 408,
+      "group_id": "6ad0d5d8"
+    },
+    "100": {
+      "entry_id": 409,
+      "group_id": "9ea97dd6"
+    }
+  },
+  "phase1_neurology": {
+    "5": {
+      "entry_id": 410,
+      "group_id": "9a21a016"
+    },
+    "1": {
+      "entry_id": 411,
+      "group_id": "c40383c4"
+    },
+    "2": {
+      "entry_id": 412,
+      "group_id": "fa44bf7a"
+    },
+    "4": {
+      "entry_id": 413,
+      "group_id": "403d8a7c"
+    },
+    "7": {
+      "entry_id": 414,
+      "group_id": "4df7e8b1"
+    },
+    "6": {
+      "entry_id": 415,
+      "group_id": "ade3c3bc"
+    },
+    "3": {
+      "entry_id": 416,
+      "group_id": "22ec7b56"
+    },
+    "8": {
+      "entry_id": 417,
+      "group_id": "3d42dc58"
+    },
+    "9": {
+      "entry_id": 418,
+      "group_id": "5848aa6e"
+    },
+    "12": {
+      "entry_id": 419,
+      "group_id": "8cdea4be"
+    },
+    "10": {
+      "entry_id": 420,
+      "group_id": "3a82c3a4"
+    },
+    "14": {
+      "entry_id": 421,
+      "group_id": "9d6295f8"
+    },
+    "15": {
+      "entry_id": 422,
+      "group_id": "01bcc793"
+    },
+    "11": {
+      "entry_id": 423,
+      "group_id": "2139a794"
+    },
+    "16": {
+      "entry_id": 424,
+      "group_id": "b8434d89"
+    },
+    "13": {
+      "entry_id": 425,
+      "group_id": "1fd15dab"
+    },
+    "17": {
+      "entry_id": 426,
+      "group_id": "509c0220"
+    },
+    "19": {
+      "entry_id": 427,
+      "group_id": "738c860f"
+    },
+    "22": {
+      "entry_id": 428,
+      "group_id": "18d672cd"
+    },
+    "20": {
+      "entry_id": 429,
+      "group_id": "249b60ca"
+    },
+    "21": {
+      "entry_id": 430,
+      "group_id": "dccc1e45"
+    },
+    "18": {
+      "entry_id": 431,
+      "group_id": "e1dd7246"
+    },
+    "23": {
+      "entry_id": 432,
+      "group_id": "1ad7943b"
+    },
+    "24": {
+      "entry_id": 433,
+      "group_id": "263282b7"
+    },
+    "25": {
+      "entry_id": 434,
+      "group_id": "74351e74"
+    },
+    "26": {
+      "entry_id": 435,
+      "group_id": "2267a99d"
+    },
+    "29": {
+      "entry_id": 436,
+      "group_id": "a893eeaa"
+    },
+    "27": {
+      "entry_id": 437,
+      "group_id": "01b842f7"
+    },
+    "28": {
+      "entry_id": 438,
+      "group_id": "e733d44d"
+    },
+    "30": {
+      "entry_id": 439,
+      "group_id": "2c6f6f9c"
+    },
+    "31": {
+      "entry_id": 440,
+      "group_id": "300ad8a8"
+    },
+    "32": {
+      "entry_id": 441,
+      "group_id": "6090fee4"
+    },
+    "33": {
+      "entry_id": 442,
+      "group_id": "8b519654"
+    },
+    "34": {
+      "entry_id": 443,
+      "group_id": "ee288958"
+    },
+    "36": {
+      "entry_id": 444,
+      "group_id": "2a84ab57"
+    },
+    "38": {
+      "entry_id": 445,
+      "group_id": "92b7a678"
+    },
+    "37": {
+      "entry_id": 446,
+      "group_id": "24e2ffa0"
+    },
+    "35": {
+      "entry_id": 447,
+      "group_id": "8e8bc0ee"
+    },
+    "39": {
+      "entry_id": 448,
+      "group_id": "828d55d3"
+    },
+    "40": {
+      "entry_id": 449,
+      "group_id": "e33e2a50"
+    },
+    "41": {
+      "entry_id": 450,
+      "group_id": "42beb549"
+    },
+    "42": {
+      "entry_id": 451,
+      "group_id": "8abd0655"
+    },
+    "44": {
+      "entry_id": 452,
+      "group_id": "aa673f04"
+    },
+    "43": {
+      "entry_id": 453,
+      "group_id": "77e52f05"
+    },
+    "45": {
+      "entry_id": 454,
+      "group_id": "47ceadba"
+    },
+    "46": {
+      "entry_id": 455,
+      "group_id": "bfab5936"
+    },
+    "47": {
+      "entry_id": 456,
+      "group_id": "ee8dd8cb"
+    },
+    "51": {
+      "entry_id": 457,
+      "group_id": "4691eba3"
+    },
+    "48": {
+      "entry_id": 458,
+      "group_id": "53bb8cbc"
+    },
+    "50": {
+      "entry_id": 459,
+      "group_id": "300585e2"
+    },
+    "52": {
+      "entry_id": 460,
+      "group_id": "952bbec1"
+    },
+    "49": {
+      "entry_id": 461,
+      "group_id": "b36d0c05"
+    },
+    "53": {
+      "entry_id": 462,
+      "group_id": "de311740"
+    },
+    "55": {
+      "entry_id": 463,
+      "group_id": "6b0c29f7"
+    },
+    "54": {
+      "entry_id": 464,
+      "group_id": "596d2c63"
+    },
+    "57": {
+      "entry_id": 465,
+      "group_id": "60046610"
+    },
+    "59": {
+      "entry_id": 466,
+      "group_id": "1cd685bd"
+    },
+    "58": {
+      "entry_id": 467,
+      "group_id": "d75bba25"
+    },
+    "60": {
+      "entry_id": 468,
+      "group_id": "c06385e6"
+    },
+    "56": {
+      "entry_id": 469,
+      "group_id": "e59259e6"
+    },
+    "61": {
+      "entry_id": 470,
+      "group_id": "405049c5"
+    },
+    "62": {
+      "entry_id": 471,
+      "group_id": "e348b8bb"
+    },
+    "65": {
+      "entry_id": 472,
+      "group_id": "bef19a4e"
+    },
+    "63": {
+      "entry_id": 473,
+      "group_id": "1113598c"
+    },
+    "64": {
+      "entry_id": 474,
+      "group_id": "d0d2173e"
+    },
+    "66": {
+      "entry_id": 475,
+      "group_id": "d81c0cb6"
+    },
+    "68": {
+      "entry_id": 476,
+      "group_id": "7d1f7799"
+    },
+    "67": {
+      "entry_id": 477,
+      "group_id": "457ba643"
+    },
+    "70": {
+      "entry_id": 478,
+      "group_id": "f057b6bf"
+    },
+    "69": {
+      "entry_id": 479,
+      "group_id": "be622930"
+    },
+    "71": {
+      "entry_id": 480,
+      "group_id": "a530bc42"
+    },
+    "74": {
+      "entry_id": 481,
+      "group_id": "91a1010b"
+    },
+    "73": {
+      "entry_id": 482,
+      "group_id": "42007c8d"
+    },
+    "72": {
+      "entry_id": 483,
+      "group_id": "708ed5bc"
+    },
+    "75": {
+      "entry_id": 484,
+      "group_id": "2970c6f5"
+    },
+    "76": {
+      "entry_id": 485,
+      "group_id": "e8e2f520"
+    },
+    "77": {
+      "entry_id": 486,
+      "group_id": "e82f50f7"
+    },
+    "78": {
+      "entry_id": 487,
+      "group_id": "b9ae45c5"
+    },
+    "81": {
+      "entry_id": 488,
+      "group_id": "e76285f5"
+    },
+    "79": {
+      "entry_id": 489,
+      "group_id": "a654426c"
+    },
+    "82": {
+      "entry_id": 490,
+      "group_id": "a0b6264c"
+    },
+    "83": {
+      "entry_id": 491,
+      "group_id": "bc4b9761"
+    },
+    "84": {
+      "entry_id": 492,
+      "group_id": "be18861b"
+    },
+    "80": {
+      "entry_id": 493,
+      "group_id": "bf2cf896"
+    },
+    "86": {
+      "entry_id": 494,
+      "group_id": "da80dd60"
+    },
+    "85": {
+      "entry_id": 495,
+      "group_id": "8347cf0a"
+    },
+    "87": {
+      "entry_id": 496,
+      "group_id": "6fdacf5c"
+    },
+    "88": {
+      "entry_id": 497,
+      "group_id": "72a02a97"
+    },
+    "91": {
+      "entry_id": 498,
+      "group_id": "862db643"
+    },
+    "89": {
+      "entry_id": 499,
+      "group_id": "bf724919"
+    },
+    "90": {
+      "entry_id": 500,
+      "group_id": "86941fd4"
+    },
+    "92": {
+      "entry_id": 501,
+      "group_id": "fe37912d"
+    },
+    "93": {
+      "entry_id": 502,
+      "group_id": "d4483980"
+    },
+    "94": {
+      "entry_id": 503,
+      "group_id": "a0dca759"
+    },
+    "95": {
+      "entry_id": 504,
+      "group_id": "64d8d322"
+    },
+    "98": {
+      "entry_id": 505,
+      "group_id": "1006f42b"
+    },
+    "96": {
+      "entry_id": 506,
+      "group_id": "bef1ecb7"
+    },
+    "99": {
+      "entry_id": 507,
+      "group_id": "4457687b"
+    },
+    "100": {
+      "entry_id": 508,
+      "group_id": "24b47cad"
+    },
+    "97": {
+      "entry_id": 509,
+      "group_id": "1f6a7396"
+    }
+  },
+  "phase2_neuro_sme": {
+    "25": {
+      "score": 4,
+      "feedback_preview": "The response provides a solid overview of the current understanding of migraine "
+    },
+    "26": {
+      "score": 1,
+      "feedback_preview": "The response is grossly inadequate and misleading. While stress can be a trigger"
+    },
+    "123": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incorrect and potentially dangerous. Parkinson's disease"
+    },
+    "27": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incorrect and misleading. Migraines are not 'just bad he"
+    },
+    "121": {
+      "score": 4,
+      "feedback_preview": "The response provides a very good overview of Parkinson's disease, including its"
+    },
+    "411": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for progressive lim"
+    },
+    "122": {
+      "score": 1,
+      "feedback_preview": "The response is grossly inadequate and misleading. Parkinson's disease is a comp"
+    },
+    "410": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes relev"
+    },
+    "414": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that appropriately "
+    },
+    "413": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's b"
+    },
+    "415": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "412": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "416": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for optic neuropath"
+    },
+    "417": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "419": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes relev"
+    },
+    "418": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "420": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "424": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound differential diagnosi"
+    },
+    "421": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that is appropriate"
+    },
+    "422": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "425": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's s"
+    },
+    "423": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "426": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound differential diagnosi"
+    },
+    "428": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "427": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    },
+    "430": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for progressive lim"
+    },
+    "431": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "433": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "429": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "432": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for loss of conscio"
+    },
+    "434": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and structured approach to evaluating the "
+    },
+    "435": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "436": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing multiple diff"
+    },
+    "438": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "439": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for loss of conscio"
+    },
+    "441": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "437": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "442": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the pat"
+    },
+    "443": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "440": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for new-onset seizu"
+    },
+    "444": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "445": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "446": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the pat"
+    },
+    "449": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "448": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound differential diagnosi"
+    },
+    "447": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "450": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that considers the "
+    },
+    "451": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "452": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "453": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "454": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent evaluation of the"
+    },
+    "456": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "458": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "457": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "455": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "459": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "460": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "461": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes multi"
+    },
+    "463": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the burning sen"
+    },
+    "464": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for progressive lim"
+    },
+    "462": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that appropriately "
+    },
+    "465": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    },
+    "466": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "468": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive assessment of the differential diagnoses f"
+    },
+    "469": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "470": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "471": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "472": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "467": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "474": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "473": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "478": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for progressive lim"
+    },
+    "476": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "475": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes a wid"
+    },
+    "477": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes relev"
+    },
+    "480": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "479": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "481": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "483": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "482": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "484": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "486": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "485": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "489": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing a wide range "
+    },
+    "488": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "487": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "493": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the burning sen"
+    },
+    "491": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "492": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the pat"
+    },
+    "490": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    },
+    "494": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for loss of conscio"
+    },
+    "497": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the burning sen"
+    },
+    "498": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes both "
+    },
+    "495": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "496": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's s"
+    },
+    "499": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound differential diagnosi"
+    },
+    "501": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the pat"
+    },
+    "502": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically excellent assessment of the"
+    },
+    "503": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's b"
+    },
+    "500": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "504": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "505": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's s"
+    },
+    "506": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "507": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "509": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    },
+    "508": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for loss of conscio"
+    }
+  },
+  "phase3_cardio_sme": {
+    "64": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines on "
+    },
+    "20": {
+      "score": 1,
+      "feedback_preview": "The response is grossly inadequate and lacks any clinical detail. It fails to ex"
+    },
+    "8": {
+      "score": 1,
+      "feedback_preview": "The response is grossly inadequate and lacks any clinical detail. It fails to ex"
+    },
+    "9": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incorrect and misleading. High blood pressure, or hypert"
+    },
+    "7": {
+      "score": 3,
+      "feedback_preview": "The response provides a basic overview of the effects of high blood pressure, me"
+    },
+    "65": {
+      "score": 1,
+      "feedback_preview": "The response is grossly inadequate and misleading. It only mentions chest pain a"
+    },
+    "21": {
+      "score": 1,
+      "feedback_preview": "The statement that cholesterol is always harmful and should be eliminated from t"
+    },
+    "19": {
+      "score": 4,
+      "feedback_preview": "The response provides a solid overview of the role of cholesterol in heart healt"
+    },
+    "70": {
+      "score": 4,
+      "feedback_preview": "The response provides a solid overview of the causes of high blood pressure, dis"
+    },
+    "66": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incorrect and misleading. Heart attacks can have warning"
+    },
+    "72": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incorrect and misleading. High blood pressure, or hypert"
+    },
+    "71": {
+      "score": 1,
+      "feedback_preview": "The response is grossly incomplete and misleading. While excessive salt intake c"
+    },
+    "115": {
+      "score": 4,
+      "feedback_preview": "The response provides a clear and accurate definition of blood pressure, explain"
+    },
+    "116": {
+      "score": 2,
+      "feedback_preview": "The response provides a very basic definition of blood pressure but lacks essent"
+    },
+    "117": {
+      "score": 1,
+      "feedback_preview": "The response is unsafe and grossly incorrect. Blood pressure is a critical vital"
+    },
+    "310": {
+      "score": 5,
+      "feedback_preview": "The response is comprehensive and clinically excellent, addressing the different"
+    },
+    "317": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "314": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "315": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "313": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "316": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes valvu"
+    },
+    "312": {
+      "score": 5,
+      "feedback_preview": "The response is comprehensive and clinically excellent, covering a thorough diff"
+    },
+    "311": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for tachycardia in "
+    },
+    "318": {
+      "score": 5,
+      "feedback_preview": "The response is comprehensive and clinically excellent, covering a wide differen"
+    },
+    "321": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "319": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "320": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "322": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "325": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "324": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "326": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "323": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "327": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "329": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "328": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "330": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "333": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that is clinically "
+    },
+    "332": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for exertional sync"
+    },
+    "334": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive evaluation of the patient's presentation, "
+    },
+    "331": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for a 23-year-old m"
+    },
+    "335": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing a wide differ"
+    },
+    "337": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "336": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "339": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "338": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of a 21-ye"
+    },
+    "341": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "340": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing a wide range "
+    },
+    "343": {
+      "score": 5,
+      "feedback_preview": "The response is comprehensive and clinically excellent, addressing a wide differ"
+    },
+    "342": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "344": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "345": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "346": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "347": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "348": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "349": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "351": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, providing a thorough dif"
+    },
+    "350": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "352": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "353": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "354": {
+      "score": 5,
+      "feedback_preview": "The response is comprehensive and clinically excellent, addressing the different"
+    },
+    "356": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "355": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "357": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "360": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "358": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "359": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pot"
+    },
+    "361": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for the patient's s"
+    },
+    "362": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines. It"
+    },
+    "364": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "365": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "363": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "366": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "367": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide range of"
+    },
+    "368": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "372": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "369": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "371": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "373": {
+      "score": 5,
+      "feedback_preview": "The AI response is comprehensive and aligns well with current clinical guideline"
+    },
+    "370": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the potential"
+    },
+    "374": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "376": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "375": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes relev"
+    },
+    "377": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "378": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent, providing a comprehensive differential dia"
+    },
+    "379": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "380": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines. It"
+    },
+    "381": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "382": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "383": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, covering a wide differen"
+    },
+    "385": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of bradyca"
+    },
+    "384": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for a 15-year-old f"
+    },
+    "387": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound differential diagnosi"
+    },
+    "388": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that appropriately "
+    },
+    "386": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive assessment of the differential diagnoses r"
+    },
+    "389": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and aligns well with current guidelines for"
+    },
+    "390": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "394": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "392": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "391": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that appropriately "
+    },
+    "395": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "393": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the pat"
+    },
+    "396": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "397": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that includes criti"
+    },
+    "398": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "399": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "402": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "404": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis for bradycardia, co"
+    },
+    "403": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive. It provides a thorough d"
+    },
+    "400": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of bradyca"
+    },
+    "401": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound assessment of the dif"
+    },
+    "405": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive differential diagnosis that is appropriate"
+    },
+    "406": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the different"
+    },
+    "407": {
+      "score": 5,
+      "feedback_preview": "The response is clinically excellent and comprehensive, addressing the patient's"
+    },
+    "409": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    },
+    "408": {
+      "score": 5,
+      "feedback_preview": "The response provides a comprehensive and clinically sound evaluation of the pat"
+    }
+  }
+}

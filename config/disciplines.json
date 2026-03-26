@@ -1,0 +1,42 @@
+{
+  "disciplines": [
+    {
+      "id": "family_medicine",
+      "name": "Family Medicine",
+      "description": "Comprehensive primary healthcare for individuals and families",
+      "is_default": true,
+      "kb_path": "Organization_KB/Family_Medicine",
+      "vector_db_path": "vector_dbs/organization/family_medicine"
+    },
+    {
+      "id": "cardiology",
+      "name": "Cardiology",
+      "description": "Heart and cardiovascular system disorders",
+      "is_default": false,
+      "kb_path": "Organization_KB/Cardiology",
+      "vector_db_path": "vector_dbs/organization/cardiology"
+    },
+    {
+      "id": "neurology",
+      "name": "Neurology",
+      "description": "Nervous system disorders and diseases",
+      "is_default": false,
+      "kb_path": "Organization_KB/Neurology",
+      "vector_db_path": "vector_dbs/organization/neurology"
+    },
+    {
+      "id": "doctors_files",
+      "name": "Doctor's Files",
+      "description": "User-uploaded PDFs and URLs from web sessions",
+      "is_default": false,
+      "kb_path": "KB",
+      "vector_db_path": "vector_dbs",
+      "is_session_based": true
+    }
+  ],
+  "selection_rules": {
+    "min_selections": 1,
+    "max_selections": 4,
+    "default_discipline": "family_medicine"
+  }
+}
