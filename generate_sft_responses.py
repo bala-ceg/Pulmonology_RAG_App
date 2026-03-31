@@ -43,6 +43,21 @@ _raw = {
 }
 _raw["dbname" if _PG_VERSION == 3 else "database"] = os.getenv("DB_NAME")
 DB_CONFIG = {k: v for k, v in _raw.items() if v is not None}
+SQLITE_DB  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_sft.db")
+
+
+def _connect():
+    """Try PostgreSQL (5 s timeout); fall back to SQLite. Returns (conn, placeholder, is_sqlite)."""
+    try:
+        cfg = {**DB_CONFIG, "connect_timeout": 5}
+        conn = _pg.connect(**cfg)
+        print(f"Connected to PostgreSQL at {DB_CONFIG.get('host')}:{DB_CONFIG.get('port')}/{DB_CONFIG.get('dbname') or DB_CONFIG.get('database')}")
+        return conn, "%s", False
+    except Exception as pg_err:
+        print(f"⚠️  PostgreSQL unavailable ({pg_err}). Falling back to SQLite: {SQLITE_DB}")
+        import sqlite3
+        conn = sqlite3.connect(SQLITE_DB)
+        return conn, "?", True
 
 # ---------------------------------------------------------------------------
 # OpenAI
@@ -90,6 +105,25 @@ DOMAIN_SYSTEM_PROMPTS = {
         "joint disorders, spine pathology, and sports injuries. Always write in "
         "plain clinical prose — no code, markdown headers, or bullet points beyond "
         "brief lists where essential."
+    ),
+    "Ophthalmology": (
+        "You are a board-certified ophthalmologist providing evidence-based clinical "
+        "guidance. Your responses address diagnosis, investigation, and management "
+        "of eye and vision conditions including glaucoma, cataracts, retinal disorders, "
+        "corneal disease, uveitis, strabismus, and refractive errors. Include relevant "
+        "slit-lamp findings, visual field testing, IOP measurements, OCT, and "
+        "fluorescein angiography where appropriate. Always write in plain clinical "
+        "prose — no code, markdown headers, or bullet points beyond brief lists where "
+        "essential."
+    ),
+    "Dentistry": (
+        "You are a board-certified dentist and oral health specialist providing "
+        "evidence-based clinical guidance. Your responses address diagnosis, "
+        "radiographic assessment, and management of dental and oral conditions "
+        "including caries, periodontal disease, dental abscess, pulpitis, enamel "
+        "erosion, malocclusion, and oral mucosal lesions. Reference current ADA and "
+        "AAPD guidelines where relevant. Always write in plain clinical prose — no "
+        "code, markdown headers, or bullet points beyond brief lists where essential."
     ),
 }
 DEFAULT_SYSTEM_PROMPT = (
@@ -173,23 +207,18 @@ def generate_responses(prompt: str, domain: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main():
-    dbname = DB_CONFIG.get("dbname") or DB_CONFIG.get("database")
-    print(f"Connecting to {DB_CONFIG.get('host')}:{DB_CONFIG.get('port')}/{dbname} ...")
-    try:
-        conn = _pg.connect(**DB_CONFIG)
-    except Exception as e:
-        print(f"ERROR: {e}")
-        sys.exit(1)
+    conn, ph, is_sqlite = _connect()
 
     # Fetch all rows with empty response_text
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, prompt, group_id, domain "
-            "FROM sft_ranked_data "
-            "WHERE response_text = '' "
-            "ORDER BY domain, id"
-        )
-        rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, prompt, group_id, domain "
+        "FROM sft_ranked_data "
+        "WHERE response_text = '' "
+        "ORDER BY domain, id"
+    )
+    rows = cur.fetchall()
+    cur.close()
 
     if not rows:
         print("No rows with empty response_text found — nothing to do.")
@@ -215,23 +244,28 @@ def main():
             continue
 
         try:
-            with conn.cursor() as cur:
-                # Update the existing rank-1 placeholder row
+            cur = conn.cursor()
+            # Update the existing rank-1 placeholder row
+            if is_sqlite:
                 cur.execute(
-                    "UPDATE sft_ranked_data "
-                    "SET response_text = %s, reason = %s, updated_at = NOW() "
-                    "WHERE id = %s",
+                    f"UPDATE sft_ranked_data SET response_text = {ph}, reason = {ph} WHERE id = {ph}",
+                    (answers[0]["text"], answers[0]["reason"], row_id),
+                )
+            else:
+                cur.execute(
+                    f"UPDATE sft_ranked_data SET response_text = {ph}, reason = {ph}, updated_at = NOW() WHERE id = {ph}",
                     (answers[0]["text"], answers[0]["reason"], row_id),
                 )
 
-                # Insert rank-2 and rank-3 rows under the same group_id
-                for ans in answers[1:]:
-                    cur.execute(
-                        "INSERT INTO sft_ranked_data "
-                        "(prompt, response_text, rank, reason, group_id, domain) "
-                        "VALUES (%s, %s, %s, %s, %s, %s)",
-                        (prompt, ans["text"], ans["rank"], ans["reason"], group_id, domain),
-                    )
+            # Insert rank-2 and rank-3 rows under the same group_id
+            for ans in answers[1:]:
+                cur.execute(
+                    f"INSERT INTO sft_ranked_data "
+                    f"(prompt, response_text, rank, reason, group_id, domain) "
+                    f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                    (prompt, ans["text"], ans["rank"], ans["reason"], group_id, domain),
+                )
+            cur.close()
             conn.commit()
             updated += 1
             print("✅")

@@ -1,0 +1,402 @@
+[
+  {
+    "id": 1,
+    "prompt": "I am evaluating a 42-year-old Hispanic Male from the Mid Atlantic who drinks occasionally and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 2,
+    "prompt": "I am evaluating a 84-year-old Australian Male from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 3,
+    "prompt": "I am evaluating a 39-year-old Latino Female from the NorthEast who drinks occasionally and denies drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 4,
+    "prompt": "I am evaluating a 15-year-old African American Female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 5,
+    "prompt": "I am evaluating a 99-year-old Caucasian Female from the NorthEast who does not drink and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 6,
+    "prompt": "I am evaluating a 65-year-old Middle Eastern Female from the South who does not drink and has a history of drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 7,
+    "prompt": "I am evaluating a 92-year-old Caucasian Female from the Mid Atlantic who does not drink and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 8,
+    "prompt": "I am evaluating a 97-year-old South Asian Female from the West Coast who drinks occasionally and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 9,
+    "prompt": "I am evaluating a 88-year-old Hispanic Male from the Mid West who does not drink and has a history of drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 10,
+    "prompt": "I am evaluating a 25-year-old Asian Female from the South who drinks regularly and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 11,
+    "prompt": "I am evaluating a 53-year-old Hispanic Male from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 12,
+    "prompt": "I am evaluating a 88-year-old South Asian Male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 13,
+    "prompt": "I am evaluating a 27-year-old Hispanic Male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 14,
+    "prompt": "I am evaluating a 68-year-old Hispanic Male from the Great Lakes who drinks occasionally and denies drug abuse. The patient presents with floaters and flashes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate vitreous detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 15,
+    "prompt": "I am evaluating a 34-year-old Hispanic Male from the NorthEast who drinks occasionally and has a history of drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 16,
+    "prompt": "I am evaluating a 85-year-old Middle Eastern Female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 17,
+    "prompt": "I am evaluating a 29-year-old South Asian Male from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 18,
+    "prompt": "I am evaluating a 51-year-old South Asian Male from the Florida who drinks regularly and has a history of drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 19,
+    "prompt": "I am evaluating a 67-year-old Latino Male from the South who does not drink and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 20,
+    "prompt": "I am evaluating a 89-year-old Latino Male from the Florida who does not drink and has a history of drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 21,
+    "prompt": "I am evaluating a 59-year-old Australian Male from the NorthEast who drinks occasionally and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 22,
+    "prompt": "I am evaluating a 19-year-old Caucasian Male from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with floaters and flashes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate vitreous detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 23,
+    "prompt": "I am evaluating a 63-year-old South Asian Male from the Mountain Ranges who drinks occasionally and denies drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 24,
+    "prompt": "I am evaluating a 95-year-old Asian Male from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 25,
+    "prompt": "I am evaluating a 56-year-old African American Female from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 26,
+    "prompt": "I am evaluating a 91-year-old Middle Eastern Male from the South who does not drink and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 27,
+    "prompt": "I am evaluating a 27-year-old Caucasian Female from the South who drinks occasionally and denies drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 28,
+    "prompt": "I am evaluating a 51-year-old African American Female from the Mountain Ranges who does not drink and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 29,
+    "prompt": "I am evaluating a 91-year-old African American Male from the Mid West who drinks regularly and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 30,
+    "prompt": "I am evaluating a 95-year-old South Asian Male from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 31,
+    "prompt": "I am evaluating a 77-year-old South Asian Female from the NorthEast who drinks occasionally and has a history of drug abuse. The patient presents with floaters and flashes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate vitreous detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 32,
+    "prompt": "I am evaluating a 90-year-old Latino Male from the Texas who drinks occasionally and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 33,
+    "prompt": "I am evaluating a 93-year-old Hispanic Female from the Great Lakes who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 34,
+    "prompt": "I am evaluating a 63-year-old Hispanic Male from the Mid West who does not drink and has a history of drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 35,
+    "prompt": "I am evaluating a 18-year-old Middle Eastern Male from the West Coast who drinks occasionally and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 36,
+    "prompt": "I am evaluating a 84-year-old Latino Female from the Mid Atlantic who drinks occasionally and has a history of drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 37,
+    "prompt": "I am evaluating a 77-year-old Caucasian Female from the South who does not drink and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 38,
+    "prompt": "I am evaluating a 27-year-old South Asian Female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 39,
+    "prompt": "I am evaluating a 93-year-old Asian Female from the South who drinks occasionally and has a history of drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 40,
+    "prompt": "I am evaluating a 46-year-old African American Female from the Mid West who does not drink and denies drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 41,
+    "prompt": "I am evaluating a 35-year-old Middle Eastern Female from the West Coast who drinks occasionally and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 42,
+    "prompt": "I am evaluating a 77-year-old African American Female from the South who drinks occasionally and has a history of drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 43,
+    "prompt": "I am evaluating a 92-year-old Hispanic Female from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 44,
+    "prompt": "I am evaluating a 95-year-old Caucasian Male from the NorthEast who drinks occasionally and denies drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 45,
+    "prompt": "I am evaluating a 32-year-old Australian Female from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 46,
+    "prompt": "I am evaluating a 20-year-old Hispanic Female from the Mid Atlantic who drinks regularly and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 47,
+    "prompt": "I am evaluating a 77-year-old Middle Eastern Female from the Texas who drinks regularly and has a history of drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 48,
+    "prompt": "I am evaluating a 47-year-old Hispanic Male from the Mid Atlantic who does not drink and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 49,
+    "prompt": "I am evaluating a 15-year-old Middle Eastern Male from the Mid Atlantic who drinks occasionally and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 50,
+    "prompt": "I am evaluating a 18-year-old South Asian Female from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 51,
+    "prompt": "I am evaluating a 60-year-old African American Male from the Texas who does not drink and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 52,
+    "prompt": "I am evaluating a 41-year-old African American Male from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 53,
+    "prompt": "I am evaluating a 83-year-old Asian Female from the Great Lakes who drinks regularly and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 54,
+    "prompt": "I am evaluating a 20-year-old Latino Male from the Great Lakes who drinks occasionally and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 55,
+    "prompt": "I am evaluating a 55-year-old Hispanic Female from the NorthEast who drinks regularly and denies drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 56,
+    "prompt": "I am evaluating a 76-year-old Middle Eastern Female from the South who drinks occasionally and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 57,
+    "prompt": "I am evaluating a 62-year-old Caucasian Female from the Mid Atlantic who drinks regularly and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 58,
+    "prompt": "I am evaluating a 15-year-old African American Male from the West Coast who drinks occasionally and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 59,
+    "prompt": "I am evaluating a 44-year-old Hispanic Male from the West Coast who does not drink and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 60,
+    "prompt": "I am evaluating a 81-year-old South Asian Male from the Florida who drinks regularly and denies drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 61,
+    "prompt": "I am evaluating a 48-year-old Middle Eastern Male from the Great Lakes who drinks occasionally and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 62,
+    "prompt": "I am evaluating a 36-year-old Asian Male from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 63,
+    "prompt": "I am evaluating a 25-year-old Hispanic Male from the West Coast who drinks occasionally and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 64,
+    "prompt": "I am evaluating a 90-year-old Latino Female from the Mid West who drinks occasionally and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 65,
+    "prompt": "I am evaluating a 53-year-old Caucasian Female from the Mountain Ranges who drinks regularly and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 66,
+    "prompt": "I am evaluating a 84-year-old Hispanic Male from the Florida who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 67,
+    "prompt": "I am evaluating a 60-year-old Australian Male from the Texas who does not drink and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 68,
+    "prompt": "I am evaluating a 30-year-old African American Male from the NorthEast who drinks regularly and denies drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 69,
+    "prompt": "I am evaluating a 46-year-old South Asian Female from the Texas who drinks occasionally and denies drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 70,
+    "prompt": "I am evaluating a 52-year-old South Asian Male from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 71,
+    "prompt": "I am evaluating a 22-year-old Caucasian Female from the Great Lakes who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 72,
+    "prompt": "I am evaluating a 86-year-old Latino Female from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 73,
+    "prompt": "I am evaluating a 58-year-old Latino Male from the Mid Atlantic who drinks regularly and has a history of drug abuse. The patient presents with floaters and flashes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate vitreous detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 74,
+    "prompt": "I am evaluating a 41-year-old South Asian Female from the Florida who drinks regularly and has a history of drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 75,
+    "prompt": "I am evaluating a 37-year-old Middle Eastern Female from the West Coast who does not drink and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 76,
+    "prompt": "I am evaluating a 80-year-old African American Female from the Texas who does not drink and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 77,
+    "prompt": "I am evaluating a 93-year-old Middle Eastern Male from the Mid West who drinks regularly and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 78,
+    "prompt": "I am evaluating a 40-year-old Asian Male from the NorthEast who drinks regularly and has a history of drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 79,
+    "prompt": "I am evaluating a 75-year-old Latino Female from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 80,
+    "prompt": "I am evaluating a 42-year-old Caucasian Female from the Great Lakes who drinks occasionally and has a history of drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 81,
+    "prompt": "I am evaluating a 17-year-old Asian Female from the Texas who drinks occasionally and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 82,
+    "prompt": "I am evaluating a 97-year-old Asian Male from the Mid Atlantic who does not drink and denies drug abuse. The patient presents with swelling around the eyelid. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate blepharitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 83,
+    "prompt": "I am evaluating a 17-year-old Caucasian Female from the South who drinks regularly and denies drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 84,
+    "prompt": "I am evaluating a 73-year-old Hispanic Male from the South who drinks occasionally and has a history of drug abuse. The patient presents with blurred vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate refractive error and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 85,
+    "prompt": "I am evaluating a 16-year-old Australian Female from the Mountain Ranges who drinks regularly and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 86,
+    "prompt": "I am evaluating a 21-year-old Australian Male from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 87,
+    "prompt": "I am evaluating a 46-year-old Asian Male from the Florida who drinks regularly and has a history of drug abuse. The patient presents with eye redness and irritation. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate conjunctivitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 88,
+    "prompt": "I am evaluating a 97-year-old South Asian Female from the Mountain Ranges who does not drink and denies drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 89,
+    "prompt": "I am evaluating a 23-year-old Caucasian Female from the Florida who drinks occasionally and has a history of drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 90,
+    "prompt": "I am evaluating a 43-year-old Asian Female from the Mountain Ranges who does not drink and has a history of drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 91,
+    "prompt": "I am evaluating a 69-year-old African American Female from the Mid Atlantic who drinks occasionally and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 92,
+    "prompt": "I am evaluating a 75-year-old South Asian Male from the Mid Atlantic who does not drink and has a history of drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 93,
+    "prompt": "I am evaluating a 31-year-old Hispanic Male from the Texas who does not drink and has a history of drug abuse. The patient presents with double vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate ocular muscle disorder and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 94,
+    "prompt": "I am evaluating a 81-year-old Caucasian Female from the Mid Atlantic who does not drink and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 95,
+    "prompt": "I am evaluating a 91-year-old Asian Male from the Mountain Ranges who drinks regularly and has a history of drug abuse. The patient presents with floaters and flashes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate vitreous detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 96,
+    "prompt": "I am evaluating a 19-year-old Asian Male from the Texas who drinks regularly and has a history of drug abuse. The patient presents with sudden loss of vision. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate retinal detachment and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 97,
+    "prompt": "I am evaluating a 59-year-old Latino Male from the Mid West who does not drink and denies drug abuse. The patient presents with gradual vision loss. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate glaucoma and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 98,
+    "prompt": "I am evaluating a 60-year-old Latino Female from the Mountain Ranges who drinks occasionally and denies drug abuse. The patient presents with difficulty seeing at night. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate night blindness and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 99,
+    "prompt": "I am evaluating a 87-year-old Caucasian Male from the Mountain Ranges who does not drink and has a history of drug abuse. The patient presents with eye pain with light sensitivity. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate uveitis and what diagnostic and treatment options should I consider?"
+  },
+  {
+    "id": 100,
+    "prompt": "I am evaluating a 54-year-old Latino Male from the Florida who drinks regularly and has a history of drug abuse. The patient presents with dry and itchy eyes. Symptoms have been present for several days or weeks and are affecting daily visual activities. Could this indicate dry eye syndrome and what diagnostic and treatment options should I consider?"
+  }
+]

@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify, render_template
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain.chains import RetrievalQA
+from langchain_classic.chains import RetrievalQA
 from langchain_openai import OpenAI
 from langchain_openai import ChatOpenAI
-from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import new RAG architecture
 try:
@@ -66,6 +66,13 @@ try:
 except ImportError:
     print("⚠️ Integrated RAG system not available. Some advanced features may be limited.")
     INTEGRATED_RAG_AVAILABLE = False
+
+# Import Domain Scope Guard (RLHF query restriction)
+try:
+    from domain_scope_guard import DomainScopeGuard
+    SCOPE_GUARD_AVAILABLE = True
+except ImportError:
+    SCOPE_GUARD_AVAILABLE = False
 
 from psycopg import sql
 
@@ -583,6 +590,20 @@ if INTEGRATED_RAG_AVAILABLE:
 else:
     print("⚠️ Integrated RAG System not available")
 
+# Initialize Domain Scope Guard (RLHF query restriction gate)
+scope_guard = None
+if SCOPE_GUARD_AVAILABLE:
+    try:
+        scope_guard = DomainScopeGuard(db_config=db_config)
+        import domain_scope_guard as _dsg_module
+        _dsg_module.scope_guard = scope_guard
+        print("✅ Domain Scope Guard initialized")
+    except Exception as e:
+        print(f"⚠️ Domain Scope Guard failed to initialize: {e} — pass-through mode active")
+        scope_guard = None
+else:
+    print("⚠️ Domain Scope Guard not available")
+
 # Split documents and create FAISS vector store
 text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=4096, 
@@ -734,7 +755,7 @@ def translate_audio():
     Expects: audio file, language code
     Returns: segmented conversation with speaker roles and translations
     """
-    from langchain.schema import HumanMessage, SystemMessage
+    from langchain_core.messages import HumanMessage, SystemMessage
     import concurrent.futures
     
     try:
@@ -1358,7 +1379,23 @@ def handle_query():
             "response": False,
             "message": "Please provide a valid input to get a medical response."
         })
-    
+
+    # 🔒 RLHF DOMAIN SCOPE GUARD — three-tier query filtering
+    guard_disclaimer = ""
+    if scope_guard is not None:
+        _guard_status, similarity_score, _guard_msg = scope_guard.check(user_input)
+        if _guard_status == "rejected":
+            print(f"🚫 Query rejected by scope guard (score={similarity_score:.3f}): {user_input[:80]!r}")
+            return jsonify({
+                "response": False,
+                "message": _guard_msg,
+                "out_of_scope": True,
+                "similarity_score": round(similarity_score, 4)
+            })
+        elif _guard_status == "general_medical":
+            print(f"⚠️ General medical query (score={similarity_score:.3f}) — answering with disclaimer")
+            guard_disclaimer = _guard_msg  # prepend to every success answer below
+
     # Store patient context for system message (don't append to query)
     if patient_problem:
         print(f"📋 Using patient context as system message: '{patient_problem}'")
@@ -1394,7 +1431,7 @@ def handle_query():
                 # Return JSON response for UI
                 return jsonify({
                     "response": True,
-                    "message": answer,
+                    "message": guard_disclaimer + answer,
                     "routing_details": {
                         "disciplines": tools_used,
                         "sources": routing_info.get('sources', []),
@@ -1444,7 +1481,7 @@ def handle_query():
                 # Return JSON response for two-store RAG
                 return jsonify({
                     "response": True,
-                    "message": final_response,
+                    "message": guard_disclaimer + final_response,
                     "routing_details": {
                         "disciplines": routing_info.get('sources_queried', []),
                         "sources": rag_result['citations'],
@@ -1585,7 +1622,7 @@ def handle_query():
             # Return JSON response for legacy medical routing
             return jsonify({
                 "response": True,
-                "message": final_response,
+                "message": guard_disclaimer + final_response,
                 "routing_details": {
                     "disciplines": relevant_disciplines,
                     "sources": all_citations,
@@ -1655,6 +1692,31 @@ def handle_query_html():
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
 
+    # 🔒 RLHF DOMAIN SCOPE GUARD — three-tier query filtering
+    guard_disclaimer = ""
+    if scope_guard is not None:
+        _guard_status, similarity_score, _guard_msg = scope_guard.check(user_input)
+        if _guard_status == "rejected":
+            print(f"🚫 Query rejected by scope guard (score={similarity_score:.3f}): {user_input[:80]!r}")
+            result_data = {
+                'medical_summary': _guard_msg,
+                'sources': ['Domain Scope Guard'],
+                'tool_info': {
+                    'primary_tool': 'Domain Scope Guard',
+                    'confidence': 'N/A',
+                    'reasoning': f'Query similarity score {similarity_score:.3f} is below threshold '
+                                 f'{scope_guard.threshold}. Query is outside trained domain.'
+                }
+            }
+            html_response = generate_full_html_response(result_data)
+            from flask import make_response
+            response = make_response(html_response)
+            response.headers['Content-Type'] = 'text/html; charset=utf-8'
+            return response
+        elif _guard_status == "general_medical":
+            print(f"⚠️ General medical query (score={similarity_score:.3f}) — answering with disclaimer")
+            guard_disclaimer = _guard_msg
+
     # Store patient context for system message (don't append to query)
     if patient_problem:
         print(f"📋 Using patient context as system message: '{patient_problem}'")
@@ -1691,6 +1753,11 @@ def handle_query_html():
                 # Parse the enhanced HTML response using our new parser
                 result_data = parse_enhanced_response(answer, routing_info, tools_used, explanation)
                 
+                if guard_disclaimer:
+                    key = 'medical_summary' if 'medical_summary' in result_data else next(iter(result_data), None)
+                    if key:
+                        result_data[key] = guard_disclaimer + str(result_data[key])
+                
                 html_response = generate_full_html_response(result_data)
                 from flask import make_response
                 response = make_response(html_response)
@@ -1703,7 +1770,7 @@ def handle_query_html():
                 
                 # For internal VectorDB or organization KB responses, create result_data
                 result_data = {
-                    'Answer': answer,
+                    'Answer': guard_disclaimer + answer,
                     'sources': ['Internal Document (PDF)', 'Organization Knowledge Base'] if 'organization' in tools_used[0].lower() else ['Internal Document (PDF)'],
                     'tool_info': {
                         'primary_tool': tools_used[0] if tools_used else 'Internal_VectorDB',
@@ -3066,7 +3133,7 @@ def transcribe_doctor_patient_conversation():
         return jsonify({"error": "Voice diarization not available. Please install required dependencies."}), 500
     
     try:
-        from langchain.schema import HumanMessage, SystemMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
         
         audio_file = request.files['audio']
         doctor_name = request.form.get('doctor_name', 'Unknown Doctor')
@@ -3746,6 +3813,13 @@ def add_rlhf_sample():
                 interaction_id = cur.fetchone()[0]
                 conn.commit()
                 
+                # Refresh scope guard corpus so new prompt is immediately included
+                if scope_guard is not None:
+                    try:
+                        scope_guard.refresh()
+                    except Exception as _sg_err:
+                        print(f"⚠️ Scope guard refresh failed (non-critical): {_sg_err}")
+
                 return jsonify({
                     "success": True,
                     "interaction_id": interaction_id,
@@ -3866,6 +3940,13 @@ def generate_rlhf_samples():
                     inserted_count += 1
                 conn.commit()
         
+        # Refresh scope guard corpus so all newly inserted prompts are immediately included
+        if scope_guard is not None:
+            try:
+                scope_guard.refresh()
+            except Exception as _sg_err:
+                print(f"⚠️ Scope guard refresh failed (non-critical): {_sg_err}")
+
         return jsonify({
             "success": True,
             "count": inserted_count,
@@ -4236,6 +4317,62 @@ def get_model_info():
         })
 
 
+@app.route('/api/rlhf/scope_guard', methods=['GET', 'POST'])
+def manage_scope_guard():
+    """
+    Manage the RLHF Domain Scope Guard.
+
+    GET  — Return current guard status (corpus size, threshold, covered topics).
+    POST — Actions:
+        {"action": "refresh"}                  Reload corpus from DB
+        {"action": "set_threshold", "threshold": 0.5}  Update similarity threshold
+    """
+    if request.method == 'GET':
+        if scope_guard is None:
+            return jsonify({
+                "success": True,
+                "available": False,
+                "message": "Domain Scope Guard is not initialized."
+            })
+        return jsonify({"success": True, "available": True, **scope_guard.get_status()})
+
+    # POST
+    try:
+        data = request.json or {}
+        action = data.get("action", "")
+
+        if scope_guard is None:
+            return jsonify({"success": False, "error": "Domain Scope Guard is not initialized."}), 503
+
+        if action == "refresh":
+            n = scope_guard.refresh()
+            return jsonify({
+                "success": True,
+                "message": f"Corpus refreshed — {n} training prompts loaded.",
+                **scope_guard.get_status()
+            })
+
+        if action == "set_threshold":
+            threshold = data.get("threshold")
+            if threshold is None:
+                return jsonify({"error": "Missing 'threshold' field"}), 400
+            try:
+                scope_guard.set_threshold(float(threshold))
+            except ValueError as ve:
+                return jsonify({"error": str(ve)}), 400
+            return jsonify({
+                "success": True,
+                "message": f"Threshold updated to {scope_guard.threshold}",
+                **scope_guard.get_status()
+            })
+
+        return jsonify({"error": f"Unknown action: {action!r}. Use 'refresh' or 'set_threshold'."}), 400
+
+    except Exception as e:
+        print(f"Error managing scope guard: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/rlhf/score', methods=['POST'])
 def score_answer():
     """
@@ -4324,7 +4461,7 @@ def generate_candidates():
                 "error": "'prompt' is required"
             }), 400
         
-        from langchain.schema import HumanMessage, SystemMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
         
         # Generate three different quality levels of answers
         generation_prompt = f"""Given this medical question: "{prompt}"
@@ -4707,9 +4844,28 @@ def api_test_experiment_model(exp_id):
     question = data.get('question', '')
     if not question:
         return jsonify({"success": False, "error": "Question is required"}), 400
+
+    # 🔒 RLHF DOMAIN SCOPE GUARD — three-tier filtering for test questions
+    guard_disclaimer = ""
+    if scope_guard is not None:
+        _guard_status, similarity_score, _guard_msg = scope_guard.check(question)
+        if _guard_status == "rejected":
+            print(f"🚫 SFT test rejected by scope guard (score={similarity_score:.3f}): {question[:80]!r}")
+            return jsonify({
+                "success": False,
+                "out_of_scope": True,
+                "similarity_score": round(similarity_score, 4),
+                "error": _guard_msg
+            }), 400
+        elif _guard_status == "general_medical":
+            print(f"⚠️ SFT general medical query (score={similarity_score:.3f}) — answering with disclaimer")
+            guard_disclaimer = _guard_msg
+
     max_tokens = data.get('max_tokens', 256)
     result = test_trained_model(exp_id, question, max_new_tokens=max_tokens)
     if result.get("success"):
+        if guard_disclaimer:
+            result["response"] = guard_disclaimer + result.get("response", "")
         return jsonify(result)
     return jsonify(result), 400
 

@@ -9,8 +9,8 @@ with LangChain agents for fast, real-time medical question answering.
 import os
 from typing import Dict, List, Optional, Any
 from langchain_openai import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
-from langchain.schema import HumanMessage
+from langchain_classic.agents import initialize_agent, AgentType
+from langchain_core.messages import HumanMessage
 
 # Import direct API tools
 from direct_api_tools import create_agent_tools, get_tool_descriptions

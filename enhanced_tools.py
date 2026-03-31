@@ -13,7 +13,7 @@ import re
 import threading
 from contextlib import contextmanager
 from typing import List, Dict, Optional, Tuple
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
 from langchain_openai import ChatOpenAI
 
@@ -200,7 +200,7 @@ Content to summarize:
 Provide a 2-3 sentence summary that highlights the most current and relevant information for the user's query."""
         
         # Create messages with system context
-        from langchain.schema import HumanMessage, SystemMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
         response = llm.invoke([
             SystemMessage(content=system_message),
             HumanMessage(content=user_prompt)
@@ -413,7 +413,7 @@ Provide a 2-3 sentence summary that directly addresses the user's query."""
         ]
         
         # Use the chat completion format for better context handling
-        from langchain.schema import HumanMessage, SystemMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
         response = llm.invoke([
             SystemMessage(content=system_message),
             HumanMessage(content=user_prompt)

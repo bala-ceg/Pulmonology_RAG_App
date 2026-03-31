@@ -297,6 +297,7 @@ DEPARTMENTS = OrderedDict([
     ("Sleep Medicine", ["sleep", "insomnia", "sleep apnea", "circadian", "sleep deprivation", "melatonin"]),
     ("Sports Medicine", ["sports", "exercise", "physical activity", "athletic", "fitness", "physical exercise"]),
     ("Geriatrics", ["elderly", "aging", "geriatric", "dementia", "age-related", "senior"]),
+    ("Dentistry", ["tooth", "teeth", "dental", "dentist", "cavity", "gum", "oral", "mouth", "crown", "filling", "root canal", "orthodont", "periodon", "enamel", "plaque", "tartar", "braces", "molar", "incisor"]),
 ])
 
 

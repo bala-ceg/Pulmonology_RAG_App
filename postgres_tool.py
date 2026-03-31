@@ -290,7 +290,7 @@ Diagnosis data:
 Provide a 2-3 sentence summary that is informative and professional."""
             
             # Use LangChain message format
-            from langchain.schema import HumanMessage, SystemMessage
+            from langchain_core.messages import HumanMessage, SystemMessage
             response = llm.invoke([
                 SystemMessage(content=system_message),
                 HumanMessage(content=user_prompt)

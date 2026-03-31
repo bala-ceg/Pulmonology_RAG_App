@@ -11,7 +11,7 @@ import os
 import wikipedia
 import arxiv
 from typing import Optional
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 # Configure Wikipedia for better reliability
 wikipedia.set_rate_limiting(True)

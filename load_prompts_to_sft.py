@@ -29,6 +29,7 @@ except ImportError:
         sys.exit(1)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLITE_DB  = os.path.join(SCRIPT_DIR, "local_sft.db")
 
 _raw = {
     "host": os.getenv("DB_HOST"),
@@ -36,35 +37,56 @@ _raw = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
 }
-# psycopg uses 'dbname'; psycopg2 accepts both but 'database' is canonical
 _raw["dbname" if _PG_VERSION == 3 else "database"] = os.getenv("DB_NAME")
-
 DB_CONFIG = {k: v for k, v in _raw.items() if v is not None}
+
+
+def _connect():
+    """Try PostgreSQL (5 s timeout); fall back to SQLite. Returns (conn, placeholder, is_sqlite)."""
+    try:
+        cfg = {**DB_CONFIG, "connect_timeout": 5}
+        conn = _pg.connect(**cfg)
+        print(f"Connected to PostgreSQL at {DB_CONFIG.get('host')}:{DB_CONFIG.get('port')}/{DB_CONFIG.get('dbname') or DB_CONFIG.get('database')}")
+        return conn, "%s", False
+    except Exception as pg_err:
+        print(f"⚠️  PostgreSQL unavailable ({pg_err}). Falling back to SQLite: {SQLITE_DB}")
+        import sqlite3
+        conn = sqlite3.connect(SQLITE_DB)
+        return conn, "?", True
 
 FILES = [
     ("neurologist_prompts_100.json", "Neurology"),
     ("cardiologist_prompts_100.json", "Cardiology"),
     ("pediatrician_prompts_100.json", "Pediatrics"),
     ("orthopedic_prompts_100.json", "Orthopedics"),
+    ("ophthalmologist_prompts_100.json", "Ophthalmology"),
+    ("dentist_prompts_100.json", "Dentistry"),
 ]
 
 
-def ensure_domain_column(cur):
+def ensure_domain_column(cur, is_sqlite=False):
     """Add domain column if it doesn't exist yet (idempotent)."""
-    cur.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = 'sft_ranked_data' AND column_name = 'domain'"
-    )
-    if not cur.fetchone():
-        cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN domain TEXT")
+    if is_sqlite:
+        rows = cur.execute("PRAGMA table_info(sft_ranked_data)").fetchall()
+        existing = [row[1] for row in rows]
+        if "domain" not in existing:
+            cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN domain TEXT")
+            print("  ℹ️  Added missing 'domain' column to sft_ranked_data")
+    else:
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_sft_ranked_data_domain "
-            "ON sft_ranked_data(domain)"
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'sft_ranked_data' AND column_name = 'domain'"
         )
-        print("  ℹ️  Added missing 'domain' column to sft_ranked_data")
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN domain TEXT")
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sft_ranked_data_domain "
+                "ON sft_ranked_data(domain)"
+            )
+            print("  ℹ️  Added missing 'domain' column to sft_ranked_data")
 
 
-def insert_prompts(cur, prompts, domain):
+def insert_prompts(cur, prompts, domain, ph="%s"):
     inserted = 0
     skipped = 0
     for item in prompts:
@@ -73,7 +95,7 @@ def insert_prompts(cur, prompts, domain):
             continue
 
         cur.execute(
-            "SELECT 1 FROM sft_ranked_data WHERE prompt = %s LIMIT 1",
+            f"SELECT 1 FROM sft_ranked_data WHERE prompt = {ph} LIMIT 1",
             (prompt_text,),
         )
         if cur.fetchone():
@@ -82,9 +104,9 @@ def insert_prompts(cur, prompts, domain):
 
         group_id = str(uuid.uuid4())[:8]
         cur.execute(
-            """INSERT INTO sft_ranked_data
+            f"""INSERT INTO sft_ranked_data
                (prompt, response_text, rank, reason, group_id, domain)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
+               VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
             (prompt_text, "", 1, "", group_id, domain),
         )
         inserted += 1
@@ -93,22 +115,16 @@ def insert_prompts(cur, prompts, domain):
 
 
 def main():
-    host = DB_CONFIG.get("host")
-    dbname = DB_CONFIG.get("dbname") or DB_CONFIG.get("database")
-    port = DB_CONFIG.get("port")
-    print(f"Connecting to PostgreSQL at {host}:{port}/{dbname} ...")
-    try:
-        conn = _pg.connect(**DB_CONFIG)
-    except Exception as e:
-        print(f"ERROR: Could not connect — {e}")
-        sys.exit(1)
+    conn, ph, is_sqlite = _connect()
 
     total_inserted = 0
     total_skipped = 0
 
     try:
-        with conn.cursor() as cur:
-            ensure_domain_column(cur)
+        cur = conn.cursor()
+        ensure_domain_column(cur, is_sqlite=is_sqlite)
+        conn.commit()
+        cur.close()
 
         for filename, domain in FILES:
             path = os.path.join(SCRIPT_DIR, filename)
@@ -121,8 +137,9 @@ def main():
                 continue
 
             print(f"  Found {len(prompts)} prompts")
-            with conn.cursor() as cur:
-                inserted, skipped = insert_prompts(cur, prompts, domain)
+            cur = conn.cursor()
+            inserted, skipped = insert_prompts(cur, prompts, domain, ph=ph)
+            cur.close()
             conn.commit()
             print(f"  ✅ Inserted: {inserted}   ⏭  Skipped (duplicate): {skipped}")
             total_inserted += inserted

@@ -44,6 +44,21 @@ _raw = {
 }
 _raw["dbname" if _PG_VERSION == 3 else "database"] = os.getenv("DB_NAME")
 DB_CONFIG = {k: v for k, v in _raw.items() if v is not None}
+SQLITE_DB  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_sft.db")
+
+
+def _connect():
+    """Try PostgreSQL (5 s timeout); fall back to SQLite. Returns (conn, placeholder, is_sqlite)."""
+    try:
+        cfg = {**DB_CONFIG, "connect_timeout": 5}
+        conn = _pg.connect(**cfg)
+        print(f"Connected to PostgreSQL at {DB_CONFIG.get('host')}:{DB_CONFIG.get('port')}/{DB_CONFIG.get('dbname') or DB_CONFIG.get('database')}")
+        return conn, "%s", False
+    except Exception as pg_err:
+        print(f"⚠️  PostgreSQL unavailable ({pg_err}). Falling back to SQLite: {SQLITE_DB}")
+        import sqlite3
+        conn = sqlite3.connect(SQLITE_DB)
+        return conn, "?", True
 
 # ---------------------------------------------------------------------------
 # OpenAI
@@ -118,22 +133,17 @@ def generate_sme_reason(prompt: str, response: str, rank: int, score: int,
 # ---------------------------------------------------------------------------
 
 def main():
-    dbname = DB_CONFIG.get("dbname") or DB_CONFIG.get("database")
-    print(f"Connecting to {DB_CONFIG.get('host')}:{DB_CONFIG.get('port')}/{dbname} ...")
-    try:
-        conn = _pg.connect(**DB_CONFIG)
-    except Exception as e:
-        print(f"ERROR: {e}")
-        sys.exit(1)
+    conn, ph, is_sqlite = _connect()
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, prompt, response_text, rank, domain "
-            "FROM sft_ranked_data "
-            "WHERE response_text <> '' AND sme_score IS NULL "
-            "ORDER BY domain, rank, id"
-        )
-        rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, prompt, response_text, rank, domain "
+        "FROM sft_ranked_data "
+        "WHERE response_text <> '' AND sme_score IS NULL "
+        "ORDER BY domain, rank, id"
+    )
+    rows = cur.fetchall()
+    cur.close()
 
     if not rows:
         print("No rows need SME scoring — nothing to do.")
@@ -161,19 +171,23 @@ def main():
             continue
 
         try:
-            with conn.cursor() as cur:
+            cur = conn.cursor()
+            if is_sqlite:
                 cur.execute(
-                    """
-                    UPDATE sft_ranked_data
-                    SET sme_score        = %s,
-                        sme_score_reason = %s,
-                        sme_reviewed_by  = 'Auto-SME',
-                        sme_reviewed_at  = NOW(),
-                        updated_at       = NOW()
-                    WHERE id = %s
-                    """,
+                    f"UPDATE sft_ranked_data "
+                    f"SET sme_score = {ph}, sme_score_reason = {ph}, sme_reviewed_by = 'Auto-SME' "
+                    f"WHERE id = {ph}",
                     (score, reason, row_id),
                 )
+            else:
+                cur.execute(
+                    f"UPDATE sft_ranked_data "
+                    f"SET sme_score = {ph}, sme_score_reason = {ph}, sme_reviewed_by = 'Auto-SME', "
+                    f"    sme_reviewed_at = NOW(), updated_at = NOW() "
+                    f"WHERE id = {ph}",
+                    (score, reason, row_id),
+                )
+            cur.close()
             conn.commit()
             updated += 1
             print("✅")

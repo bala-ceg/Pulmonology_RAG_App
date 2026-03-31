@@ -14,15 +14,15 @@ and implements a post-retrieval guard system with Wikipedia fallback.
 import os
 import re
 from typing import List, Dict, Optional, Tuple
-from langchain.schema import Document
+from langchain_core.documents import Document
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 try:
-    from langchain.tools import tool
+    from langchain_core.tools import tool
 except ImportError:
     # Fallback for older versions or different package structure
     def tool(func):

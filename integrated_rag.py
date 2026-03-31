@@ -9,10 +9,10 @@ with intelligent routing, guarded retrieval, and fallback mechanisms.
 import os
 from typing import Dict, List, Optional, Any
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
-from langchain.schema import Document
+from langchain_classic.agents import initialize_agent, AgentType
+from langchain_core.documents import Document
 try:
-    from langchain.tools import tool
+    from langchain_core.tools import tool
 except ImportError:
     # Fallback for older versions or different package structure
     def tool(func):
