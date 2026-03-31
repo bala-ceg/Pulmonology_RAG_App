@@ -313,12 +313,12 @@ def Tavily_Search(query: str) -> str:
         try:
             from tavily import TavilyClient
         except ImportError:
-            return f"Tavily package not installed. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+            return f"Tavily package not installed. Falling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Get API key from environment
         tavily_api_key = os.getenv('TAVILY_API_KEY')
         if not tavily_api_key:
-            return f"Tavily API key not configured. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+            return f"Tavily API key not configured. Falling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Initialize Tavily client
         client = TavilyClient(api_key=tavily_api_key)
@@ -332,7 +332,7 @@ def Tavily_Search(query: str) -> str:
         )
         
         if not search_results or 'results' not in search_results:
-            return f"No current web information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+            return f"No current web information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Convert Tavily results to Document format for consistency
         docs = []
@@ -355,7 +355,7 @@ def Tavily_Search(query: str) -> str:
                 docs.append(doc)
         
         if not docs:
-            return f"No relevant current information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+            return f"No relevant current information found for '{query}'. Falling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Use the same utility function as other tools for consistent formatting
         result_text = _join_docs(docs, max_chars=1200)
@@ -367,7 +367,7 @@ def Tavily_Search(query: str) -> str:
         error_msg = f"Error searching web with Tavily: {str(e)}"
         print(error_msg)
         # Fallback to Wikipedia on error
-        return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
 
 @tool
@@ -409,13 +409,13 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
             session_kb_loaded = rag_manager.load_session_vector_db(session_id)
             if not session_kb_loaded:
                 print(f"Internal_VectorDB: No session vector DB found for {session_id} - triggering Wikipedia fallback")
-                return f"No documents found for your session ({session_id}). Searching general knowledge instead...\n\n{Wikipedia_Search(query)}"
+                return f"No documents found for your session ({session_id}). Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:
             print("Internal_VectorDB: No local content found - triggering Wikipedia fallback")
             # Fallback to Wikipedia for better user experience
-            return Wikipedia_Search(query)
+            return Wikipedia_Search.invoke(query)
         
         # Create retriever for local knowledge base
         retriever = rag_manager.kb_local.as_retriever(
@@ -428,7 +428,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         
         if docs is None:
             print("Internal_VectorDB: Guard triggered - falling back to Wikipedia")
-            return f"No relevant information found in uploaded documents. Searching general knowledge instead...\n\n{Wikipedia_Search(query)}"
+            return f"No relevant information found in uploaded documents. Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Add source type metadata for consistency
         for doc in docs:
@@ -443,7 +443,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         # If result is too generic or empty, fallback to Wikipedia
         if len(result) < 100 or _is_generic_content(result):
             print("Internal_VectorDB: Result too generic - falling back to Wikipedia")
-            return f"Limited relevant information in uploaded documents. Supplementing with general knowledge...\n\n{Wikipedia_Search(query)}"
+            return f"Limited relevant information in uploaded documents. Supplementing with general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         return result
         
@@ -451,7 +451,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         error_msg = f"Error searching internal knowledge base: {str(e)}"
         print(error_msg)
         # Fallback to Wikipedia on error
-        return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search(query)}"
+        return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
 
 @tool
@@ -518,7 +518,7 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
         error_msg = f"Error searching diagnosis database: {str(e)}"
         print(error_msg)
         # Fallback to Wikipedia for general medical information
-        return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search(query)}"
+        return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
 
 # Tool registry for easy access
