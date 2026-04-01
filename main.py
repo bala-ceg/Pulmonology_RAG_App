@@ -1740,11 +1740,12 @@ def handle_query_html():
                 session_id = last_created_folder if last_created_folder else "guest"
                 print(f"🔄 Using current session: {session_id}")
             
-            # Use the integrated RAG system's intelligent query method
-            answer, routing_info, tools_used, explanation = integrated_rag_system.intelligent_query(
-                query_input, 
-                session_id=session_id
-            )
+            # Use the integrated RAG system — query() returns a dict; unpack here
+            _result      = integrated_rag_system.query(query_input, session_id=session_id)
+            answer       = _result.get('answer', '')
+            routing_info = _result.get('routing_info', {})
+            tools_used   = _result.get('tools_used', [])
+            explanation  = _result.get('explanation', '')
             
             # Handle Enhanced Tools Response (Wikipedia/ArXiv with HTML formatting)
             if tools_used and any('Enhanced' in tool for tool in tools_used):
