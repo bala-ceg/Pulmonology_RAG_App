@@ -8,7 +8,7 @@ import sys
 import json
 
 # Setup path
-os.chdir('/Users/bseetharaman/Desktop/Bala/2025/AI_Medical_App/Pulmonology_RAG_App')
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.getcwd())
 
 def test_session_loading_scenarios():

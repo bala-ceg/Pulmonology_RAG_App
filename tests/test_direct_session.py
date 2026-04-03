@@ -7,7 +7,7 @@ import sys
 import os
 
 # Change to the correct directory
-os.chdir('/Users/bseetharaman/Desktop/Bala/2025/AI_Medical_App/Pulmonology_RAG_App')
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import just the RAG architecture
 from rag_architecture import TwoStoreRAGManager
