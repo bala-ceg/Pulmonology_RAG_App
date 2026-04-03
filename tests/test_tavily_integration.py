@@ -26,9 +26,10 @@ def test_tavily_tool_availability():
     assert 'Tavily_Search' in AVAILABLE_TOOLS, "Tavily_Search not found in AVAILABLE_TOOLS"
     print("✅ Tavily_Search found in AVAILABLE_TOOLS")
     
-    # Check if the tool function is callable
-    assert callable(AVAILABLE_TOOLS['Tavily_Search']), "Tavily_Search is not callable"
-    print("✅ Tavily_Search is callable")
+    # LangChain StructuredTool objects expose .invoke() and .run() rather than __call__
+    tool = AVAILABLE_TOOLS['Tavily_Search']
+    assert hasattr(tool, 'invoke') or hasattr(tool, 'run'), "Tavily_Search has no invoke/run method"
+    print("✅ Tavily_Search is invocable")
 
 
 def test_tavily_routing():

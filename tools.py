@@ -11,6 +11,8 @@ Each tool includes strong descriptions with "use" and "do not use" conditions
 and implements a post-retrieval guard system with Wikipedia fallback.
 """
 
+from __future__ import annotations
+
 import os
 import re
 from typing import List, Dict, Optional, Tuple
@@ -24,12 +26,15 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 try:
     from langchain_core.tools import tool
 except ImportError:
-    # Fallback for older versions or different package structure
     def tool(func):
         """Simple decorator for tool functions."""
         func.is_tool = True
         return func
 import numpy as np
+
+from utils.error_handlers import get_logger
+
+logger = get_logger(__name__)
 
 
 def _join_docs(docs: List[Document], max_chars: int = 1200) -> str:
@@ -148,7 +153,7 @@ def guarded_retrieve(query: str, retriever, similarity_threshold: float = 0.35) 
         
         # If no documents contain main terms, trigger fallback
         if not relevant_docs:
-            print(f"Guard: No documents contain main terms {main_terms} - triggering fallback")
+            logger.debug("Guard: No documents contain main terms %s - triggering fallback", main_terms)
             return None
         
         # Check document quality - avoid very short or generic responses
@@ -159,13 +164,13 @@ def guarded_retrieve(query: str, retriever, similarity_threshold: float = 0.35) 
                 quality_docs.append(doc)
         
         if not quality_docs:
-            print("Guard: No quality documents found - triggering fallback")
+            logger.debug("Guard: No quality documents found - triggering fallback")
             return None
         
         return quality_docs
         
     except Exception as e:
-        print(f"Error in guarded_retrieve: {e}")
+        logger.error("Error in guarded_retrieve: %s", e)
         return None
 
 
@@ -208,7 +213,7 @@ def Wikipedia_Search(query: str) -> str:
         Plain string with concatenated Wikipedia content and sources footer
     """
     try:
-        print(f"Wikipedia_Search: Searching for '{query}'")
+        logger.info(f"Wikipedia_Search: Searching for '{query}'")
         
         # Load Wikipedia documents
         loader = WikipediaLoader(query=query, load_max_docs=3)
@@ -224,7 +229,7 @@ def Wikipedia_Search(query: str) -> str:
         # Use the utility function to join and limit content
         result = _join_docs(docs, max_chars=1200)
         
-        print(f"Wikipedia_Search: Found {len(docs)} articles, returned {len(result)} characters")
+        logger.info(f"Wikipedia_Search: Found {len(docs)} articles, returned {len(result)} characters")
         return result
         
     except Exception as e:
@@ -257,7 +262,7 @@ def ArXiv_Search(query: str) -> str:
         Plain string with concatenated arXiv paper content and sources footer
     """
     try:
-        print(f"ArXiv_Search: Searching for '{query}'")
+        logger.info(f"ArXiv_Search: Searching for '{query}'")
         
         # Load arXiv documents
         loader = ArxivLoader(query=query, load_max_docs=3)
@@ -273,7 +278,7 @@ def ArXiv_Search(query: str) -> str:
         # Use the utility function to join and limit content
         result = _join_docs(docs, max_chars=1200)
         
-        print(f"ArXiv_Search: Found {len(docs)} papers, returned {len(result)} characters")
+        logger.info(f"ArXiv_Search: Found {len(docs)} papers, returned {len(result)} characters")
         return result
         
     except Exception as e:
@@ -307,7 +312,7 @@ def Tavily_Search(query: str) -> str:
         Plain string with concatenated web search results and sources footer
     """
     try:
-        print(f"Tavily_Search: Searching web for '{query}'")
+        logger.info(f"Tavily_Search: Searching web for '{query}'")
         
         # Import Tavily client
         try:
@@ -360,12 +365,12 @@ def Tavily_Search(query: str) -> str:
         # Use the same utility function as other tools for consistent formatting
         result_text = _join_docs(docs, max_chars=1200)
         
-        print(f"Tavily_Search: Found {len(search_results['results'])} web results, returned {len(result_text)} characters")
+        logger.info(f"Tavily_Search: Found {len(search_results['results'])} web results, returned {len(result_text)} characters")
         return result_text
         
     except Exception as e:
         error_msg = f"Error searching web with Tavily: {str(e)}"
-        print(error_msg)
+        logger.error(error_msg)
         # Fallback to Wikipedia on error
         return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
@@ -398,7 +403,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         Plain string with concatenated internal document content and sources footer
     """
     try:
-        print(f"Internal_VectorDB: Searching internal KB for '{query}' (session: {session_id})")
+        logger.info(f"Internal_VectorDB: Searching internal KB for '{query}' (session: {session_id})")
         
         if not rag_manager:
             return "Internal knowledge base is not available. Please ensure documents have been uploaded and the system is properly initialized."
@@ -408,12 +413,12 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         if session_id:
             session_kb_loaded = rag_manager.load_session_vector_db(session_id)
             if not session_kb_loaded:
-                print(f"Internal_VectorDB: No session vector DB found for {session_id} - triggering Wikipedia fallback")
+                logger.warning(f"Internal_VectorDB: No session vector DB found for {session_id} - triggering Wikipedia fallback")
                 return f"No documents found for your session ({session_id}). Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:
-            print("Internal_VectorDB: No local content found - triggering Wikipedia fallback")
+            logger.warning("Internal_VectorDB: No local content found - triggering Wikipedia fallback")
             # Fallback to Wikipedia for better user experience
             return Wikipedia_Search.invoke(query)
         
@@ -427,7 +432,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         docs = guarded_retrieve(query, retriever, similarity_threshold=0.35)
         
         if docs is None:
-            print("Internal_VectorDB: Guard triggered - falling back to Wikipedia")
+            logger.info("Internal_VectorDB: Guard triggered - falling back to Wikipedia")
             return f"No relevant information found in uploaded documents. Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
         
         # Add source type metadata for consistency
@@ -438,18 +443,18 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         # Use the utility function to join and limit content
         result = _join_docs(docs, max_chars=1200)
         
-        print(f"Internal_VectorDB: Found {len(docs)} relevant chunks, returned {len(result)} characters")
+        logger.info(f"Internal_VectorDB: Found {len(docs)} relevant chunks, returned {len(result)} characters")
         
         # If result is too generic or empty, fallback to Wikipedia
         if len(result) < 100 or _is_generic_content(result):
-            print("Internal_VectorDB: Result too generic - falling back to Wikipedia")
+            logger.info("Internal_VectorDB: Result too generic - falling back to Wikipedia")
             return f"Limited relevant information in uploaded documents. Supplementing with general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
         
         return result
         
     except Exception as e:
         error_msg = f"Error searching internal knowledge base: {str(e)}"
-        print(error_msg)
+        logger.error(error_msg)
         # Fallback to Wikipedia on error
         return f"{error_msg}\n\nFalling back to general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
@@ -481,7 +486,7 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
         Plain string with diagnosis information from database and sources footer
     """
     try:
-        print(f"PostgreSQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
+        logger.info(f"PostgreSQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
         
         # Import the PostgreSQL tool
         try:
@@ -516,7 +521,7 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
         
     except Exception as e:
         error_msg = f"Error searching diagnosis database: {str(e)}"
-        print(error_msg)
+        logger.error(error_msg)
         # Fallback to Wikipedia for general medical information
         return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 

@@ -6,6 +6,8 @@ This module demonstrates the integration of the tool-based RAG architecture
 with intelligent routing, guarded retrieval, and fallback mechanisms.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Dict, List, Optional, Any
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
@@ -14,7 +16,6 @@ from langchain_core.documents import Document
 try:
     from langchain_core.tools import tool
 except ImportError:
-    # Fallback for older versions or different package structure
     def tool(func):
         """Simple decorator for tool functions."""
         func.is_tool = True
@@ -24,6 +25,9 @@ except ImportError:
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
 from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
+from utils.error_handlers import get_logger
+
+logger = get_logger(__name__)
 
 
 class IntegratedMedicalRAG:
@@ -91,23 +95,27 @@ class IntegratedMedicalRAG:
     
     def _initialize_agent(self):
         """Initialize the LangChain agent with tools and system prompt."""
+        import warnings
         try:
-            agent = initialize_agent(
-                tools=self.tools,
-                llm=self.llm,
-                agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                verbose=True,
-                max_iterations=3,
-                early_stopping_method="generate"
-            )
-            
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DeprecationWarning)
+                agent = initialize_agent(
+                    tools=self.tools,
+                    llm=self.llm,
+                    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                    verbose=True,
+                    max_iterations=3,
+                    early_stopping_method="generate",
+                )
+
             # Inject our routing system prompt
-            agent.agent.llm_chain.prompt.template = f"{ROUTING_SYSTEM_PROMPT}\n\n{agent.agent.llm_chain.prompt.template}"
-            
+            agent.agent.llm_chain.prompt.template = (
+                f"{ROUTING_SYSTEM_PROMPT}\n\n{agent.agent.llm_chain.prompt.template}"
+            )
             return agent
-            
+
         except Exception as e:
-            print(f"Error initializing agent: {e}")
+            logger.error(f"Error initializing agent: {e}")
             return None
     
     def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
@@ -126,9 +134,9 @@ class IntegratedMedicalRAG:
             # Step 1: Route the query to appropriate tools
             routing_result = self.router.route_tools(question, session_id)
             
-            print(f"Routing Decision: {routing_result['primary_tool']}")
-            print(f"Confidence: {routing_result['confidence']}")
-            print(f"Reasoning: {routing_result['reasoning']}")
+            logger.info(f"Routing Decision: {routing_result['primary_tool']}")
+            logger.info(f"Confidence: {routing_result['confidence']}")
+            logger.info(f"Reasoning: {routing_result['reasoning']}")
             
             # Step 2: Use only the top 1-2 tools as suggested
             allowed_tools = routing_result['ranked_tools'][:2]
@@ -139,15 +147,15 @@ class IntegratedMedicalRAG:
                 original_tools = self.agent.tools
                 
                 # Debug: Print tool matching
-                print(f"Allowed tools: {allowed_tools}")
-                print(f"Available tool names: {[tool.name for tool in self.tools]}")
+                logger.info(f"Allowed tools: {allowed_tools}")
+                logger.info(f"Available tool names: {[tool.name for tool in self.tools]}")
                 
                 # Fixed tool filtering logic - exact name match (case insensitive)
                 self.agent.tools = [tool for tool in self.tools 
                                   if any(tool.name.lower() == allowed_tool.lower() 
                                         for allowed_tool in allowed_tools)]
                 
-                print(f"Filtered tools: {[tool.name for tool in self.agent.tools]}")
+                logger.info(f"Filtered tools: {[tool.name for tool in self.agent.tools]}")
                 
                 try:
                     response = self.agent.run(question)
@@ -174,7 +182,7 @@ class IntegratedMedicalRAG:
             }
             
         except Exception as e:
-            print(f"Error processing query: {e}")
+            logger.error(f"Error processing query: {e}")
             return {
                 'answer': f"I encountered an error processing your question: {str(e)}. Please try rephrasing your question.",
                 'routing_info': {'error': str(e)},
@@ -262,7 +270,7 @@ def demo_integration():
     api_key = os.getenv('OPENAI_API_KEY', 'your-api-key-here')
     
     if api_key == 'your-api-key-here':
-        print("Please set OPENAI_API_KEY environment variable")
+        logger.info("Please set OPENAI_API_KEY environment variable")
         return
     
     # Initialize system
@@ -270,10 +278,10 @@ def demo_integration():
     
     # Check system status
     status = rag_system.get_system_status()
-    print("System Status:")
-    print(f"  Local documents: {status['local_document_count']}")
-    print(f"  External documents: {status['external_document_count']}")
-    print(f"  Available tools: {status['available_tools']}")
+    logger.info("System Status:")
+    logger.info(f"  Local documents: {status['local_document_count']}")
+    logger.info(f"  External documents: {status['external_document_count']}")
+    logger.info(f"  Available tools: {status['available_tools']}")
     
     # Example queries demonstrating different routing scenarios
     test_queries = [
@@ -284,16 +292,16 @@ def demo_integration():
     ]
     
     for query in test_queries:
-        print(f"\n{'='*60}")
-        print(f"Query: {query}")
-        print('='*60)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Query: {query}")
+        logger.info('='*60)
         
         result = rag_system.query(query)
         
-        print(f"Primary Tool: {result['routing_info']['primary_tool']}")
-        print(f"Confidence: {result['routing_info']['confidence']}")
-        print(f"Reasoning: {result['routing_info']['reasoning']}")
-        print(f"Answer: {result['answer'][:200]}...")  # Truncate for demo
+        logger.info(f"Primary Tool: {result['routing_info']['primary_tool']}")
+        logger.info(f"Confidence: {result['routing_info']['confidence']}")
+        logger.info(f"Reasoning: {result['routing_info']['reasoning']}")
+        logger.info(f"Answer: {result['answer'][:200]}...")  # Truncate for demo
 
 
 if __name__ == "__main__":

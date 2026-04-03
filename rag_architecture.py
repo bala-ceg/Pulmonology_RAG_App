@@ -8,10 +8,12 @@ This module implements a two-store RAG architecture with:
 3. TF-IDF lexical gate for intelligent query routing
 """
 
+from __future__ import annotations
+
 import os
 import json
 import pickle
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -23,6 +25,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
+
+from utils.error_handlers import get_logger
+
+logger = get_logger(__name__)
 
 
 class TFIDFLexicalGate:
@@ -55,16 +61,16 @@ class TFIDFLexicalGate:
             local_chunks: List of text chunks from local knowledge base
         """
         if not local_chunks:
-            print("Warning: No local chunks provided for automation summary")
+            logger.warning("Warning: No local chunks provided for automation summary")
             return
             
         self.local_documents = local_chunks
         try:
             self.local_tfidf_matrix = self.vectorizer.fit_transform(local_chunks)
             self.is_fitted = True
-            print(f"Built automation summary from {len(local_chunks)} local chunks")
+            logger.info(f"Built automation summary from {len(local_chunks)} local chunks")
         except Exception as e:
-            print(f"Error building automation summary: {e}")
+            logger.error(f"Error building automation summary: {e}")
             self.is_fitted = False
     
     def should_query_local_first(self, query: str) -> Tuple[bool, float]:
@@ -92,18 +98,18 @@ class TFIDFLexicalGate:
             # Decide routing based on threshold
             query_local_first = bool(max_similarity >= self.threshold)
             
-            print(f"TF-IDF Gate: max_similarity={max_similarity:.3f}, threshold={self.threshold}, local_first={query_local_first}")
+            logger.info(f"TF-IDF Gate: max_similarity={max_similarity:.3f}, threshold={self.threshold}, local_first={query_local_first}")
             
             return query_local_first, max_similarity
             
         except Exception as e:
-            print(f"Error in lexical gate routing: {e}")
+            logger.error(f"Error in lexical gate routing: {e}")
             return False, 0.0
     
     def save_to_disk(self, filepath: str) -> None:
         """Save the fitted vectorizer and TF-IDF matrix to disk."""
         if not self.is_fitted:
-            print("Warning: Cannot save unfitted lexical gate")
+            logger.warning("Warning: Cannot save unfitted lexical gate")
             return
             
         try:
@@ -118,16 +124,16 @@ class TFIDFLexicalGate:
             with open(filepath, 'wb') as f:
                 pickle.dump(gate_data, f)
                 
-            print(f"Lexical gate saved to {filepath}")
+            logger.info(f"Lexical gate saved to {filepath}")
             
         except Exception as e:
-            print(f"Error saving lexical gate: {e}")
+            logger.error(f"Error saving lexical gate: {e}")
     
     def load_from_disk(self, filepath: str) -> bool:
         """Load the fitted vectorizer and TF-IDF matrix from disk."""
         try:
             if not os.path.exists(filepath):
-                print(f"Lexical gate file not found: {filepath}")
+                logger.warning(f"Lexical gate file not found: {filepath}")
                 return False
                 
             with open(filepath, 'rb') as f:
@@ -139,11 +145,11 @@ class TFIDFLexicalGate:
             self.threshold = gate_data['threshold']
             self.is_fitted = gate_data['is_fitted']
             
-            print(f"Lexical gate loaded from {filepath}")
+            logger.info(f"Lexical gate loaded from {filepath}")
             return True
             
         except Exception as e:
-            print(f"Error loading lexical gate: {e}")
+            logger.error(f"Error loading lexical gate: {e}")
             return False
 
 
@@ -193,12 +199,12 @@ class TwoStoreRAGManager:
             # Initialize kb_external  
             if os.path.exists(self.kb_external_path) and os.listdir(self.kb_external_path):
                 self.kb_external = Chroma(persist_directory=self.kb_external_path, embedding_function=self.embeddings)
-                print("Loaded existing kb_external")
+                logger.info("Loaded existing kb_external")
             else:
-                print("kb_external not found - will be created when documents are added")
+                logger.warning("kb_external not found - will be created when documents are added")
                 
         except Exception as e:
-            print(f"Error initializing external vector store: {e}")
+            logger.error(f"Error initializing external vector store: {e}")
     
     def load_session_vector_db(self, session_id: str) -> bool:
         """Load session-specific vector database dynamically.
@@ -218,7 +224,7 @@ class TwoStoreRAGManager:
             session_vector_path = os.path.join(self.base_vector_path, session_id)
             
             if not os.path.exists(session_vector_path) or not os.listdir(session_vector_path):
-                print(f"No vector DB found for session {session_id}")
+                logger.warning(f"No vector DB found for session {session_id}")
                 self.kb_local = None
                 self.current_session_id = None
                 return False
@@ -227,7 +233,7 @@ class TwoStoreRAGManager:
             if session_id in self.session_cache:
                 self.kb_local = self.session_cache[session_id]
                 self.current_session_id = session_id
-                print(f"Loaded session vector DB from cache: {session_id}")
+                logger.info(f"Loaded session vector DB from cache: {session_id}")
                 return True
             
             # Load session-specific vector database
@@ -242,11 +248,11 @@ class TwoStoreRAGManager:
             self.session_cache[session_id] = self.kb_local
             self.current_session_id = session_id
             
-            print(f"Loaded session vector DB: {session_id}")
+            logger.info(f"Loaded session vector DB: {session_id}")
             return True
             
         except Exception as e:
-            print(f"Error loading session vector DB for {session_id}: {e}")
+            logger.error(f"Error loading session vector DB for {session_id}: {e}")
             self.kb_local = None
             self.current_session_id = None
             return False
@@ -260,7 +266,7 @@ class TwoStoreRAGManager:
         """
         try:
             if not documents:
-                print("No documents to add to kb_local")
+                logger.warning("No documents to add to kb_local")
                 return
                 
             # Create or update kb_local
@@ -270,10 +276,10 @@ class TwoStoreRAGManager:
                     embedding=self.embeddings, 
                     persist_directory=self.kb_local_path
                 )
-                print(f"Created kb_local with {len(documents)} documents")
+                logger.info(f"Created kb_local with {len(documents)} documents")
             else:
                 self.kb_local.add_documents(documents)
-                print(f"Added {len(documents)} documents to kb_local")
+                logger.info(f"Added {len(documents)} documents to kb_local")
             
             # Update lexical gate with new content
             local_chunks = [doc.page_content for doc in documents]
@@ -289,7 +295,7 @@ class TwoStoreRAGManager:
             self.lexical_gate.save_to_disk(self.lexical_gate_path)
             
         except Exception as e:
-            print(f"Error adding documents to kb_local: {e}")
+            logger.error(f"Error adding documents to kb_local: {e}")
     
     def add_documents_to_external(self, documents: List[Document]) -> None:
         """
@@ -300,7 +306,7 @@ class TwoStoreRAGManager:
         """
         try:
             if not documents:
-                print("No documents to add to kb_external")
+                logger.warning("No documents to add to kb_external")
                 return
                 
             # Create or update kb_external
@@ -310,13 +316,13 @@ class TwoStoreRAGManager:
                     embedding=self.embeddings, 
                     persist_directory=self.kb_external_path
                 )
-                print(f"Created kb_external with {len(documents)} documents")
+                logger.info(f"Created kb_external with {len(documents)} documents")
             else:
                 self.kb_external.add_documents(documents)
-                print(f"Added {len(documents)} documents to kb_external")
+                logger.info(f"Added {len(documents)} documents to kb_external")
                 
         except Exception as e:
-            print(f"Error adding documents to kb_external: {e}")
+            logger.error(f"Error adding documents to kb_external: {e}")
     
     def has_external_content(self) -> bool:
         """Check if external KB has any content."""
@@ -379,15 +385,15 @@ class TwoStoreRAGManager:
         # Skip loading if external KB already has content and not forcing reload
         if not force_reload and self.has_external_content():
             count = self.get_external_content_count()
-            print(f"📊 External KB already has {count} documents, skipping Wikipedia loading")
-            print("   Use force_reload=True to add more content")
+            logger.info(f"📊 External KB already has {count} documents, skipping Wikipedia loading")
+            logger.info("   Use force_reload=True to add more content")
             return
             
         try:
             all_docs = []
             
             for topic in topics:
-                print(f"Loading Wikipedia content for: {topic}")
+                logger.info(f"Loading Wikipedia content for: {topic}")
                 
                 try:
                     loader = WikipediaLoader(query=topic, load_max_docs=max_docs_per_topic)
@@ -399,10 +405,10 @@ class TwoStoreRAGManager:
                         doc.metadata['topic'] = topic
                     
                     all_docs.extend(docs)
-                    print(f"Loaded {len(docs)} Wikipedia documents for {topic}")
+                    logger.info(f"Loaded {len(docs)} Wikipedia documents for {topic}")
                     
                 except Exception as e:
-                    print(f"Error loading Wikipedia content for {topic}: {e}")
+                    logger.error(f"Error loading Wikipedia content for {topic}: {e}")
             
             if all_docs:
                 # Split documents if they're too large
@@ -410,10 +416,10 @@ class TwoStoreRAGManager:
                 split_docs = text_splitter.split_documents(all_docs)
                 
                 self.add_documents_to_external(split_docs)
-                print(f"Added {len(split_docs)} Wikipedia chunks to kb_external")
+                logger.info(f"Added {len(split_docs)} Wikipedia chunks to kb_external")
                 
         except Exception as e:
-            print(f"Error loading Wikipedia content: {e}")
+            logger.error(f"Error loading Wikipedia content: {e}")
     
     def load_arxiv_content(self, queries: List[str], max_docs_per_query: int = 2, force_reload: bool = False) -> None:
         """
@@ -427,15 +433,15 @@ class TwoStoreRAGManager:
         # Skip loading if external KB already has content and not forcing reload
         if not force_reload and self.has_external_content():
             count = self.get_external_content_count()
-            print(f"📊 External KB already has {count} documents, skipping arXiv loading")
-            print("   Use force_reload=True to add more content")
+            logger.info(f"📊 External KB already has {count} documents, skipping arXiv loading")
+            logger.info("   Use force_reload=True to add more content")
             return
             
         try:
             all_docs = []
             
             for query in queries:
-                print(f"Loading arXiv content for: {query}")
+                logger.info(f"Loading arXiv content for: {query}")
                 
                 try:
                     loader = ArxivLoader(query=query, load_max_docs=max_docs_per_query)
@@ -447,10 +453,10 @@ class TwoStoreRAGManager:
                         doc.metadata['query'] = query
                     
                     all_docs.extend(docs)
-                    print(f"Loaded {len(docs)} arXiv documents for {query}")
+                    logger.info(f"Loaded {len(docs)} arXiv documents for {query}")
                     
                 except Exception as e:
-                    print(f"Error loading arXiv content for {query}: {e}")
+                    logger.error(f"Error loading arXiv content for {query}: {e}")
             
             if all_docs:
                 # Split documents if they're too large
@@ -458,10 +464,10 @@ class TwoStoreRAGManager:
                 split_docs = text_splitter.split_documents(all_docs)
                 
                 self.add_documents_to_external(split_docs)
-                print(f"Added {len(split_docs)} arXiv chunks to kb_external")
+                logger.info(f"Added {len(split_docs)} arXiv chunks to kb_external")
                 
         except Exception as e:
-            print(f"Error loading arXiv content: {e}")
+            logger.error(f"Error loading arXiv content: {e}")
     
     def query_with_routing(self, query: str, session_id: str = None) -> Dict:
         """
@@ -565,7 +571,7 @@ class TwoStoreRAGManager:
             }
             
         except Exception as e:
-            print(f"Error in query routing: {e}")
+            logger.error(f"Error in query routing: {e}")
             return {
                 'responses': [],
                 'citations': [],
@@ -612,7 +618,7 @@ class TwoStoreRAGManager:
             
             # If no documents contain main terms, trigger fallback
             if not relevant_docs:
-                print(f"Guard: No documents contain main terms {main_terms} - triggering fallback")
+                logger.warning(f"Guard: No documents contain main terms {main_terms} - triggering fallback")
                 return None
             
             # Check document quality - avoid very short or generic responses
@@ -623,13 +629,13 @@ class TwoStoreRAGManager:
                     quality_docs.append(doc)
             
             if not quality_docs:
-                print("Guard: No quality documents found - triggering fallback")
+                logger.warning("Guard: No quality documents found - triggering fallback")
                 return None
             
             return quality_docs
             
         except Exception as e:
-            print(f"Error in guarded_retrieve: {e}")
+            logger.error(f"Error in guarded_retrieve: {e}")
             return None
     
     def _is_generic_content(self, content: str) -> bool:
@@ -657,7 +663,7 @@ class TwoStoreRAGManager:
             search_results = self.guarded_retrieve(query, retriever)
             
             if search_results is None:
-                print("Local KB query failed guard check - low relevance")
+                logger.error("Local KB query failed guard check - low relevance")
                 return None
             
             # Use the filtered results for QA chain
@@ -671,7 +677,7 @@ class TwoStoreRAGManager:
             }
             
         except Exception as e:
-            print(f"Error querying kb_local: {e}")
+            logger.error(f"Error querying kb_local: {e}")
             return None
     
     def _query_kb_external(self, query: str) -> Optional[Dict]:
@@ -686,7 +692,7 @@ class TwoStoreRAGManager:
             search_results = self.guarded_retrieve(query, retriever)
             
             if search_results is None:
-                print("External KB query failed guard check - low relevance")
+                logger.error("External KB query failed guard check - low relevance")
                 return None
             
             # Use the filtered results for QA chain
@@ -700,7 +706,7 @@ class TwoStoreRAGManager:
             }
             
         except Exception as e:
-            print(f"Error querying kb_external: {e}")
+            logger.error(f"Error querying kb_external: {e}")
             return None
     
     def _is_strong_response(self, response: str) -> bool:
@@ -764,7 +770,7 @@ class TwoStoreRAGManager:
                 citations.append(citation)
                 
         except Exception as e:
-            print(f"Error formatting citations: {e}")
+            logger.error(f"Error formatting citations: {e}")
             
         return citations
 
@@ -889,25 +895,25 @@ class MedicalQueryRouter:
             tool_scores['PostgreSQL_Diagnosis_Search'] += postgres_relevance_score
             
             # Debug logging for routing decision factors
-            print(f"🔍 Routing Analysis for: '{query}'")
-            print(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}, Tavily: {tavily_relevance_score}")
-            print(f"📁 Session Context - ID: {session_id}, Has Content: {has_session_content}")
-            print(f"🎯 Current Tool Scores - {tool_scores}")
+            logger.info(f"🔍 Routing Analysis for: '{query}'")
+            logger.info(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}, Tavily: {tavily_relevance_score}")
+            logger.info(f"📁 Session Context - ID: {session_id}, Has Content: {has_session_content}")
+            logger.info(f"🎯 Current Tool Scores - {tool_scores}")
             
             # Only boost Internal_VectorDB if session has content AND query is relevant to PDF content
             if has_session_content and pdf_relevance_score > 0:
                 tool_scores['Internal_VectorDB'] += 1  # Modest boost for relevant session content
-                print(f"🎯 Boosting Internal_VectorDB: Session content available and query relevant (session: {session_id})")
+                logger.info(f"🎯 Boosting Internal_VectorDB: Session content available and query relevant (session: {session_id})")
             elif has_session_content and pdf_relevance_score == 0:
                 # Session has content but query isn't PDF-relevant
-                print(f"📄 Session {session_id} has content but query not PDF-relevant - allowing content-based routing")
+                logger.info(f"📄 Session {session_id} has content but query not PDF-relevant - allowing content-based routing")
             elif session_id:
                 # Session provided but has no content
-                print(f"⚠️  Session {session_id} has no content - routing to external sources")
+                logger.warning(f"⚠️  Session {session_id} has no content - routing to external sources")
                 tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 2)
             else:
                 # No session provided - prefer external sources for general queries
-                print(f"ℹ️  No session provided - routing to external sources")
+                logger.warning(f"ℹ️  No session provided - routing to external sources")
                 tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 1)
             
             # Default scoring if no keywords match
@@ -956,9 +962,9 @@ class MedicalQueryRouter:
                                                has_session_content, has_external_content)
             
             # Final routing decision logging
-            print(f"🏆 Final Routing Decision: {primary_tool} (confidence: {confidence})")
-            print(f"💭 Reasoning: {reasoning}")
-            print(f"📋 Ranked Tools: {[tool for tool, score in ranked_tools if score > 0]}")
+            logger.info(f"🏆 Final Routing Decision: {primary_tool} (confidence: {confidence})")
+            logger.info(f"💭 Reasoning: {reasoning}")
+            logger.info(f"📋 Ranked Tools: {[tool for tool, score in ranked_tools if score > 0]}")
             
             # Return top 1-2 tools as requested
             selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
@@ -974,7 +980,7 @@ class MedicalQueryRouter:
             }
             
         except Exception as e:
-            print(f"Error in route_tools: {e}")
+            logger.error(f"Error in route_tools: {e}")
             return {
                 'ranked_tools': ['Wikipedia_Search'],
                 'primary_tool': 'Wikipedia_Search',

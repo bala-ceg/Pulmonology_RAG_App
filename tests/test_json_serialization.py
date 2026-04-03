@@ -61,8 +61,8 @@ def test_json_serialization():
         return False
 
 @app.route('/test_json')
-def test_flask_json():
-    """Test Flask jsonify with various data types"""
+def _flask_json_route():
+    """Flask route handler for JSON serialization test."""
     routing_details = {
         "method": "Two-Store RAG with Lexical Gate",
         "similarity_score": float(np.float64(0.456)),
@@ -70,12 +70,22 @@ def test_flask_json():
         "sources_queried": list(["kb_local"]),
         "responses_count": int(np.int64(1))
     }
-    
     return jsonify({
         "response": True,
         "message": "Test message",
         "routing_details": routing_details
     })
+
+
+def test_flask_json():
+    """Test Flask jsonify with various data types via test client."""
+    with app.test_client() as c:
+        resp = c.get('/test_json')
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    assert data['response'] is True
+    assert data['routing_details']['similarity_score'] == 0.456
+    print("✅ Flask jsonify serialization test passed")
 
 if __name__ == "__main__":
     success = test_json_serialization()

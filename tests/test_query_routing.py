@@ -11,7 +11,7 @@ import requests
 import json
 import time
 
-def test_query(query, description=""):
+def _run_query(query, description=""):
     """Test a single query against the AI system"""
     print(f"\n🔍 Testing: {description}")
     print(f"Query: '{query}'")
@@ -95,7 +95,7 @@ def main():
     time.sleep(2)
     
     for query, description in test_queries:
-        if not test_query(query, description):
+        if not _run_query(query, description):
             break
         time.sleep(1)  # Small delay between requests
     

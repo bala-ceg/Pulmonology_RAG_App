@@ -52,7 +52,7 @@ def test_direct_postgres_queries():
     print(f"   Retrieved {len(result['content'])} chars of diagnosis data")
     
     print("\n4️⃣ Testing LangChain tool interface:")
-    langchain_result = PostgreSQL_Diagnosis_Search("diagnosis")
+    langchain_result = PostgreSQL_Diagnosis_Search.invoke("diagnosis")
     print(f"   LangChain tool returned {len(langchain_result)} chars")
 
 if __name__ == "__main__":
