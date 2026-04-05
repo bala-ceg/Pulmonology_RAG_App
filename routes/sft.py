@@ -31,7 +31,6 @@ try:
         delete_experiment,
         delete_ranked_entry,
         delete_ranked_group,
-        ensure_tables as sft_ensure_tables,
         export_to_jsonl,
         get_department_list,
         get_experiment,
@@ -47,7 +46,6 @@ try:
         update_ranked_entry,
     )
 
-    sft_ensure_tables()
     SFT_AVAILABLE = True
     logger.info("SFT Experiment Manager loaded in sft blueprint")
 except Exception as _sft_err:

@@ -177,6 +177,30 @@
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
+        .sidebar .yodha-chat-btn {
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            color: #1a1a2e;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar .yodha-chat-section {
+            margin-top: 24px;
+        }
+
+        .sidebar .yodha-chat-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 210, 0, 0.45);
+        }
+
         .discipline-section {
             background: rgba(255, 255, 255, 0.1);
             padding: 10px;
@@ -1876,6 +1900,15 @@
             <ul class="red-box">
                 <li>
                     <button class="rlhf-admin-btn" onclick="window.open('/admin/rlhf', '_blank')">RLHF Training Admin</button>
+                </li>
+            </ul>
+            </li>
+
+            <!-- YodhaChat -->
+            <li class="no-bullet yodha-chat-section">
+            <ul class="red-box">
+                <li>
+                    <button class="yodha-chat-btn" onclick="window.open('{{ yodha_chat_url }}', '_blank')">YodhaChat</button>
                 </li>
             </ul>
             </li>

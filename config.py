@@ -115,6 +115,11 @@ class Config:
     HOST: str = os.getenv("FLASK_HOST", "0.0.0.0")
     PORT: int = int(os.getenv("FLASK_PORT", "5000"))
 
+    # ------------------------------------------------------------------
+    # External application links
+    # ------------------------------------------------------------------
+    YODHA_CHAT_URL: str = os.getenv("YODHA_CHAT_URL", "http://127.0.0.1:3000")
+
     @classmethod
     def db_kwargs(cls) -> dict:
         """Return a dict of non-None DB connection kwargs for psycopg."""

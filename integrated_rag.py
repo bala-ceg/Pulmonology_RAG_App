@@ -80,10 +80,11 @@ class IntegratedMedicalRAG:
         tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search])
         
         # Create Internal_VectorDB tool with RAG manager injected using @tool decorator
+        # ZeroShotAgent requires single-input tools — only expose `query`
         @tool
-        def internal_vectordb_with_context(query: str, session_id: str = None) -> str:
-            """Internal VectorDB tool with RAG manager context."""
-            return Internal_VectorDB(query, session_id, self.rag_manager)
+        def internal_vectordb_with_context(query: str) -> str:
+            """Search uploaded PDFs and URLs in the internal knowledge base for user-specific content."""
+            return Internal_VectorDB(query, None, self.rag_manager)
         
         # Set tool metadata to match original
         internal_vectordb_with_context.name = Internal_VectorDB.name

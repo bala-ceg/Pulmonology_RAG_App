@@ -22,12 +22,14 @@ import asyncio
 import glob
 import io
 import json
+import logging
 import os
 import re
 import tempfile
 import threading
 import time
 import traceback
+import warnings
 from datetime import datetime
 from typing import List
 
@@ -55,6 +57,14 @@ from config import Config
 from utils.error_handlers import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Suppress noisy third-party loggers
+# ---------------------------------------------------------------------------
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
+for _noisy_logger in ("httpx", "httpcore", "sentence_transformers", "transformers"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------
 # Local — optional subsystems (graceful degradation)

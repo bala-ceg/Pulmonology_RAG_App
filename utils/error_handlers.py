@@ -31,6 +31,7 @@ def get_logger(name: str) -> logging.Logger:
         )
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
+        logger.propagate = False  # prevent double-logging via root logger
     return logger
 
 

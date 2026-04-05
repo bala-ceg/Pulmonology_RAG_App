@@ -17,6 +17,8 @@ Usage in Flask app:
 """
 
 import os
+import logging
+import warnings
 import joblib
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -25,15 +27,17 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Suppress sklearn version mismatch warning when loading the reward model
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
+logger = logging.getLogger(__name__)
+
 # CONFIG
 EMB_MODEL = os.getenv("EMB_MODEL", "all-MiniLM-L6-v2")
 REWARD_MODEL_PATH = os.getenv("REWARD_MODEL_PATH", "reward_model.joblib")
 
 # Initialize embedder
-print(f"🔧 Initializing RLHF reranker...")
-print(f"   Embedding model: {EMB_MODEL}")
-print(f"   Reward model: {REWARD_MODEL_PATH}")
-
+logger.info("Initializing RLHF reranker (model=%s)", EMB_MODEL)
 embedder = SentenceTransformer(EMB_MODEL)
 
 # Load reward model if available
@@ -41,13 +45,11 @@ reward_model = None
 if os.path.exists(REWARD_MODEL_PATH):
     try:
         reward_model = joblib.load(REWARD_MODEL_PATH)
-        print(f"✅ Reward model loaded successfully")
+        logger.info("Reward model loaded successfully from %s", REWARD_MODEL_PATH)
     except Exception as e:
-        print(f"⚠️ Failed to load reward model: {e}")
-        print(f"   Re-ranking will not be available until model is trained")
+        logger.warning("Failed to load reward model: %s — re-ranking unavailable", e)
 else:
-    print(f"⚠️ Reward model not found at {REWARD_MODEL_PATH}")
-    print(f"   Please train the model first: python train_reward_sbert.py")
+    logger.warning("Reward model not found at %s — run train_reward_sbert.py first", REWARD_MODEL_PATH)
 
 
 def score_text_pair(prompt: str, candidate: str):
@@ -131,7 +133,7 @@ def rerank_candidates(prompt: str, candidates: list):
     
     # If no model available (all scores are None), preserve original order
     if scored and scored[0]["_score"] is None:
-        print("⚠️ Reward model not available - returning candidates in original order")
+        logger.warning("Reward model not available — returning candidates in original order")
         return scored
     
     # Sort by score (highest first)

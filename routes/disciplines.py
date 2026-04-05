@@ -312,7 +312,8 @@ def index():
     """Refresh page to create a new session folder."""
     user = request.args.get("user", "guest")
     initialize_session(user)
-    return render_template("index.html")
+    from config import Config  # noqa: PLC0415
+    return render_template("index.html", yodha_chat_url=Config.YODHA_CHAT_URL)
 
 
 @disciplines_bp.route("/api/disciplines", methods=["GET"])
