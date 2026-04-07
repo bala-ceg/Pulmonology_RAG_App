@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - PCES Users</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 420px; margin: 40px auto; }
+    .container { padding: 20px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.06); }
+    .field { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; }
+    input { width: 100%; padding: 8px; font-size: 16px; }
+    button { padding: 10px 16px; font-size: 16px; cursor: pointer; }
+    .message { margin-top: 14px; padding: 10px; border: 1px solid #bbb; border-radius: 5px; }
+    .success { color: #075; background: #e7f8ee; border-color: #87ca93; }
+    .error { color: #900; background: #f8e7e7; border-color: #ca8787; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>PCES Login</h2>
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" />
+    </div>
+    <div class="field">
+      <button id="loginBtn">Login</button>
+    </div>
+    <div id="response" class="message" style="display:none"></div>
+  </div>
+
+  <script>
+    const loginBtn = document.getElementById('loginBtn');
+    const responseDiv = document.getElementById('response');
+
+    loginBtn.addEventListener('click', async () => {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        responseDiv.style.display = 'block';
+        responseDiv.className = 'message error';
+        responseDiv.textContent = 'Please enter both username and password.';
+        return;
+      }
+
+      try {
+        const result = await fetch('/api/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await result.json();
+
+        if (!data.success) {
+          responseDiv.style.display = 'block';
+          responseDiv.className = 'message error';
+          responseDiv.textContent = data.message || 'Login failed';
+          return;
+        }
+
+        responseDiv.style.display = 'block';
+        responseDiv.className = 'message success';
+        responseDiv.innerHTML = `Hello <strong>${data.username}</strong>, your role is <strong>${data.pces_role}</strong>.`;
+      } catch (err) {
+        responseDiv.style.display = 'block';
+        responseDiv.className = 'message error';
+        responseDiv.textContent = 'Network or server error. Please try again.';
+      }
+    });
+  </script>
+</body>
+</html>

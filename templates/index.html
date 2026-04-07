@@ -143,6 +143,23 @@
             background-color: #8a76b8;
         }
 
+        .sidebar .doc-patient-v2-btn {
+            background-color: #2a9d8f;  /* Teal — distinct from v1 purple */
+            color: white;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .sidebar .doc-patient-v2-btn:hover {
+            background-color: #21867a;
+        }
+
         .sidebar .patient-notes-btn {
             background-color: #6fc276;  /* Light green */
             color: white;
@@ -199,6 +216,123 @@
         .sidebar .yodha-chat-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(255, 210, 0, 0.45);
+        }
+
+        /* ── ChatYodha Login Modal ─────────────────────────────────────── */
+        .yodha-login-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .yodha-login-overlay.active {
+            display: flex;
+        }
+
+        .yodha-login-modal {
+            background: #fff;
+            border-radius: 10px;
+            padding: 30px 28px 24px;
+            width: 340px;
+            max-width: 90vw;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .yodha-login-modal h2 {
+            margin: 0 0 4px;
+            font-size: 20px;
+            color: #1a1a2e;
+        }
+
+        .yodha-login-modal .modal-subtitle {
+            font-size: 13px;
+            color: #666;
+            margin: 0 0 20px;
+        }
+
+        .yodha-login-modal .field {
+            margin-bottom: 14px;
+        }
+
+        .yodha-login-modal label {
+            display: block;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .yodha-login-modal input[type="text"],
+        .yodha-login-modal input[type="password"] {
+            width: 100%;
+            padding: 9px 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .yodha-login-modal input:focus {
+            outline: none;
+            border-color: #f7971e;
+            box-shadow: 0 0 0 2px rgba(247, 151, 30, 0.2);
+        }
+
+        .yodha-login-modal .login-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .yodha-login-modal .btn-login {
+            flex: 1;
+            padding: 9px;
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            color: #1a1a2e;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .yodha-login-modal .btn-login:hover { opacity: 0.9; }
+
+        .yodha-login-modal .btn-cancel {
+            padding: 9px 14px;
+            background: #eee;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .yodha-login-modal .btn-cancel:hover { background: #ddd; }
+
+        .yodha-login-modal .login-msg {
+            margin-top: 12px;
+            padding: 8px 10px;
+            border-radius: 5px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .yodha-login-modal .login-msg.error {
+            background: #f8e7e7;
+            color: #900;
+            border: 1px solid #ca8787;
+            display: block;
+        }
+
+        .yodha-login-modal .login-msg.success {
+            background: #e7f8ee;
+            color: #075;
+            border: 1px solid #87ca93;
+            display: block;
         }
 
         .discipline-section {
@@ -306,28 +440,43 @@
             display: flex;
             flex-direction: column;
             padding: 12px;               /* Slightly reduced padding */
-            overflow-y: auto;
+            overflow: hidden;            /* Scrolling handled by inner scroll area */
             transition: all 0.3s ease;
             flex-shrink: 0;
-            scroll-behavior: smooth;     /* Smooth scrolling */
         }
 
-        /* Custom scrollbar for sidebar */
-        .sidebar::-webkit-scrollbar {
+        /* Scrollable inner area of the sidebar */
+        .sidebar-scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        /* Pinned bottom section for ChatYodha */
+        .sidebar-bottom {
+            flex-shrink: 0;
+            padding: 10px 0 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            margin-top: 8px;
+        }
+
+        /* Custom scrollbar for sidebar scroll area */
+        .sidebar-scroll-area::-webkit-scrollbar {
             width: 6px;
         }
 
-        .sidebar::-webkit-scrollbar-track {
+        .sidebar-scroll-area::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.1);
             border-radius: 3px;
         }
 
-        .sidebar::-webkit-scrollbar-thumb {
+        .sidebar-scroll-area::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.3);
             border-radius: 3px;
         }
 
-        .sidebar::-webkit-scrollbar-thumb:hover {
+        .sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.5);
         }
 
@@ -1844,28 +1993,50 @@
         </div>
     </div>
 
+    <!-- PCES Login Modal -->
+    <div class="yodha-login-overlay" id="yodha-login-overlay">
+        <div class="yodha-login-modal">
+            <h2>PCES Login</h2>
+            <p class="modal-subtitle">Log in to access PCES features</p>
+            <div class="field">
+                <label for="yodha-username">Username</label>
+                <input id="yodha-username" type="text" autocomplete="username" placeholder="Username" />
+            </div>
+            <div class="field">
+                <label for="yodha-password">Password</label>
+                <input id="yodha-password" type="password" autocomplete="current-password" placeholder="Password" />
+            </div>
+            <div class="login-actions">
+                <button class="btn-login" onclick="submitPcesLogin()">Login</button>
+                <button class="btn-cancel" onclick="closePcesLoginModal()">Cancel</button>
+            </div>
+            <div id="yodha-login-msg" class="login-msg"></div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="sidebar" id="sidebar">
+            <div class="sidebar-scroll-area">
             <ul>
                 <!-- inside your existing <ul> ... -->
                 <li class="no-bullet">
                 <ul class="red-box">
                     <li>
-                    <button class="light-btn" onclick="document.getElementById('pdf-upload').click()">Choose Files</button>
+                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Choose Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
                     </li>
                     <li>
-                    <button class="dark-btn" onclick="uploadFiles('pdf')">Add PDF</button>
+                    <button class="dark-btn" onclick="requireAuth(() => uploadFiles('pdf'))">Add PDF</button>
                     </li>
                     <li>
-                    <button class="light-btn" onclick="document.getElementById('url-upload').click()">Choose URL</button>
+                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('url-upload').click())">Choose URL</button>
                     <input type="file" id="url-upload" multiple style="display: none;">
                     </li>
                     <li>
-                    <button class="dark-btn" onclick="uploadFiles('url')">Add URL</button>
+                    <button class="dark-btn" onclick="requireAuth(() => uploadFiles('url'))">Add URL</button>
                     </li>
                     <li>
-                    <button class="dark-btn" onclick="createVectorDB()">Update KB</button>
+                    <button class="dark-btn" onclick="requireAuth(() => createVectorDB())">Update KB</button>
                     </li>
                 </ul>
                 </li>
@@ -1875,10 +2046,13 @@
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="conversation-btn" onclick="startConversationRecording()" id="start-conversation-btn">Doc / Patient Conversation</button>
+                    <button class="conversation-btn" onclick="requireAuth(() => startConversationRecording())" id="start-conversation-btn">Doc / Patient Conversation</button>
                 </li>
                 <li>
                     <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>Stop Recording</button>
+                </li>
+                <li>
+                    <button class="doc-patient-v2-btn" onclick="requireAuth(() => openDocPatientV2())">Doc-Patient v2</button>
                 </li>
             </ul>
             </li>
@@ -1887,7 +2061,7 @@
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="patient-notes-btn" onclick="startPatientRecording()">Record Patient Notes</button>
+                    <button class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Record Patient Notes</button>
                 </li>
                 <li>
                     <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
@@ -1899,20 +2073,18 @@
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="rlhf-admin-btn" onclick="window.open('/admin/rlhf', '_blank')">RLHF Training Admin</button>
+                    <button class="rlhf-admin-btn" onclick="requireAuth(() => window.open('/admin/rlhf', '_blank'))">RLHF Training Admin</button>
                 </li>
             </ul>
             </li>
+            </ul>
+            </div><!-- /.sidebar-scroll-area -->
 
-            <!-- YodhaChat -->
-            <li class="no-bullet yodha-chat-section">
-            <ul class="red-box">
-                <li>
-                    <button class="yodha-chat-btn" onclick="window.open('{{ yodha_chat_url }}', '_blank')">YodhaChat</button>
-                </li>
-            </ul>
-            </li>
-        </div>
+            <!-- ChatYodha — pinned to the bottom of the sidebar -->
+            <div class="sidebar-bottom">
+                <button class="yodha-chat-btn" onclick="openChatYodha()">ChatYodha</button>
+            </div>
+        </div><!-- /.sidebar -->
 
         <div class="chat-container">
             <div class="chat-header">
@@ -3818,6 +3990,105 @@ ${data.conclusion}
                     closeConversationModal();
                 }
             });
+        });
+
+        // ── PCES Authentication Gate ──────────────────────────────────────
+        const YODHA_CHAT_URL = "{{ yodha_chat_url }}";
+        const DOC_PATIENT_V2_URL = "{{ doc_patient_v2_url }}";
+
+        // Persist auth across page refreshes for this browser session
+        let _pcesAuthed = sessionStorage.getItem('pces_auth') === 'true';
+        let _pendingAction = null;
+
+        /** Called by every protected button — shows login if not yet authed. */
+        function requireAuth(fn) {
+            if (_pcesAuthed) { fn(); return; }
+            _pendingAction = fn;
+            openPcesLoginModal();
+        }
+
+        /** ChatYodha opens directly — no PCES login required. */
+        function openChatYodha() {
+            window.open(YODHA_CHAT_URL, '_blank');
+        }
+
+        /** Doc-Patient v2 — opens URL from .env, gated by requireAuth. */
+        function openDocPatientV2() {
+            window.open(DOC_PATIENT_V2_URL, '_blank');
+        }
+
+        function openPcesLoginModal() {
+            document.getElementById('yodha-username').value = '';
+            document.getElementById('yodha-password').value = '';
+            const msg = document.getElementById('yodha-login-msg');
+            msg.className = 'login-msg';
+            msg.textContent = '';
+            document.getElementById('yodha-login-overlay').classList.add('active');
+            setTimeout(() => document.getElementById('yodha-username').focus(), 50);
+        }
+
+        function closePcesLoginModal() {
+            _pendingAction = null;
+            document.getElementById('yodha-login-overlay').classList.remove('active');
+        }
+
+        async function submitPcesLogin() {
+            const username = document.getElementById('yodha-username').value.trim();
+            const password = document.getElementById('yodha-password').value;
+            const msg = document.getElementById('yodha-login-msg');
+
+            if (!username || !password) {
+                msg.className = 'login-msg error';
+                msg.textContent = 'Please enter both username and password.';
+                return;
+            }
+
+            msg.className = 'login-msg';
+            msg.textContent = 'Signing in\u2026';
+            msg.style.display = 'block';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password}),
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    msg.className = 'login-msg error';
+                    msg.textContent = data.message || 'Login failed. Please try again.';
+                    return;
+                }
+
+                _pcesAuthed = true;
+                sessionStorage.setItem('pces_auth', 'true');
+
+                msg.className = 'login-msg success';
+                msg.textContent = `Welcome, ${data.username}!`;
+                setTimeout(() => {
+                    closePcesLoginModal();
+                    if (_pendingAction) {
+                        const fn = _pendingAction;
+                        _pendingAction = null;
+                        fn();
+                    }
+                }, 600);
+            } catch (err) {
+                msg.className = 'login-msg error';
+                msg.textContent = 'Network error. Please try again.';
+            }
+        }
+
+        document.getElementById('yodha-login-overlay').addEventListener('click', function (e) {
+            if (e.target === this) closePcesLoginModal();
+        });
+
+        document.addEventListener('keydown', function (e) {
+            const overlay = document.getElementById('yodha-login-overlay');
+            if (!overlay.classList.contains('active')) return;
+            if (e.key === 'Escape') closePcesLoginModal();
+            if (e.key === 'Enter') submitPcesLogin();
         });
 
     </script>

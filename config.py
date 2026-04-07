@@ -119,6 +119,7 @@ class Config:
     # External application links
     # ------------------------------------------------------------------
     YODHA_CHAT_URL: str = os.getenv("YODHA_CHAT_URL", "http://127.0.0.1:3000")
+    DOC_PATIENT_V2_URL: str = os.getenv("DOC_PATIENT_V2_URL", "http://127.0.0.1:3001")
 
     @classmethod
     def db_kwargs(cls) -> dict:
