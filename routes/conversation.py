@@ -393,6 +393,8 @@ CRITICAL Rules:
                     1. A concise clinical summary highlighting key medical information, symptoms, findings, and discussions from the conversation
                     2. Professional conclusions with recommendations, follow-up actions, or treatment plans mentioned during the conversation
                     
+                    When mentioning any dates, use the format "Month Day, Year" (e.g., April 10, 2026).
+                    
                     Format your response exactly as:
                     SUMMARY:
                     [Provide a clear, professional summary of the medical conversation]

@@ -324,6 +324,8 @@ def transcribe_patient_notes():
         1. A concise clinical summary highlighting key medical information, symptoms, findings, and discussions
         2. Professional conclusions with recommendations, follow-up actions, or treatment plans mentioned
         
+        When mentioning any dates, use the format "Month Day, Year" (e.g., April 10, 2026).
+        
         Format your response exactly as:
         SUMMARY:
         [Provide a clear, professional summary of the medical consultation]

@@ -15,7 +15,7 @@ def test_display_names():
     
     try:
         from rag_architecture import TwoStoreRAGManager
-        from langchain.schema import Document
+        from langchain_core.documents import Document
         
         print("🎨 Testing User-Friendly Display Names")
         print("=" * 40)

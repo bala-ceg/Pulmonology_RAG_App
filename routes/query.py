@@ -362,6 +362,8 @@ def generate_summary():
         
         If the transcript does not contain relevant medical information, please provide appropriate default responses indicating the lack of medical content.
         
+        When mentioning any dates, use the format "Month Day, Year" (e.g., April 10, 2026).
+        
         Format your response exactly as:
         SUMMARY:
         [Provide a clear, professional summary of the medical consultation]

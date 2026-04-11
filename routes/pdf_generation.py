@@ -102,7 +102,21 @@ def _upload_pdf_to_azure(
 def generate_patient_pdf():
     """Generate PDF for patient notes with patient problem capture and Azure upload."""
     if PDF_SERVICE_AVAILABLE:
-        return pdf_service.generate_patient_pdf()
+        data = request.get_json(silent=True) or {}
+        pdf_bytes, azure_url = pdf_service.generate_patient_pdf(data)
+        patient_name = data.get("patientName", "")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        filename = (
+            f"{patient_name.upper().replace(' ', '')}-{timestamp}.pdf"
+            if patient_name
+            else f"patient_notes-{timestamp}.pdf"
+        )
+        resp = make_response(pdf_bytes)
+        resp.headers["Content-Type"] = "application/pdf"
+        resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if azure_url:
+            resp.headers["X-Azure-URL"] = azure_url
+        return resp
 
     try:
         from reportlab.lib.colors import black  # noqa: F401
@@ -305,7 +319,24 @@ def generate_patient_pdf():
 def generate_chat_pdf():
     """Generate PDF for chat conversation with specified format."""
     if PDF_SERVICE_AVAILABLE:
-        return pdf_service.generate_chat_pdf()
+        data = request.get_json(silent=True) or {}
+        pdf_bytes, azure_url = pdf_service.generate_chat_pdf(data)
+        doctor_name = data.get("doctorName", "")
+        patient_name = data.get("patientName", "")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        if patient_name:
+            filename = (
+                f"{doctor_name.upper().replace(' ', '')}"
+                f"-{patient_name.upper().replace(' ', '')}-{timestamp}.pdf"
+            )
+        else:
+            filename = f"{doctor_name.upper().replace(' ', '') or 'chat'}-{timestamp}.pdf"
+        resp = make_response(pdf_bytes)
+        resp.headers["Content-Type"] = "application/pdf"
+        resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if azure_url:
+            resp.headers["X-Azure-URL"] = azure_url
+        return resp
 
     try:
         from bs4 import BeautifulSoup
@@ -695,7 +726,17 @@ def generate_chat_pdf():
 def generate_conversation_pdf():
     """Generate PDF for conversation segments with voice diarization results."""
     if PDF_SERVICE_AVAILABLE:
-        return pdf_service.generate_conversation_pdf()
+        data = request.get_json(silent=True) or {}
+        pdf_bytes, azure_url = pdf_service.generate_conversation_pdf(data)
+        doctor_name = data.get("doctorName", "")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        filename = f"CONVERSATION-{doctor_name.upper().replace(' ', '') or 'doc'}-{timestamp}.pdf"
+        resp = make_response(pdf_bytes)
+        resp.headers["Content-Type"] = "application/pdf"
+        resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if azure_url:
+            resp.headers["X-Azure-URL"] = azure_url
+        return resp
 
     try:
         from reportlab.lib.colors import blue, green

@@ -82,8 +82,8 @@ def test_document_processing():
     print("\n📄 Testing document processing...")
     
     try:
-        from langchain.schema import Document
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        from langchain_core.documents import Document
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
         
         # Create test document
         test_content = """

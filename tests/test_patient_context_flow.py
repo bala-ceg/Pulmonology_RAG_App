@@ -38,7 +38,7 @@ def test_patient_context_flow():
     print("\n📋 Test 2: Message Creation")
     
     try:
-        from langchain.schema import SystemMessage, HumanMessage
+        from langchain_core.messages import SystemMessage, HumanMessage
         
         patient_context = "Patient is a 45-year-old male with family history of diabetes, experiencing frequent urination"
         query = "What are the symptoms of diabetes?"
