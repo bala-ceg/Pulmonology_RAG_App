@@ -2061,7 +2061,7 @@
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Record Patient Notes</button>
+                    <button id="record-patient-btn" class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Record Patient Notes</button>
                 </li>
                 <li>
                     <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
@@ -3071,7 +3071,7 @@
                     window.currentPatientId = patientId;
 
                     // Update button states
-                    document.querySelector('button[onclick="startPatientRecording()"]').disabled = true;
+                    document.getElementById('record-patient-btn').disabled = true;
                     document.getElementById('stop-patient-btn').disabled = false;
 
                     // Show recording status
@@ -3083,7 +3083,7 @@
                     
                     mediaRecorder.addEventListener('stop', async () => {
                         // Reset button states
-                        document.querySelector('button[onclick="startPatientRecording()"]').disabled = false;
+                        document.getElementById('record-patient-btn').disabled = false;
                         document.getElementById('stop-patient-btn').disabled = true;
                         
                         // Clear timeout if it exists
@@ -3156,7 +3156,7 @@
                     showToast("Error accessing microphone. Please check permissions.");
                     
                     // Reset button states on error
-                    document.querySelector('button[onclick="startPatientRecording()"]').disabled = false;
+                    document.getElementById('record-patient-btn').disabled = false;
                     document.getElementById('stop-patient-btn').disabled = true;
                 });
         }
