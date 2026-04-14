@@ -88,3 +88,6 @@ trl
 datasets
 accelerate
 safetensors
+
+# Observability: Prometheus metrics + ECS-format JSON logging
+prometheus_client

@@ -293,6 +293,16 @@ from routes import register_blueprints
 register_blueprints(app)
 
 # ---------------------------------------------------------------------------
+# Observability: structured ECS logging, Prometheus metrics, /health endpoint
+# ---------------------------------------------------------------------------
+try:
+    from utils.observability import init_observability
+    init_observability(app)
+except Exception as _obs_err:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("Observability init failed: %s", _obs_err)
+
+# ---------------------------------------------------------------------------
 # Backward-compatibility re-exports
 # ---------------------------------------------------------------------------
 last_created_folder: str | None = None

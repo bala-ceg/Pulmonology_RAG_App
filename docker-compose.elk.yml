@@ -1,0 +1,99 @@
+# docker-compose.elk.yml
+# Spin up a local Elasticsearch + Kibana + Filebeat stack.
+#
+# Usage:
+#   1. Set LOG_FILE=/app/logs/pces.log in your .env so the RAG app writes
+#      ECS-format JSON logs to a file.
+#   2. docker compose -f docker-compose.elk.yml up -d
+#   3. Open Kibana at http://localhost:5601
+#      → Go to Discover → select index "pces-rag-logs-*"
+#
+# To stop:
+#   docker compose -f docker-compose.elk.yml down -v
+#
+# Notes:
+#   - Requires Docker Desktop ≥ 4.x or Docker Engine + Compose v2.
+#   - First startup takes ~2-3 min for Elasticsearch to initialise.
+#   - Default credentials: elastic / changeme  (change in production!)
+#   - Adjust LOG_DIR below to match where your app writes logs.
+
+x-elk-version: &elk-version "8.13.0"
+
+services:
+  # ── Elasticsearch ───────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: pces-elasticsearch
+    environment:
+      - node.name=pces-es01
+      - cluster.name=pces-elk-cluster
+      - discovery.type=single-node          # single-node for local dev
+      - ELASTIC_PASSWORD=changeme
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false  # plain HTTP for local dev
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"    # tune based on VM RAM
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: >
+        curl -s -u elastic:changeme http://localhost:9200/_cluster/health
+        | grep -qE '"status":"(green|yellow)"'
+      interval: 20s
+      timeout: 10s
+      retries: 10
+    networks:
+      - elk
+
+  # ── Kibana ──────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: pces-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=changeme
+      - SERVER_NAME=pces-kibana
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - elk
+
+  # ── Filebeat — ships ECS JSON logs → Elasticsearch ─────────────────────
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.13.0
+    container_name: pces-filebeat
+    user: root                              # needed to read host log files
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
+    volumes:
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      # Mount the directory where the RAG app writes its JSON log file.
+      # Change ./logs to wherever LOG_FILE points on the host.
+      - ./logs:/app/logs:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - elk
+
+volumes:
+  esdata:
+    driver: local
+
+networks:
+  elk:
+    driver: bridge

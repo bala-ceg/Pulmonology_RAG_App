@@ -2103,12 +2103,12 @@
             
             <div class="chat-input">
                 <input type="text" id="user-input" placeholder="Type your message...">
-                <button id="send-btn" onclick="sendMessage()">Generate</button>
-                <button id="plain-english-btn" onclick="refineInput()">Plain English</button>
-                <button id="save-btn" disabled onclick="saveChat()">Save as PDF</button>
-                <button id="voice-btn" onclick="startRecording()">Start Recording</button>
-                <button id="stop-btn" disabled onclick="stopRecording()">Stop Recording</button>
-                <button id="translation-btn" onclick="openTranslationModal()">Translation</button>
+                <button id="send-btn" onclick="requireAuth(() => sendMessage())">Generate</button>
+                <button id="plain-english-btn" onclick="requireAuth(() => refineInput())">Plain English</button>
+                <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save as PDF</button>
+                <button id="voice-btn" onclick="requireAuth(() => startRecording())">Start Recording</button>
+                <button id="stop-btn" disabled onclick="requireAuth(() => stopRecording())">Stop Recording</button>
+                <button id="translation-btn" onclick="requireAuth(() => openTranslationModal())">Translation</button>
             </div>
 
         </div>

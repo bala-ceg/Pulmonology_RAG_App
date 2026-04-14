@@ -1,0 +1,50 @@
+# filebeat.yml
+# Filebeat configuration — ships ECS JSON logs from the RAG app to Elasticsearch.
+#
+# Place this file next to docker-compose.elk.yml.
+# Filebeat reads the log file that the RAG app writes when LOG_FILE is set.
+
+filebeat.inputs:
+  # ── Primary: JSON log file written by the RAG app ─────────────────────
+  - type: filestream
+    id: pces-rag-json-logs
+    enabled: true
+    paths:
+      - /app/logs/*.log        # matches LOG_FILE written inside the container
+    parsers:
+      - ndjson:
+          target: ""           # merge parsed JSON into the root event
+          overwrite_keys: true
+          add_error_key: true
+    tags: ["pces-rag", "json"]
+
+  # ── Optional: Docker container stdout (catches logs when LOG_FILE not set) ─
+  - type: container
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+
+# ── Output: Elasticsearch ─────────────────────────────────────────────────
+output.elasticsearch:
+  hosts: ["${ELASTICSEARCH_HOST:http://elasticsearch:9200}"]
+  username: "${ELASTICSEARCH_USERNAME:elastic}"
+  password: "${ELASTICSEARCH_PASSWORD:changeme}"
+  index: "pces-rag-logs-%{+yyyy.MM.dd}"
+  ssl.verification_mode: none
+
+# ── Index template ────────────────────────────────────────────────────────
+setup.template.name: "pces-rag-logs"
+setup.template.pattern: "pces-rag-logs-*"
+setup.ilm.enabled: false
+
+# ── Kibana (for dashboards) ───────────────────────────────────────────────
+setup.kibana:
+  host: "kibana:5601"
+  username: "elastic"
+  password: "${ELASTICSEARCH_PASSWORD:changeme}"
+
+# ── General settings ──────────────────────────────────────────────────────
+logging.level: warning
+queue.mem.events: 4096
