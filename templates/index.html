@@ -561,6 +561,62 @@
             border-radius: 20px;
             white-space: nowrap;
             color: white;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        #logged-in-doctor:hover {
+            background: rgba(255,255,255,0.35);
+        }
+        .doctor-popup {
+            display: none;
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: #fff;
+            color: #333;
+            border-radius: 12px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+            padding: 16px 20px;
+            min-width: 220px;
+            z-index: 9000;
+            animation: popupFadeIn 0.15s ease;
+        }
+        .doctor-popup::before {
+            content: '';
+            position: absolute;
+            top: -7px;
+            right: 22px;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-bottom: 7px solid #fff;
+        }
+        @keyframes popupFadeIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .doctor-popup-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+            font-size: 14px;
+        }
+        .doctor-popup-row:not(:last-child) {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .doctor-popup-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .doctor-popup-label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 1px;
+        }
+        .doctor-popup-value {
+            font-weight: 600;
+            color: #222;
         }
         .logo {
             width: 50px;
@@ -1830,7 +1886,7 @@
             <h3>Enter Names for Recording</h3>
             
             <div class="name-field">
-                <label for="doctor-name-input">Doctor's Name:</label>
+                <label for="doctor-name-input">🩺 Doctor's Name:</label>
                 <div class="autocomplete-container">
                     <input type="text" id="doctor-name-input" class="autocomplete-input" 
                            placeholder="Start typing doctor's name..." autocomplete="off">
@@ -1839,7 +1895,7 @@
             </div>
             
             <div class="name-field">
-                <label for="patient-name-input">Patient's Name:</label>
+                <label for="patient-name-input">🧑‍⚕️ Patient's Name:</label>
                 <div class="autocomplete-container">
                     <input type="text" id="patient-name-input" class="autocomplete-input" 
                            placeholder="Start typing patient's name..." autocomplete="off">
@@ -2112,8 +2168,24 @@
                         <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/PCES_LOGO.jpg-bzxqGCUzF83KKZavbHqIbwpxnCTvnD.jpeg" alt="PCES Logo" class="logo">
                         <h1>PATIENT CARE ENHANCED SERVICES - PCES</h1>
                     </div>
-                    <div class="header-right">
-                        <span id="logged-in-doctor" style="display:none;">👨‍⚕️ <span id="logged-in-doctor-name"></span></span>
+                    <div class="header-right" style="position:relative;">
+                        <span id="logged-in-doctor" style="display:none;" onclick="toggleDoctorPopup(event)">🩺 <span id="logged-in-doctor-name"></span></span>
+                        <div class="doctor-popup" id="doctor-popup">
+                            <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">🩺</span>
+                                <div>
+                                    <div class="doctor-popup-label">Doctor</div>
+                                    <div class="doctor-popup-value" id="popup-doctor-name">—</div>
+                                </div>
+                            </div>
+                            <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">🧑‍⚕️</span>
+                                <div>
+                                    <div class="doctor-popup-label">Current Patient</div>
+                                    <div class="doctor-popup-value" id="popup-patient-name">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4124,9 +4196,26 @@ ${data.conclusion}
             const el = document.getElementById('logged-in-doctor');
             if (name && el) {
                 document.getElementById('logged-in-doctor-name').textContent = name;
+                document.getElementById('popup-doctor-name').textContent = name;
                 el.style.display = 'inline-block';
             }
         }
+
+        function toggleDoctorPopup(e) {
+            e.stopPropagation();
+            const popup = document.getElementById('doctor-popup');
+            const isVisible = popup.style.display === 'block';
+            // Refresh patient name each time popup opens
+            const patientName = window.currentPatientName || window.currentConversationPatientName || '—';
+            document.getElementById('popup-patient-name').textContent = patientName;
+            popup.style.display = isVisible ? 'none' : 'block';
+        }
+
+        // Close popup when clicking anywhere else
+        document.addEventListener('click', function() {
+            const popup = document.getElementById('doctor-popup');
+            if (popup) popup.style.display = 'none';
+        });
 
         // Show doctor name on page load if already authenticated
         if (_pcesAuthed) { showLoggedInDoctor(); }
