@@ -334,7 +334,7 @@ def login():
         with _db_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT username, password_hash, pces_role, first_name, last_name FROM pces_users WHERE username = %s LIMIT 1",
+                    "SELECT username, password_hash, pces_role, first_name, last_name, email, comments FROM pces_users WHERE username = %s LIMIT 1",
                     (username,),
                 )
                 row = cursor.fetchone()
@@ -342,7 +342,7 @@ def login():
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        db_username, password_hash, pces_role, first_name, last_name = row
+        db_username, password_hash, pces_role, first_name, last_name, email, comments = row
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
@@ -352,6 +352,8 @@ def login():
             "username": db_username,
             "pces_role": pces_role,
             "full_name": full_name,
+            "email": email or "",
+            "department": comments or "",
         })
     except Exception as exc:
         logger.error("Login error: %s", exc)
