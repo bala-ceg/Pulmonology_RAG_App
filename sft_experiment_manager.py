@@ -389,6 +389,10 @@ def ensure_tables():
                     cur.execute(add_department_col)
                 except Exception:
                     pass  # Column already exists
+                try:
+                    cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN doctor_name TEXT;")
+                except Exception:
+                    pass  # Column already exists
         print("✅ SFT experiment tables ensured")
         return True
     except Exception as e:
@@ -444,7 +448,8 @@ def get_ranked_data(group_id=None, search=None, page=1, per_page=50, sme_filter=
                 cur.execute(
                     f"""SELECT id, prompt, response_text, rank, reason, group_id,
                                created_at, updated_at, domain,
-                               sme_score, sme_score_reason, sme_reviewed_by, sme_reviewed_at
+                               sme_score, sme_score_reason, sme_reviewed_by, sme_reviewed_at,
+                               doctor_name
                         FROM sft_ranked_data {where}
                         ORDER BY group_id, rank
                         LIMIT %s OFFSET %s""",
@@ -468,6 +473,7 @@ def get_ranked_data(group_id=None, search=None, page=1, per_page=50, sme_filter=
                         "sme_score_reason": row[10],
                         "sme_reviewed_by": row[11],
                         "sme_reviewed_at": _dt(row[12]),
+                        "doctor_name": row[13],
                     })
 
                 return {
@@ -481,23 +487,29 @@ def get_ranked_data(group_id=None, search=None, page=1, per_page=50, sme_filter=
         return {"success": False, "error": str(e)}
 
 
-def add_ranked_entry(prompt, responses):
+def add_ranked_entry(prompt, responses, domain="", doctor_name=""):
     """Add a new ranked data group (prompt + multiple ranked responses).
 
     Args:
         prompt: The medical question
         responses: List of dicts with keys: text, rank, reason
+        domain: Department/domain name for categorization
+        doctor_name: Name of the doctor creating this entry
     """
     group_id = str(uuid.uuid4())[:8]
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
                 for resp in responses:
+                    sql = """INSERT INTO sft_ranked_data
+                           (prompt, response_text, rank, reason, group_id, domain, doctor_name)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+                    if _use_sqlite:
+                        sql = _adapt_sql(sql)
                     cur.execute(
-                        """INSERT INTO sft_ranked_data
-                           (prompt, response_text, rank, reason, group_id)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        (prompt, resp["text"], resp["rank"], resp.get("reason", ""), group_id),
+                        sql,
+                        (prompt, resp["text"], resp["rank"], resp.get("reason", ""),
+                         group_id, domain or None, doctor_name or None),
                     )
             conn.commit()
         return {"success": True, "group_id": group_id}

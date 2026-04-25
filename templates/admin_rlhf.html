@@ -1025,6 +1025,24 @@
                         <button onclick="closeAddRankedModal()" style="background: none; border: none; font-size: 1.5em; cursor: pointer;">✕</button>
                     </div>
 
+                    <div style="display: flex; gap: 12px; margin-bottom: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>🏥 Department</label>
+                            <select id="new-ranked-department"
+                                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; background: white;"
+                                    onchange="loadAddEntryDoctors()">
+                                <option value="">— Select Department —</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>👨‍⚕️ Doctor Name</label>
+                            <select id="new-ranked-doctor"
+                                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; background: white;">
+                                <option value="">— Select Doctor —</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Medical Prompt / Question</label>
                         <textarea id="new-ranked-prompt" rows="2" placeholder="e.g., What are the symptoms of asthma?"
@@ -1221,9 +1239,11 @@
                 // Check if any response in group has been SME reviewed
                 const hasAnyReview = group.responses.some(r => r.sme_score !== null && r.sme_score !== undefined);
                 const groupBorderStyle = hasAnyReview ? 'border-left: 4px solid #4caf50;' : '';
+                const domainLabel = group.responses[0]?.domain ? `<span style="background:#e3f2fd; color:#1565c0; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-left:8px;">🏥 ${escapeHtml(group.responses[0].domain)}</span>` : '';
+                const doctorLabel = group.responses[0]?.doctor_name ? `<span style="background:#f3e5f5; color:#6a1b9a; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-left:4px;">👨‍⚕️ ${escapeHtml(group.responses[0].doctor_name)}</span>` : '';
                 html += `<div class="exp-ranked-group" style="${groupBorderStyle}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div class="exp-ranked-prompt">💬 ${escapeHtml(group.prompt)}</div>
+                        <div class="exp-ranked-prompt">💬 ${escapeHtml(group.prompt)}${domainLabel}${doctorLabel}</div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             ${hasAnyReview ? '<span style="background:#e8f5e9; color:#2e7d32; padding:3px 10px; border-radius:12px; font-size:0.82em; font-weight:600;">✅ SME Reviewed</span>' : '<span style="background:#fff3e0; color:#e65100; padding:3px 10px; border-radius:12px; font-size:0.82em;">⏳ Pending Review</span>'}
                             <button onclick="deleteRankedGroup('${group.group_id}')" 
@@ -1277,9 +1297,42 @@
 
         function showAddRankedDataModal() {
             document.getElementById('add-ranked-modal').style.display = 'flex';
+            populateAddEntryDepartments();
         }
         function closeAddRankedModal() {
             document.getElementById('add-ranked-modal').style.display = 'none';
+            document.getElementById('new-ranked-department').value = '';
+            document.getElementById('new-ranked-doctor').innerHTML = '<option value="">— Select Doctor —</option>';
+        }
+
+        async function populateAddEntryDepartments() {
+            try {
+                const res = await fetch('/api/rlhf/departments');
+                const data = await res.json();
+                if (data.success) {
+                    const select = document.getElementById('new-ranked-department');
+                    select.innerHTML = '<option value="">— Select Department —</option>';
+                    data.departments.forEach(dept => {
+                        select.innerHTML += `<option value="${dept}">${dept}</option>`;
+                    });
+                }
+            } catch (e) { console.error('Error loading departments for add entry:', e); }
+        }
+
+        async function loadAddEntryDoctors() {
+            const dept = document.getElementById('new-ranked-department').value;
+            const doctorSelect = document.getElementById('new-ranked-doctor');
+            doctorSelect.innerHTML = '<option value="">— Select Doctor —</option>';
+            if (!dept) return;
+            try {
+                const res = await fetch(`/api/rlhf/doctors?department=${encodeURIComponent(dept)}`);
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    data.forEach(doc => {
+                        doctorSelect.innerHTML += `<option value="${doc.name}">${doc.name}</option>`;
+                    });
+                }
+            } catch (e) { console.error('Error loading doctors for add entry:', e); }
         }
 
         async function saveRankedData() {
@@ -1290,6 +1343,8 @@
             const r2Reason = document.getElementById('new-ranked-r2-reason').value.trim();
             const r3Text = document.getElementById('new-ranked-r3-text').value.trim();
             const r3Reason = document.getElementById('new-ranked-r3-reason').value.trim();
+            const domain = document.getElementById('new-ranked-department').value;
+            const doctorName = document.getElementById('new-ranked-doctor').value;
 
             if (!prompt || !r1Text) {
                 showExpAlert('❌ Prompt and Rank 1 response are required.', 'error');
@@ -1304,7 +1359,7 @@
                 const res = await fetch('/api/rlhf/ranked-data', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt, responses})
+                    body: JSON.stringify({prompt, responses, domain, doctor_name: doctorName})
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1314,6 +1369,8 @@
                     ['new-ranked-prompt','new-ranked-r1-text','new-ranked-r1-reason',
                      'new-ranked-r2-text','new-ranked-r2-reason','new-ranked-r3-text','new-ranked-r3-reason']
                         .forEach(id => document.getElementById(id).value = '');
+                    document.getElementById('new-ranked-department').value = '';
+                    document.getElementById('new-ranked-doctor').innerHTML = '<option value="">— Select Doctor —</option>';
                     loadRankedData();
                 } else {
                     showExpAlert('❌ ' + data.error, 'error');
