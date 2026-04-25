@@ -2186,13 +2186,6 @@
                                 </div>
                             </div>
                             <div class="doctor-popup-row">
-                                <span class="doctor-popup-icon">🎓</span>
-                                <div>
-                                    <div class="doctor-popup-label">Role</div>
-                                    <div class="doctor-popup-value" id="popup-doctor-role">—</div>
-                                </div>
-                            </div>
-                            <div class="doctor-popup-row">
                                 <span class="doctor-popup-icon">📧</span>
                                 <div>
                                     <div class="doctor-popup-label">Email</div>
@@ -4219,10 +4212,11 @@ ${data.conclusion}
             const name = sessionStorage.getItem('pces_doctor_name');
             const el = document.getElementById('logged-in-doctor');
             if (name && el) {
+                const dept = sessionStorage.getItem('pces_doctor_department') || '';
+                const deptDisplay = dept ? dept.charAt(0) + dept.slice(1).toLowerCase().replace(/_/g, ' ') : '—';
                 document.getElementById('logged-in-doctor-name').textContent = name;
                 document.getElementById('popup-doctor-name').textContent = name;
-                document.getElementById('popup-doctor-dept').textContent = sessionStorage.getItem('pces_doctor_department') || '—';
-                document.getElementById('popup-doctor-role').textContent = sessionStorage.getItem('pces_doctor_role') || '—';
+                document.getElementById('popup-doctor-dept').textContent = deptDisplay;
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
                 el.style.display = 'inline-block';
             }
