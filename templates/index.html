@@ -2179,6 +2179,27 @@
                                 </div>
                             </div>
                             <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">🏥</span>
+                                <div>
+                                    <div class="doctor-popup-label">Department / Specialty</div>
+                                    <div class="doctor-popup-value" id="popup-doctor-dept">—</div>
+                                </div>
+                            </div>
+                            <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">🎓</span>
+                                <div>
+                                    <div class="doctor-popup-label">Role</div>
+                                    <div class="doctor-popup-value" id="popup-doctor-role">—</div>
+                                </div>
+                            </div>
+                            <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">📧</span>
+                                <div>
+                                    <div class="doctor-popup-label">Email</div>
+                                    <div class="doctor-popup-value" id="popup-doctor-email" style="font-size:12px;">—</div>
+                                </div>
+                            </div>
+                            <div class="doctor-popup-row">
                                 <span class="doctor-popup-icon">🧑‍⚕️</span>
                                 <div>
                                     <div class="doctor-popup-label">Current Patient</div>
@@ -4162,6 +4183,9 @@ ${data.conclusion}
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
+                sessionStorage.setItem('pces_doctor_department', data.department || '');
+                sessionStorage.setItem('pces_doctor_email', data.email || '');
+                sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
 
                 msg.className = 'login-msg success';
                 msg.textContent = `Welcome, ${data.full_name || data.username}!`;
@@ -4197,6 +4221,9 @@ ${data.conclusion}
             if (name && el) {
                 document.getElementById('logged-in-doctor-name').textContent = name;
                 document.getElementById('popup-doctor-name').textContent = name;
+                document.getElementById('popup-doctor-dept').textContent = sessionStorage.getItem('pces_doctor_department') || '—';
+                document.getElementById('popup-doctor-role').textContent = sessionStorage.getItem('pces_doctor_role') || '—';
+                document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
                 el.style.display = 'inline-block';
             }
         }
