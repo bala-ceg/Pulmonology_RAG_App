@@ -241,13 +241,15 @@ def api_add_ranked_data():
     data = request.json or {}
     prompt = data.get("prompt", "")
     responses = data.get("responses", [])
+    domain = data.get("domain", "")
+    doctor_name = data.get("doctor_name", "")
 
     if not prompt or not responses:
         return jsonify(
             {"success": False, "error": "prompt and responses are required"}
         ), 400
 
-    return jsonify(add_ranked_entry(prompt, responses))
+    return jsonify(add_ranked_entry(prompt, responses, domain=domain, doctor_name=doctor_name))
 
 
 @sft_bp.route("/api/rlhf/ranked-data/<int:entry_id>", methods=["PUT"])

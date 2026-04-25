@@ -2091,6 +2091,7 @@
                 <div class="header-content">
                     <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/PCES_LOGO.jpg-bzxqGCUzF83KKZavbHqIbwpxnCTvnD.jpeg" alt="PCES Logo" class="logo">
                     <h1>PATIENT CARE ENHANCED SERVICES - PCES</h1>
+                    <span id="logged-in-doctor" style="display:none; margin-left:auto; font-size:14px; font-weight:600; background:rgba(255,255,255,0.2); padding:6px 14px; border-radius:20px; white-space:nowrap;">👨‍⚕️ <span id="logged-in-doctor-name"></span></span>
                 </div>
             </div>
             <div id="chat-messages" class="chat-messages"></div>
@@ -2369,7 +2370,9 @@
             currentOperation = operation;
             
             document.getElementById('name-input-modal').style.display = 'flex';
-            document.getElementById('doctor-name-input').value = '';
+            // Auto-fill doctor name from logged-in session
+            const loggedInDoctor = sessionStorage.getItem('pces_doctor_name') || '';
+            document.getElementById('doctor-name-input').value = loggedInDoctor;
             document.getElementById('patient-name-input').value = '';
             document.getElementById('doctor-suggestions').style.display = 'none';
             document.getElementById('patient-suggestions').style.display = 'none';
@@ -4063,9 +4066,11 @@ ${data.conclusion}
 
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
+                sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
 
                 msg.className = 'login-msg success';
-                msg.textContent = `Welcome, ${data.username}!`;
+                msg.textContent = `Welcome, ${data.full_name || data.username}!`;
+                showLoggedInDoctor();
                 setTimeout(() => {
                     closePcesLoginModal();
                     if (_pendingAction) {
@@ -4090,6 +4095,18 @@ ${data.conclusion}
             if (e.key === 'Escape') closePcesLoginModal();
             if (e.key === 'Enter') submitPcesLogin();
         });
+
+        function showLoggedInDoctor() {
+            const name = sessionStorage.getItem('pces_doctor_name');
+            const el = document.getElementById('logged-in-doctor');
+            if (name && el) {
+                document.getElementById('logged-in-doctor-name').textContent = name;
+                el.style.display = 'inline-block';
+            }
+        }
+
+        // Show doctor name on page load if already authenticated
+        if (_pcesAuthed) { showLoggedInDoctor(); }
 
     </script>
 </body>
