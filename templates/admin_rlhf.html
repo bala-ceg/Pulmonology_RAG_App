@@ -1025,20 +1025,12 @@
                         <button onclick="closeAddRankedModal()" style="background: none; border: none; font-size: 1.5em; cursor: pointer;">✕</button>
                     </div>
 
-                    <div style="display: flex; gap: 12px; margin-bottom: 15px;">
-                        <div class="form-group" style="flex: 1;">
+                    <div style="margin-bottom: 15px;">
+                        <div class="form-group">
                             <label>🏥 Department</label>
                             <select id="new-ranked-department"
-                                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; background: white;"
-                                    onchange="loadAddEntryDoctors()">
-                                <option value="">— Select Department —</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label>👨‍⚕️ Doctor Name</label>
-                            <select id="new-ranked-doctor"
                                     style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; background: white;">
-                                <option value="">— Select Doctor —</option>
+                                <option value="">— Select Department —</option>
                             </select>
                         </div>
                     </div>
@@ -1302,7 +1294,6 @@
         function closeAddRankedModal() {
             document.getElementById('add-ranked-modal').style.display = 'none';
             document.getElementById('new-ranked-department').value = '';
-            document.getElementById('new-ranked-doctor').innerHTML = '<option value="">— Select Doctor —</option>';
         }
 
         async function populateAddEntryDepartments() {
@@ -1319,22 +1310,6 @@
             } catch (e) { console.error('Error loading departments for add entry:', e); }
         }
 
-        async function loadAddEntryDoctors() {
-            const dept = document.getElementById('new-ranked-department').value;
-            const doctorSelect = document.getElementById('new-ranked-doctor');
-            doctorSelect.innerHTML = '<option value="">— Select Doctor —</option>';
-            if (!dept) return;
-            try {
-                const res = await fetch(`/api/rlhf/doctors?department=${encodeURIComponent(dept)}`);
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                    data.forEach(doc => {
-                        doctorSelect.innerHTML += `<option value="${doc.name}">${doc.name}</option>`;
-                    });
-                }
-            } catch (e) { console.error('Error loading doctors for add entry:', e); }
-        }
-
         async function saveRankedData() {
             const prompt = document.getElementById('new-ranked-prompt').value.trim();
             const r1Text = document.getElementById('new-ranked-r1-text').value.trim();
@@ -1344,7 +1319,6 @@
             const r3Text = document.getElementById('new-ranked-r3-text').value.trim();
             const r3Reason = document.getElementById('new-ranked-r3-reason').value.trim();
             const domain = document.getElementById('new-ranked-department').value;
-            const doctorName = document.getElementById('new-ranked-doctor').value;
 
             if (!prompt || !r1Text) {
                 showExpAlert('❌ Prompt and Rank 1 response are required.', 'error');
@@ -1359,7 +1333,7 @@
                 const res = await fetch('/api/rlhf/ranked-data', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt, responses, domain, doctor_name: doctorName})
+                    body: JSON.stringify({prompt, responses, domain})
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1369,8 +1343,6 @@
                     ['new-ranked-prompt','new-ranked-r1-text','new-ranked-r1-reason',
                      'new-ranked-r2-text','new-ranked-r2-reason','new-ranked-r3-text','new-ranked-r3-reason']
                         .forEach(id => document.getElementById(id).value = '');
-                    document.getElementById('new-ranked-department').value = '';
-                    document.getElementById('new-ranked-doctor').innerHTML = '<option value="">— Select Doctor —</option>';
                     loadRankedData();
                 } else {
                     showExpAlert('❌ ' + data.error, 'error');
