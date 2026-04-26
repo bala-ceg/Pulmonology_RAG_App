@@ -1841,8 +1841,19 @@
             box-sizing: border-box;
         }
 
-        .autocomplete-input::placeholder {
-            color: #aaa;
+        .autocomplete-input.locked {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(74, 144, 226, 0.4);
+            color: #cde;
+            cursor: not-allowed;
+            opacity: 0.85;
+        }
+        .doctor-locked-badge {
+            display: inline-block;
+            font-size: 11px;
+            color: #7ec8e3;
+            margin-left: 6px;
+            vertical-align: middle;
         }
 
         .autocomplete-suggestions {
@@ -1886,7 +1897,7 @@
             <h3>Enter Names for Recording</h3>
             
             <div class="name-field">
-                <label for="doctor-name-input">🩺 Doctor's Name:</label>
+                <label for="doctor-name-input">🩺 Doctor's Name: <span id="doctor-locked-badge" class="doctor-locked-badge" style="display:none;">🔒 Set from login</span></label>
                 <div class="autocomplete-container">
                     <input type="text" id="doctor-name-input" class="autocomplete-input" 
                            placeholder="Start typing doctor's name..." autocomplete="off">
@@ -2479,9 +2490,20 @@
             currentOperation = operation;
             
             document.getElementById('name-input-modal').style.display = 'flex';
-            // Auto-fill doctor name from logged-in session
+            // Auto-fill doctor name from logged-in session and lock if authenticated
             const loggedInDoctor = sessionStorage.getItem('pces_doctor_name') || '';
-            document.getElementById('doctor-name-input').value = loggedInDoctor;
+            const doctorInput = document.getElementById('doctor-name-input');
+            const lockBadge = document.getElementById('doctor-locked-badge');
+            doctorInput.value = loggedInDoctor;
+            if (loggedInDoctor) {
+                doctorInput.readOnly = true;
+                doctorInput.classList.add('locked');
+                lockBadge.style.display = 'inline';
+            } else {
+                doctorInput.readOnly = false;
+                doctorInput.classList.remove('locked');
+                lockBadge.style.display = 'none';
+            }
             document.getElementById('patient-name-input').value = '';
             document.getElementById('doctor-suggestions').style.display = 'none';
             document.getElementById('patient-suggestions').style.display = 'none';
@@ -2519,9 +2541,13 @@
             
             setupAutocomplete();
             
-            // Focus on doctor input
+            // Focus: skip locked doctor field, go straight to patient
             setTimeout(() => {
-                document.getElementById('doctor-name-input').focus();
+                if (loggedInDoctor) {
+                    document.getElementById('patient-name-input').focus();
+                } else {
+                    document.getElementById('doctor-name-input').focus();
+                }
             }, 100);
         }
 
