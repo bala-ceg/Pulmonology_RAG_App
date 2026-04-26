@@ -363,7 +363,7 @@ def ensure_tables():
     """
     # Add department column to existing tables (safe ALTER — ignored if column exists)
     add_department_col = """
-    ALTER TABLE sft_experiments ADD COLUMN department TEXT;
+    ALTER TABLE sft_experiments ADD COLUMN IF NOT EXISTS department TEXT;
     """
     create_index = """
     CREATE INDEX IF NOT EXISTS idx_sft_ranked_data_group_id ON sft_ranked_data(group_id);
@@ -385,14 +385,9 @@ def ensure_tables():
                         cur.execute(idx_sql)
                     except Exception:
                         pass  # Index already exists
-                try:
-                    cur.execute(add_department_col)
-                except Exception:
-                    pass  # Column already exists
-                try:
-                    cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN doctor_name TEXT;")
-                except Exception:
-                    pass  # Column already exists
+                cur.execute(add_department_col)
+                cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS domain TEXT;")
+                cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS doctor_name TEXT;")
         print("✅ SFT experiment tables ensured")
         return True
     except Exception as e:
