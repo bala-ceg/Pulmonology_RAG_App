@@ -293,6 +293,16 @@ from routes import register_blueprints
 register_blueprints(app)
 
 # ---------------------------------------------------------------------------
+# Run SFT schema migrations on startup
+# ---------------------------------------------------------------------------
+try:
+    from sft_experiment_manager import ensure_tables as _sft_ensure_tables
+    _sft_ensure_tables()
+except Exception as _sft_err:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("SFT table migration failed: %s", _sft_err)
+
+# ---------------------------------------------------------------------------
 # Observability: structured ECS logging, Prometheus metrics, /health endpoint
 # ---------------------------------------------------------------------------
 try:
