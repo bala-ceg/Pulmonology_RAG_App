@@ -151,13 +151,44 @@ def api_get_sme_review_queue():
 
     import sft_experiment_manager as sft  # noqa: PLC0415
 
+    # Check whether doctor_name column exists (read-only — works even without ALTER privilege)
+    has_doctor_name = False
+    try:
+        with sft._connect() as _cc:
+            with _cc.cursor() as _ccur:
+                if sft._use_sqlite:
+                    _ccur.execute("PRAGMA table_info(sft_ranked_data)")
+                    has_doctor_name = any(r[1] == "doctor_name" for r in _ccur.fetchall())
+                else:
+                    _ccur.execute(
+                        "SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name = 'sft_ranked_data' AND column_name = 'doctor_name'"
+                    )
+                    has_doctor_name = _ccur.fetchone() is not None
+    except Exception as _ce:
+        logger.warning("Could not check doctor_name column existence: %s", _ce)
+
+    # If the column is missing, try to add it (best-effort; may fail due to permissions)
+    if not has_doctor_name:
+        try:
+            with sft._connect(autocommit=True) as _mc:
+                with _mc.cursor() as _cur:
+                    _cur.execute(
+                        "ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS doctor_name TEXT;"
+                    )
+            has_doctor_name = True
+        except Exception as _col_err:
+            logger.warning("Could not add doctor_name column (will use NULL fallback): %s", _col_err)
+
+    doctor_name_col = ", doctor_name" if has_doctor_name else ", NULL AS doctor_name"
+
     with sft._connect() as conn:
         with conn.cursor() as cur:
-            query = """
+            query = f"""
                 SELECT
                     id, prompt, response_text, rank, reason, group_id, domain,
                     sme_score, sme_score_reason, sme_reviewed_by, sme_reviewed_at,
-                    created_by, created_at, updated_by, updated_at
+                    created_by, created_at, updated_by, updated_at{doctor_name_col}
                 FROM sft_ranked_data
                 WHERE 1=1
             """
@@ -214,6 +245,7 @@ def api_get_sme_review_queue():
             "created_at": sft._dt(row[12]),
             "updated_by": row[13],
             "updated_at": sft._dt(row[14]),
+            "doctor_name": row[15],
         }
         for row in rows
     ]

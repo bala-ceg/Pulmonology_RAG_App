@@ -838,13 +838,6 @@
                         </select>
                     </div>
                     <div style="flex: 1; min-width: 200px;">
-                        <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9em;">Doctor: <span style="color: #dc3545;">*</span></label>
-                        <select id="sme-doctor-select" onchange="loadSMEReviewQueue()"
-                                style="width: 100%; padding: 10px 15px; border: 2px solid #667eea; border-radius: 8px; font-size: 1em; background: white;" disabled>
-                            <option value="">— Select Department First —</option>
-                        </select>
-                    </div>
-                    <div style="flex: 1; min-width: 200px;">
                         <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9em;">Review Status:</label>
                         <select id="sme-status-filter" onchange="loadSMEReviewQueue()"
                                 style="width: 100%; padding: 10px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; background: white;">
@@ -855,15 +848,11 @@
                     </div>
                 </div>
 
-                <!-- Hidden input to store reviewer name (populated from doctor dropdown) -->
-                <input type="hidden" id="sme-reviewer-name" value="">
-
                 <!-- Info banner -->
                 <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; color: #1565c0;">
                     <strong>📝 Instructions:</strong> 
                     <ol style="margin: 10px 0 0 20px; padding: 0;">
                         <li>Select your <strong>Department</strong> from the dropdown above</li>
-                        <li>Select your <strong>name</strong> from the Doctor dropdown</li>
                         <li>Review prompts from your department - assign scores (1-5) and provide reasoning</li>
                         <li>Click <strong>💾 Save All Reviews</strong> when done</li>
                     </ol>
@@ -877,7 +866,6 @@
                                 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 0.9em; min-width: 60px;">ID</th>
                                 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 0.9em; min-width: 120px;">Domain</th>
                                 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 0.9em; min-width: 300px;">Prompt</th>
-                                <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 0.9em; min-width: 60px;">Rank</th>
                                 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 0.9em; min-width: 300px;">LLM Response</th>
                                 <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 0.9em; min-width: 120px;">Score - By SME</th>
                                 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 0.9em; min-width: 300px;">Score Reason - by SME</th>
@@ -1941,18 +1929,12 @@
         async function loadSMEReviewQueue(page = 1) {
             const domain = document.getElementById('sme-domain-filter').value;
             const status = document.getElementById('sme-status-filter').value;
-            const doctorSelect = document.getElementById('sme-doctor-select');
-            const selectedDoctor = doctorSelect ? doctorSelect.value : '';
-            
-            // Update the hidden reviewer name input
-            const reviewerInput = document.getElementById('sme-reviewer-name');
-            if (reviewerInput) reviewerInput.value = selectedDoctor;
             
             if (!domain) {
                 // Show message to select department
                 document.getElementById('sme-review-table-body').innerHTML = `
                     <tr>
-                        <td colspan="11" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
+                        <td colspan="10" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
                             🏥 Please select a Department to view prompts for review
                         </td>
                     </tr>
@@ -1974,7 +1956,7 @@
                 if (data.success) {
                     smeReviewData = data.items;
                     smeCurrentPage = page;
-                    renderSMEReviewTable(data.items, !selectedDoctor);
+                    renderSMEReviewTable(data.items);
                     renderSMEPagination(data.page, data.total_pages, data.total);
                     await loadSMEReviewStats();
                 } else {
@@ -1985,13 +1967,13 @@
             }
         }
 
-        function renderSMEReviewTable(items, disableEditing = false) {
+        function renderSMEReviewTable(items) {
             const tbody = document.getElementById('sme-review-table-body');
             
             if (!items || items.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="11" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
+                        <td colspan="10" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
                             📭 No prompts found for review in this department
                         </td>
                     </tr>
@@ -1999,25 +1981,13 @@
                 return;
             }
             
-            // Show warning if no doctor selected
-            let warningRow = '';
-            if (disableEditing) {
-                warningRow = `
-                    <tr style="background: #fff3cd;">
-                        <td colspan="11" style="text-align: center; padding: 15px; color: #856404; font-weight: 600;">
-                            ⚠️ Please select a Doctor above to enable editing and save reviews
-                        </td>
-                    </tr>
-                `;
-            }
-            
-            tbody.innerHTML = warningRow + items.map((item, idx) => {
+            tbody.innerHTML = items.map((item, idx) => {
                 const rowStyle = idx % 2 === 0 ? 'background: #f9f9f9;' : 'background: white;';
                 const isReviewed = item.sme_score !== null;
-                const canEdit = !disableEditing && !isReviewed;
-                const inputStyle = !canEdit ? 'background: #e8e8e8; cursor: not-allowed;' : '';
-                const scoreInputDisabled = !canEdit ? 'readonly' : '';
-                const reasonInputDisabled = !canEdit ? 'readonly' : '';
+                const inputStyle = isReviewed ? 'background: #e8e8e8; cursor: not-allowed;' : '';
+                const scoreInputDisabled = isReviewed ? 'readonly' : '';
+                const reasonInputDisabled = isReviewed ? 'readonly' : '';
+                const createdBy = item.doctor_name || item.created_by || 'N/A';
                 
                 return `
                     <tr style="${rowStyle}">
@@ -2031,11 +2001,6 @@
                             <div style="max-height: 80px; overflow-y: auto; line-height: 1.5; font-size: 0.9em;">
                                 ${escapeHtml(item.prompt || '')}
                             </div>
-                        </td>
-                        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
-                            <span style="background: ${getRankColor(item.rank)}; color: white; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em;">
-                                ${item.rank}
-                            </span>
                         </td>
                         <td style="padding: 12px; border-bottom: 1px solid #eee; max-width: 300px;">
                             <div style="max-height: 80px; overflow-y: auto; line-height: 1.5; font-size: 0.9em;">
@@ -2055,7 +2020,7 @@
                         <td style="padding: 12px; border-bottom: 1px solid #eee;">
                             <textarea 
                                 id="sme-reason-${item.id}" 
-                                placeholder="${disableEditing ? 'Select a doctor to edit' : 'Enter your reasoning here...'}"
+                                placeholder="Enter your reasoning here..."
                                 ${reasonInputDisabled}
                                 style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em; resize: vertical; ${inputStyle}"
                             >${item.sme_score_reason || ''}</textarea>
@@ -2064,10 +2029,10 @@
                             ${formatDateTime(item.created_at)}
                         </td>
                         <td style="padding: 12px; border-bottom: 1px solid #eee; font-size: 0.85em;">
-                            ${item.created_by || 'N/A'}
+                            ${escapeHtml(String(createdBy))}
                         </td>
                         <td style="padding: 12px; border-bottom: 1px solid #eee; font-size: 0.85em; color: #666;">
-                            ${item.sme_reviewed_at ? formatDateTime(item.sme_reviewed_at) : '—'}
+                            ${item.updated_at ? formatDateTime(item.updated_at) : '—'}
                         </td>
                         <td style="padding: 12px; border-bottom: 1px solid #eee; font-size: 0.85em; font-weight: ${item.sme_reviewed_by ? '600' : 'normal'}; color: ${item.sme_reviewed_by ? '#2e7d32' : '#999'};">
                             ${item.sme_reviewed_by || '—'}
@@ -2075,15 +2040,6 @@
                     </tr>
                 `;
             }).join('');
-        }
-
-        function getRankColor(rank) {
-            const colors = {
-                1: '#4caf50',  // Green
-                2: '#ff9800',  // Orange
-                3: '#f44336',  // Red
-            };
-            return colors[rank] || '#757575';  // Default gray
         }
 
         function formatDateTime(isoString) {
@@ -2131,14 +2087,8 @@
         }
 
         async function saveAllSMEReviews() {
-            // Get doctor from dropdown (not free text anymore)
-            const doctorSelect = document.getElementById('sme-doctor-select');
-            const smeName = doctorSelect ? doctorSelect.value : '';
-            
-            if (!smeName) {
-                showExpAlert('❌ Please select a Doctor from the dropdown to save reviews', 'error');
-                return;
-            }
+            // Use logged-in doctor name from session storage as the reviewer
+            const smeName = sessionStorage.getItem('pces_doctor_name') || 'SME';
             
             const department = document.getElementById('sme-domain-filter').value;
             if (!department) {
@@ -2202,12 +2152,8 @@
             }
         }
 
-        // Store doctors by department for quick lookup
-        let doctorsByDepartment = {};
-
         async function populateSMEDepartments() {
             try {
-                // Load departments
                 const deptRes = await fetch('/api/rlhf/departments');
                 const deptData = await deptRes.json();
                 
@@ -2221,35 +2167,19 @@
                         select.appendChild(option);
                     });
                 }
-
-                // Load doctors grouped by department
-                const docRes = await fetch('/api/rlhf/doctors/by-department');
-                const docData = await docRes.json();
-                
-                if (docData.success && docData.doctors_by_department) {
-                    doctorsByDepartment = docData.doctors_by_department;
-                }
             } catch (e) {
-                console.error('Error loading departments/doctors:', e);
+                console.error('Error loading departments:', e);
             }
         }
 
         function onSMEDepartmentChange() {
             const department = document.getElementById('sme-domain-filter').value;
-            const doctorSelect = document.getElementById('sme-doctor-select');
-            const reviewerNameInput = document.getElementById('sme-reviewer-name');
-            
-            // Clear and reset doctor dropdown
-            doctorSelect.innerHTML = '';
-            reviewerNameInput.value = '';
             
             if (!department) {
-                doctorSelect.innerHTML = '<option value="">— Select Department First —</option>';
-                doctorSelect.disabled = true;
                 // Clear the queue since no department selected
                 document.getElementById('sme-review-table-body').innerHTML = `
                     <tr>
-                        <td colspan="11" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
+                        <td colspan="10" style="text-align: center; padding: 40px; color: #999; font-size: 1.1em;">
                             🏥 Please select a Department to view prompts for review
                         </td>
                     </tr>
@@ -2261,24 +2191,6 @@
                 document.getElementById('sme-review-percentage').textContent = '0%';
                 document.getElementById('sme-this-week').textContent = '0';
                 return;
-            }
-            
-            // Populate doctors for selected department
-            const doctors = doctorsByDepartment[department] || [];
-            
-            if (doctors.length === 0) {
-                doctorSelect.innerHTML = '<option value="">— No Doctors Available —</option>';
-                doctorSelect.disabled = true;
-            } else {
-                doctorSelect.innerHTML = '<option value="">— Select Doctor —</option>';
-                doctors.forEach(doc => {
-                    const option = document.createElement('option');
-                    option.value = doc.name;
-                    option.textContent = doc.name + (doc.specialty ? ` (${doc.specialty})` : '');
-                    option.dataset.doctorId = doc.id;
-                    doctorSelect.appendChild(option);
-                });
-                doctorSelect.disabled = false;
             }
             
             // Load queue for department

@@ -69,6 +69,7 @@ db_config = {
 SQLITE_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_sft.db")
 _use_sqlite = False
 _db_backend_initialized = False
+_ranked_data_cols: set | None = None  # lazy-cached column names for sft_ranked_data
 
 
 def _adapt_sql(sql):
@@ -82,6 +83,29 @@ def _adapt_sql(sql):
     sql = re.sub(r'\bNOW\(\)', "datetime('now')", sql)
     sql = re.sub(r'\bJSONB\b', 'TEXT', sql, flags=re.IGNORECASE)
     return sql
+
+
+def _get_ranked_data_cols() -> set:
+    """Return the set of column names in sft_ranked_data (cached after first call)."""
+    global _ranked_data_cols
+    if _ranked_data_cols is not None:
+        return _ranked_data_cols
+    try:
+        with _connect() as conn:
+            with conn.cursor() as cur:
+                if _use_sqlite:
+                    cur.execute("PRAGMA table_info(sft_ranked_data)")
+                    cols = {row[1] for row in cur.fetchall()}
+                else:
+                    cur.execute(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name = 'sft_ranked_data'"
+                    )
+                    cols = {row[0] for row in cur.fetchall()}
+        _ranked_data_cols = cols
+    except Exception:
+        _ranked_data_cols = set()
+    return _ranked_data_cols
 
 
 class _SQLiteCursor:
@@ -389,6 +413,8 @@ def ensure_tables():
                 cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS domain TEXT;")
                 cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS doctor_name TEXT;")
         print("✅ SFT experiment tables ensured")
+        global _ranked_data_cols
+        _ranked_data_cols = None  # Invalidate cache so next call re-reads the columns
         return True
     except Exception as e:
         print(f"❌ Error creating SFT tables: {e}")
@@ -487,26 +513,55 @@ def add_ranked_entry(prompt, responses, domain="", **kwargs):
         prompt: The medical question
         responses: List of dicts with keys: text, rank, reason
         domain: Department/domain name for categorization
+        doctor_name: Name of the doctor who submitted the query (optional)
     """
     group_id = str(uuid.uuid4())[:8]
+    doctor_name = kwargs.get("doctor_name") or None
+    has_doctor_name = "doctor_name" in _get_ranked_data_cols()
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
                 for resp in responses:
-                    sql = """INSERT INTO sft_ranked_data
-                           (prompt, response_text, rank, reason, group_id, domain)
-                           VALUES (%s, %s, %s, %s, %s, %s)"""
+                    if has_doctor_name:
+                        sql = """INSERT INTO sft_ranked_data
+                               (prompt, response_text, rank, reason, group_id, domain, doctor_name)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+                        row_params = (prompt, resp["text"], resp["rank"], resp.get("reason", ""),
+                                      group_id, domain or None, doctor_name)
+                    else:
+                        sql = """INSERT INTO sft_ranked_data
+                               (prompt, response_text, rank, reason, group_id, domain)
+                               VALUES (%s, %s, %s, %s, %s, %s)"""
+                        row_params = (prompt, resp["text"], resp["rank"], resp.get("reason", ""),
+                                      group_id, domain or None)
                     if _use_sqlite:
                         sql = _adapt_sql(sql)
-                    cur.execute(
-                        sql,
-                        (prompt, resp["text"], resp["rank"], resp.get("reason", ""),
-                         group_id, domain or None),
-                    )
+                    cur.execute(sql, row_params)
             conn.commit()
         return {"success": True, "group_id": group_id}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def add_sme_queue_entry(prompt, response_text, domain="", doctor_name=""):
+    """Insert a single chat query + LLM response into the SME review queue.
+
+    Called automatically after each successful chat response so that SMEs can
+    review and score real interactions.  Uses rank=1 (the only/best response)
+    to satisfy the NOT NULL DB constraint while keeping rank invisible in the UI.
+
+    Args:
+        prompt: The user's chat query.
+        response_text: The LLM response text.
+        domain: The doctor's department (used to filter the queue by department).
+        doctor_name: Full name of the logged-in doctor.
+    """
+    return add_ranked_entry(
+        prompt,
+        [{"text": response_text, "rank": 1, "reason": ""}],
+        domain=domain,
+        doctor_name=doctor_name or None,
+    )
 
 
 def update_ranked_entry(entry_id, response_text=None, rank=None, reason=None):

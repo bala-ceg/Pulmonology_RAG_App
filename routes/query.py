@@ -29,6 +29,7 @@ from __future__ import annotations
 import glob as glob_module
 import os
 import re
+import threading
 import traceback
 from datetime import datetime
 
@@ -43,6 +44,73 @@ from utils.error_handlers import get_logger, handle_route_errors
 logger = get_logger(__name__)
 
 query_bp = Blueprint("query_bp", __name__)
+
+# ---------------------------------------------------------------------------
+# Optional SME queue auto-insert
+# ---------------------------------------------------------------------------
+try:
+    from sft_experiment_manager import add_sme_queue_entry as _add_sme_queue_entry, DEPARTMENTS as _DEPARTMENTS
+    _SME_QUEUE_AVAILABLE = True
+except Exception:
+    _DEPARTMENTS = {}
+    _SME_QUEUE_AVAILABLE = False
+
+# Explicit mapping for pces_role values that don't match DEPARTMENTS keys directly
+_ROLE_TO_DEPT: dict[str, str] = {
+    "ophthalmologist": "Ophthalmology",
+    "opthalmologist": "Ophthalmology",       # typo present in live DB
+    "ophthalmology": "Ophthalmology",
+    "cardiologist": "Cardiology",
+    "neurologist": "Neurology",
+    "pulmonologist": "Pulmonology",
+    "gastroenterologist": "Gastroenterology",
+    "nephrologist": "Nephrology",
+    "oncologist": "Oncology",
+    "hematologist": "Hematology",
+    "dermatologist": "Dermatology",
+    "psychiatrist": "Psychiatry",
+    "pediatrician": "Pediatrics",
+    "rheumatologist": "Rheumatology",
+    "urologist": "Urology",
+    "hepatologist": "Hepatology",
+    "radiologist": "Radiology",
+    "anesthesiologist": "Anesthesiology",
+    "geriatrician": "Geriatrics",
+    "dentist": "Dentistry",
+    "general surgeon": "General Medicine",
+    "general_surgeon": "General Medicine",
+    "family medicine": "Family Medicine",
+    "family_medicine": "Family Medicine",
+    "admin": "",
+}
+
+
+def _normalize_department(role: str) -> str:
+    """Map a pces_role value (e.g. 'Ophthalmologist', 'CARDIOLOGIST') to a canonical
+    DEPARTMENTS key (e.g. 'Ophthalmology', 'Cardiology') so SME queue entries are
+    filtered correctly by the domain dropdown."""
+    if not role:
+        return ""
+    role_lower = role.strip().lower()
+
+    # 1. Direct case-insensitive match against DEPARTMENTS keys
+    for dept in _DEPARTMENTS:
+        if dept.lower() == role_lower:
+            return dept
+
+    # 2. Replace underscores with spaces then retry (handles FAMILY_MEDICINE)
+    role_spaced = role_lower.replace("_", " ")
+    for dept in _DEPARTMENTS:
+        if dept.lower() == role_spaced:
+            return dept
+
+    # 3. Explicit role → department map
+    mapped = _ROLE_TO_DEPT.get(role_lower) or _ROLE_TO_DEPT.get(role_spaced)
+    if mapped is not None:
+        return mapped
+
+    # 4. Fallback: return the original value unchanged
+    return role
 
 # ---------------------------------------------------------------------------
 # Shared resource accessors
@@ -78,6 +146,27 @@ def _get_disciplines_config() -> dict:
 
 def _get_medical_router():
     return current_app.config.get("MEDICAL_ROUTER")
+
+
+def _queue_sme_entry(prompt: str, response_text: str, doctor_name: str, doctor_department: str) -> None:
+    """Fire-and-forget: insert a chat Q&A pair into the SME review queue in a background thread."""
+    if not _SME_QUEUE_AVAILABLE or not prompt or not response_text:
+        return
+
+    normalized_dept = _normalize_department(doctor_department)
+
+    def _insert():
+        try:
+            _add_sme_queue_entry(
+                prompt=prompt,
+                response_text=response_text,
+                domain=normalized_dept or "",
+                doctor_name=doctor_name or "",
+            )
+        except Exception as exc:
+            logger.warning("SME queue auto-insert failed (non-critical): %s", exc)
+
+    threading.Thread(target=_insert, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +556,8 @@ def handle_query():
     """Original JSON endpoint for the UI — returns JSON responses."""
     user_input = request.json.get("data", "")
     patient_problem = request.json.get("patient_problem", "").strip()
+    doctor_name = (request.json.get("doctor_name") or "").strip()
+    doctor_department = (request.json.get("doctor_department") or "").strip()
 
     if not user_input:
         return jsonify(
@@ -530,6 +621,7 @@ def handle_query():
                 answer = integrated_result["answer"]
                 routing_info = integrated_result.get("routing_info", {})
                 tools_used = integrated_result.get("tools_used", [])
+                _queue_sme_entry(user_input, answer, doctor_name, doctor_department)
                 return jsonify(
                     {
                         "response": True,
@@ -576,6 +668,7 @@ def handle_query():
                     f"{routing_info.get('similarity_score', 0):.3f}, Sources: {sources_info}"
                 )
 
+                _queue_sme_entry(user_input, guard_disclaimer + final_response, doctor_name, doctor_department)
                 return jsonify(
                     {
                         "response": True,
@@ -722,6 +815,7 @@ def handle_query():
             )
             final_response += f"\n**Query Routing:** Analyzed and routed to {routing_str}"
 
+            _queue_sme_entry(user_input, guard_disclaimer + final_response, doctor_name, doctor_department)
             return jsonify(
                 {
                     "response": True,
