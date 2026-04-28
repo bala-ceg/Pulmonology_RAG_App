@@ -2756,7 +2756,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         data: message,
-                        patient_problem: patientProblem  // Include patient problem as context
+                        patient_problem: patientProblem,  // Include patient problem as context
+                        doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
+                        doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
                 });
 
@@ -2943,7 +2945,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         data: transcription,
-                        patient_problem: patientProblem  // Include patient problem as context
+                        patient_problem: patientProblem,  // Include patient problem as context
+                        doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
+                        doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
                 });
 
@@ -2983,7 +2987,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         data: transcription,
-                        patient_problem: patientProblem  // Include patient problem as context
+                        patient_problem: patientProblem,  // Include patient problem as context
+                        doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
+                        doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
                 });
 
