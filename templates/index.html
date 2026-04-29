@@ -2146,11 +2146,11 @@
             </ul>
             </li>
 
-            <!-- RLHF Admin Panel -->
-            <li class="no-bullet">
+            <!-- SME Training Panel -->
+            <li id="sme-training-container" class="no-bullet" style="display:none">
             <ul class="red-box">
                 <li>
-                    <button class="rlhf-admin-btn" onclick="requireAuth(() => window.open('/admin/rlhf', '_blank'))">RLHF Training Admin</button>
+                    <button id="sme-training-btn" class="rlhf-admin-btn" onclick="window.open('/admin/rlhf', '_blank')">SME Training</button>
                 </li>
             </ul>
             </li>
@@ -4240,6 +4240,12 @@ ${data.conclusion}
                 document.getElementById('popup-doctor-dept').textContent = deptDisplay;
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
                 el.style.display = 'inline-block';
+            }
+            const smeContainer = document.getElementById('sme-training-container');
+            if (smeContainer) {
+                const role = sessionStorage.getItem('pces_doctor_role') || '';
+                const isSME = role.split(',').map(r => r.trim()).includes('SME');
+                smeContainer.style.display = isSME ? '' : 'none';
             }
         }
 
