@@ -4196,10 +4196,12 @@ ${data.conclusion}
 
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
+                sessionStorage.setItem('pces_username', data.username || '');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
+                sessionStorage.setItem('pces_allowed_departments', data.allowed_departments || '');
 
                 msg.className = 'login-msg success';
                 msg.textContent = `Welcome, ${data.full_name || data.username}!`;
