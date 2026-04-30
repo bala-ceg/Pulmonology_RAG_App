@@ -1080,7 +1080,7 @@
             document.getElementById(sectionId).classList.add('active');
             if (btn) btn.classList.add('active');
 
-            if (sectionId === 'ranked-data-section') { loadDepartments(); loadRankedData(); }
+            if (sectionId === 'ranked-data-section') { loadDepartments().then(() => loadRankedData()); }
             else if (sectionId === 'sme-review-section') loadSMEReviewQueue();
             else if (sectionId === 'launch-section') loadLaunchInfo();
             else if (sectionId === 'progress-section') loadTrainingProgress();
@@ -1088,9 +1088,9 @@
             else if (sectionId === 'history-section') loadExperimentHistory();
         }
 
-        function loadExperimentsTab() {
+        async function loadExperimentsTab() {
             loadRankedDataStats();
-            loadDepartments();
+            await loadDepartments();
             loadRankedData();
         }
 
@@ -1103,18 +1103,113 @@
 
         // --- Department Loading ---
 
+        /**
+         * Maps uppercase pces_role tokens to DEPARTMENTS dict keys.
+         * Roles that are not medical departments (e.g. SME) are omitted.
+         */
+        const ROLE_TO_DEPARTMENT = {
+            'CARDIOLOGY':          'Cardiology',
+            'CARDIOLOGIST':        'Cardiology',
+            'NEUROLOGY':           'Neurology',
+            'NEUROLOGIST':         'Neurology',
+            'DIABETES':            'Diabetes',
+            'PULMONOLOGY':         'Pulmonology',
+            'PULMONOLOGIST':       'Pulmonology',
+            'GENERAL SURGEON':     'General Surgery',
+            'GENERAL SURGERY':     'General Surgery',
+            'GASTROENTEROLOGY':    'Gastroenterology',
+            'GASTROENTEROLOGIST':  'Gastroenterology',
+            'NEPHROLOGY':          'Nephrology',
+            'NEPHROLOGIST':        'Nephrology',
+            'ONCOLOGY':            'Oncology',
+            'ONCOLOGIST':          'Oncology',
+            'HEMATOLOGY':          'Hematology',
+            'HEMATOLOGIST':        'Hematology',
+            'ORTHOPEDICS':         'Orthopedics',
+            'ORTHOPEDIC SURGEON':  'Orthopedics',
+            'DERMATOLOGY':         'Dermatology',
+            'DERMATOLOGIST':       'Dermatology',
+            'OPHTHALMOLOGY':       'Ophthalmology',
+            'OPHTHALMOLOGIST':     'Ophthalmology',
+            'PSYCHIATRY':          'Psychiatry',
+            'PSYCHIATRIST':        'Psychiatry',
+            'PEDIATRICS':          'Pediatrics',
+            'PEDIATRICIAN':        'Pediatrics',
+            'RHEUMATOLOGY':        'Rheumatology',
+            'RHEUMATOLOGIST':      'Rheumatology',
+            'UROLOGY':             'Urology',
+            'UROLOGIST':           'Urology',
+            'IMMUNOLOGY & ALLERGY':'Immunology & Allergy',
+            'INFECTIOUS DISEASE':  'Infectious Disease',
+            'EMERGENCY MEDICINE':  'Emergency Medicine',
+            'HEPATOLOGY':          'Hepatology',
+            'HEPATOLOGIST':        'Hepatology',
+            'NUTRITION & DIETETICS':'Nutrition & Dietetics',
+            'PHARMACOLOGY':        'Pharmacology',
+            'GENERAL MEDICINE':    'General Medicine',
+            'ENT':                 'ENT (Otolaryngology)',
+            'OTOLARYNGOLOGY':      'ENT (Otolaryngology)',
+            'OBSTETRICS & GYNECOLOGY': 'Obstetrics & Gynecology',
+            'GYNECOLOGY':          'Obstetrics & Gynecology',
+            'RADIOLOGY':           'Radiology',
+            'RADIOLOGIST':         'Radiology',
+            'ANESTHESIOLOGY':      'Anesthesiology',
+            'ANESTHESIOLOGIST':    'Anesthesiology',
+            'PAIN MANAGEMENT':     'Pain Management',
+            'SLEEP MEDICINE':      'Sleep Medicine',
+            'SPORTS MEDICINE':     'Sports Medicine',
+            'GERIATRICS':          'Geriatrics',
+            'GERIATRICIAN':        'Geriatrics',
+            'DENTISTRY':           'Dentistry',
+            'DENTIST':             'Dentistry',
+        };
+
+        /**
+         * Returns the array of DEPARTMENTS keys the logged-in user may see,
+         * derived from their pces_role stored in sessionStorage.
+         * Returns null when there is no restriction (show all departments).
+         */
+        function getSessionDepartments() {
+            const raw = sessionStorage.getItem('pces_doctor_role') || '';
+            if (!raw.trim()) return null;
+            const depts = raw.split(',')
+                .map(r => ROLE_TO_DEPARTMENT[r.trim().toUpperCase()])
+                .filter(Boolean);
+            // Deduplicate while preserving order
+            return depts.length > 0 ? [...new Set(depts)] : null;
+        }
+
         async function loadDepartments() {
             try {
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
                 if (data.success) {
+                    const allowed = getSessionDepartments();
                     const select = document.getElementById('department-select');
                     const currentVal = select.value;
-                    select.innerHTML = '<option value="">— Select a Department —</option>';
-                    data.departments.forEach(dept => {
-                        select.innerHTML += `<option value="${dept}">${dept}</option>`;
+
+                    let depts = data.departments;
+                    if (allowed) {
+                        // Keep order from the role string, skip any name not in master list
+                        depts = allowed.filter(d => data.departments.includes(d));
+                        select.innerHTML = '';  // no blank "All Departments" for restricted users
+                    } else {
+                        select.innerHTML = '<option value="">— Select a Department —</option>';
+                    }
+
+                    depts.forEach(dept => {
+                        const opt = document.createElement('option');
+                        opt.value = dept;
+                        opt.textContent = dept;
+                        select.appendChild(opt);
                     });
-                    if (currentVal) select.value = currentVal;
+
+                    // Restore previous valid selection; otherwise pre-select first for restricted users
+                    if (currentVal && depts.includes(currentVal)) {
+                        select.value = currentVal;
+                    } else if (allowed && depts.length > 0) {
+                        select.value = depts[0];
+                    }
                 }
             } catch (e) { console.error('Error loading departments:', e); }
         }
@@ -1289,11 +1384,22 @@
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
                 if (data.success) {
+                    const allowed = getSessionDepartments();
+                    let depts = data.departments;
                     const select = document.getElementById('new-ranked-department');
-                    select.innerHTML = '<option value="">— Select Department —</option>';
-                    data.departments.forEach(dept => {
+
+                    if (allowed) {
+                        depts = allowed.filter(d => data.departments.includes(d));
+                        select.innerHTML = '';
+                    } else {
+                        select.innerHTML = '<option value="">— Select Department —</option>';
+                    }
+
+                    depts.forEach(dept => {
                         select.innerHTML += `<option value="${dept}">${dept}</option>`;
                     });
+
+                    if (allowed && depts.length > 0) select.value = depts[0];
                 }
             } catch (e) { console.error('Error loading departments for add entry:', e); }
         }
@@ -1386,13 +1492,24 @@
             try {
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
+                const allowed = getSessionDepartments();
+                let depts = data.departments || [];
                 const select = document.getElementById('launch-department-select');
-                select.innerHTML = '<option value="">— Select a Department to Train —</option>';
+
+                if (allowed) {
+                    depts = allowed.filter(d => depts.includes(d));
+                    select.innerHTML = '';
+                } else {
+                    select.innerHTML = '<option value="">— Select a Department to Train —</option>';
+                }
+
                 if (data.success) {
-                    data.departments.forEach(dept => {
+                    depts.forEach(dept => {
                         select.innerHTML += `<option value="${dept}">${dept}</option>`;
                     });
                 }
+
+                if (allowed && depts.length > 0) select.value = depts[0];
             } catch (e) { console.error(e); }
         }
 
@@ -1448,7 +1565,10 @@
         }
 
         async function loadLaunchInfo() {
-            loadLaunchDepartments();
+            await loadLaunchDepartments();
+            // If a dept was pre-selected (restricted user), trigger the change handler
+            const dept = document.getElementById('launch-department-select').value;
+            if (dept) onLaunchDepartmentChange();
         }
 
         async function startExperiment() {
@@ -2156,16 +2276,31 @@
             try {
                 const deptRes = await fetch('/api/rlhf/departments');
                 const deptData = await deptRes.json();
-                
+
                 if (deptData.success && deptData.departments) {
+                    const allowed = getSessionDepartments();
+                    let depts = deptData.departments;
                     const select = document.getElementById('sme-domain-filter');
-                    select.innerHTML = '<option value="">— Select Department —</option>';
-                    deptData.departments.forEach(dept => {
+
+                    if (allowed) {
+                        depts = allowed.filter(d => deptData.departments.includes(d));
+                        select.innerHTML = '';  // no blank option for restricted users
+                    } else {
+                        select.innerHTML = '<option value="">— Select Department —</option>';
+                    }
+
+                    depts.forEach(dept => {
                         const option = document.createElement('option');
                         option.value = dept;
                         option.textContent = dept;
                         select.appendChild(option);
                     });
+
+                    // Pre-select first dept and trigger queue load for restricted users
+                    if (allowed && depts.length > 0) {
+                        select.value = depts[0];
+                        onSMEDepartmentChange();
+                    }
                 }
             } catch (e) {
                 console.error('Error loading departments:', e);
