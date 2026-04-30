@@ -333,16 +333,32 @@ def login():
     try:
         with _db_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT username, password_hash, pces_role, first_name, last_name, email, allowed_departments FROM pces_users WHERE username = %s LIMIT 1",
-                    (username,),
-                )
-                row = cursor.fetchone()
+                # Try to fetch allowed_departments; fall back if the column doesn't exist yet
+                try:
+                    cursor.execute(
+                        "SELECT username, password_hash, pces_role, first_name, last_name, email, allowed_departments FROM pces_users WHERE username = %s LIMIT 1",
+                        (username,),
+                    )
+                    row = cursor.fetchone()
+                    has_allowed_dept_col = True
+                except Exception:
+                    conn.rollback()
+                    cursor.execute(
+                        "SELECT username, password_hash, pces_role, first_name, last_name, email FROM pces_users WHERE username = %s LIMIT 1",
+                        (username,),
+                    )
+                    row = cursor.fetchone()
+                    has_allowed_dept_col = False
 
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        db_username, password_hash, pces_role, first_name, last_name, email, allowed_departments = row
+        if has_allowed_dept_col:
+            db_username, password_hash, pces_role, first_name, last_name, email, allowed_departments = row
+        else:
+            db_username, password_hash, pces_role, first_name, last_name, email = row
+            allowed_departments = None
+
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
