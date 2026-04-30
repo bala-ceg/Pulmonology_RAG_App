@@ -295,7 +295,6 @@ DEPARTMENTS = OrderedDict([
     ("Neurology", ["brain", "nerve", "neurological", "stroke", "migraine", "headache", "seizure", "epilepsy", "neuropathy", "parkinson", "alzheimer"]),
     ("Diabetes", ["diabetes", "diabetic", "insulin", "blood sugar", "glucose", "glycemic", "hba1c", "type-1 diabetes", "type-2 diabetes", "hyperglycemia", "hypoglycemia"]),
     ("Pulmonology", ["lung", "respiratory", "asthma", "pneumonia", "breathing", "bronchitis", "copd", "pulmonary", "bronchial"]),
-    ("General Surgery", ["surgery", "surgical", "appendix", "appendectomy", "hernia", "gallbladder", "cholecystectomy", "laparoscopy", "thyroid surgery", "bowel resection", "colostomy", "mastectomy", "wound", "abscess", "biopsy"]),
     ("Gastroenterology", ["stomach", "digestive", "gastric", "intestin", "bowel", "colon", "acid reflux", "gerd", "gastrointestinal", "celiac"]),
     ("Nephrology", ["kidney", "renal", "nephro", "dialysis", "urinary tract infection", "uti"]),
     ("Oncology", ["cancer", "tumor", "malignant", "chemotherapy", "radiation therapy", "oncolog", "carcinoma", "leukemia", "lymphoma"]),
