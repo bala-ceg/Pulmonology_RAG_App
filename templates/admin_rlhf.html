@@ -1080,7 +1080,7 @@
             document.getElementById(sectionId).classList.add('active');
             if (btn) btn.classList.add('active');
 
-            if (sectionId === 'ranked-data-section') { loadDepartments().then(() => loadRankedData()); }
+            if (sectionId === 'ranked-data-section') { loadDepartments(); loadRankedData(); }
             else if (sectionId === 'sme-review-section') loadSMEReviewQueue();
             else if (sectionId === 'launch-section') loadLaunchInfo();
             else if (sectionId === 'progress-section') loadTrainingProgress();
@@ -1088,9 +1088,9 @@
             else if (sectionId === 'history-section') loadExperimentHistory();
         }
 
-        async function loadExperimentsTab() {
+        function loadExperimentsTab() {
             loadRankedDataStats();
-            await loadDepartments();
+            loadDepartments();
             loadRankedData();
         }
 
@@ -1103,48 +1103,18 @@
 
         // --- Department Loading ---
 
-        /**
-         * Returns the array of allowed department names for the logged-in user,
-         * in the order configured in pces_users.allowed_departments.
-         * Returns null when there is no restriction (show all departments).
-         */
-        function getAllowedDepartments() {
-            const raw = sessionStorage.getItem('pces_allowed_departments') || '';
-            if (!raw.trim()) return null;
-            return raw.split(',').map(d => d.trim()).filter(Boolean);
-        }
-
         async function loadDepartments() {
             try {
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
                 if (data.success) {
-                    const allowed = getAllowedDepartments();
                     const select = document.getElementById('department-select');
                     const currentVal = select.value;
-
-                    // Determine visible departments: preserve allowed-list order when restricted
-                    let depts = data.departments;
-                    if (allowed) {
-                        depts = allowed.filter(d => data.departments.includes(d));
-                        select.innerHTML = '';  // no "All Departments" blank option for restricted users
-                    } else {
-                        select.innerHTML = '<option value="">— Select a Department —</option>';
-                    }
-
-                    depts.forEach(dept => {
-                        const opt = document.createElement('option');
-                        opt.value = dept;
-                        opt.textContent = dept;
-                        select.appendChild(opt);
+                    select.innerHTML = '<option value="">— Select a Department —</option>';
+                    data.departments.forEach(dept => {
+                        select.innerHTML += `<option value="${dept}">${dept}</option>`;
                     });
-
-                    // Restore previous selection if still valid; otherwise pre-select first for restricted users
-                    if (currentVal && depts.includes(currentVal)) {
-                        select.value = currentVal;
-                    } else if (allowed && depts.length > 0) {
-                        select.value = depts[0];
-                    }
+                    if (currentVal) select.value = currentVal;
                 }
             } catch (e) { console.error('Error loading departments:', e); }
         }
@@ -1319,24 +1289,11 @@
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
                 if (data.success) {
-                    const allowed = getAllowedDepartments();
-                    let depts = data.departments;
                     const select = document.getElementById('new-ranked-department');
-
-                    if (allowed) {
-                        depts = allowed.filter(d => data.departments.includes(d));
-                        select.innerHTML = '';
-                    } else {
-                        select.innerHTML = '<option value="">— Select Department —</option>';
-                    }
-
-                    depts.forEach(dept => {
+                    select.innerHTML = '<option value="">— Select Department —</option>';
+                    data.departments.forEach(dept => {
                         select.innerHTML += `<option value="${dept}">${dept}</option>`;
                     });
-
-                    if (allowed && depts.length > 0) {
-                        select.value = depts[0];
-                    }
                 }
             } catch (e) { console.error('Error loading departments for add entry:', e); }
         }
@@ -1429,25 +1386,12 @@
             try {
                 const res = await fetch('/api/rlhf/departments');
                 const data = await res.json();
-                const allowed = getAllowedDepartments();
-                let depts = data.departments || [];
                 const select = document.getElementById('launch-department-select');
-
-                if (allowed) {
-                    depts = allowed.filter(d => depts.includes(d));
-                    select.innerHTML = '';  // no blank for restricted users
-                } else {
-                    select.innerHTML = '<option value="">— Select a Department to Train —</option>';
-                }
-
+                select.innerHTML = '<option value="">— Select a Department to Train —</option>';
                 if (data.success) {
-                    depts.forEach(dept => {
+                    data.departments.forEach(dept => {
                         select.innerHTML += `<option value="${dept}">${dept}</option>`;
                     });
-                }
-
-                if (allowed && depts.length > 0) {
-                    select.value = depts[0];
                 }
             } catch (e) { console.error(e); }
         }
@@ -1504,10 +1448,7 @@
         }
 
         async function loadLaunchInfo() {
-            await loadLaunchDepartments();
-            // If a department was pre-selected (restricted user), trigger dept change handler
-            const dept = document.getElementById('launch-department-select').value;
-            if (dept) onLaunchDepartmentChange();
+            loadLaunchDepartments();
         }
 
         async function startExperiment() {
@@ -2215,31 +2156,16 @@
             try {
                 const deptRes = await fetch('/api/rlhf/departments');
                 const deptData = await deptRes.json();
-
+                
                 if (deptData.success && deptData.departments) {
-                    const allowed = getAllowedDepartments();
-                    let depts = deptData.departments;
                     const select = document.getElementById('sme-domain-filter');
-
-                    if (allowed) {
-                        depts = allowed.filter(d => deptData.departments.includes(d));
-                        select.innerHTML = '';  // no blank for restricted users
-                    } else {
-                        select.innerHTML = '<option value="">— Select Department —</option>';
-                    }
-
-                    depts.forEach(dept => {
+                    select.innerHTML = '<option value="">— Select Department —</option>';
+                    deptData.departments.forEach(dept => {
                         const option = document.createElement('option');
                         option.value = dept;
                         option.textContent = dept;
                         select.appendChild(option);
                     });
-
-                    // Pre-select first dept for restricted users and trigger queue load
-                    if (allowed && depts.length > 0) {
-                        select.value = depts[0];
-                        onSMEDepartmentChange();
-                    }
                 }
             } catch (e) {
                 console.error('Error loading departments:', e);
