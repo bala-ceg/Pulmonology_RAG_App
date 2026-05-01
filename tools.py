@@ -526,13 +526,109 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
         return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search.invoke(query)}"
 
 
+# ---------------------------------------------------------------------------
+# Pinecone KB tool (optional — gracefully absent if Pinecone not configured)
+# ---------------------------------------------------------------------------
+try:
+    from pinecone_kb import get_pinecone_kb, PINECONE_KB_AVAILABLE as _PINECONE_KB_AVAILABLE
+except ImportError:
+    _PINECONE_KB_AVAILABLE = False
+
+
+@tool
+def Pinecone_KB_Search(query: str) -> str:
+    """
+    Search the PCES organisation Pinecone knowledge base for clinical guidelines,
+    department protocols, and curated medical content.
+
+    USE this tool when:
+    - Query explicitly asks about PCES knowledge base or organisation protocols
+    - Query is department-specific and mentions neurology, cardiology, general medicine,
+      dentist / dental, or pulmonology
+    - User asks about clinical guidelines, best practices, or standard of care
+    - Query contains words like "protocol", "guideline", "standard of care", "PCES KB"
+    - You need authoritative clinical content beyond what Wikipedia offers
+    - Query relates to department-level curated medical content
+
+    DO NOT use this tool when:
+    - User asks for the latest research papers (use ArXiv instead)
+    - Query is about breaking news or real-time updates (use Tavily instead)
+    - User refers to their own uploaded documents (use Internal_VectorDB instead)
+    - Query asks for diagnosis codes from hospital records (use PostgreSQL instead)
+
+    Args:
+        query: The clinical or medical query to search
+
+    Returns:
+        Plain string with relevant clinical content and Sources footer
+    """
+    if not _PINECONE_KB_AVAILABLE:
+        return "Pinecone KB is not configured. Please set PINECONE_API_KEY in the environment."
+
+    try:
+        logger.info("Pinecone_KB_Search: querying for '%s'", query)
+        kb = get_pinecone_kb()
+
+        # Try to detect a department from the query to narrow the namespace
+        namespace: Optional[str] = None
+        q_lower = query.lower()
+        dept_keywords = {
+            "cardiology":       ["cardio", "heart", "cardiac", "atrial", "coronary", "ecg", "arrhythmia"],
+            "neurology":        ["neuro", "brain", "stroke", "seizure", "epilep", "parkinson", "migraine"],
+            "general_medicine": ["diabetes", "hypertension", "anaemia", "anemia", "kidney", "thyroid", "pneumonia"],
+            "dentist":          ["dental", "tooth", "teeth", "gum", "periodontal", "caries", "tmj", "oral"],
+            "pulmonology":      ["lung", "pulmon", "asthma", "copd", "respiratory", "breath", "inhaler", "sleep apnea"],
+        }
+        for dept, kws in dept_keywords.items():
+            if any(kw in q_lower for kw in kws):
+                namespace = dept
+                break
+
+        results = kb.query(query, namespace=namespace, top_k=5)
+
+        if not results:
+            return "No relevant content found in the PCES Pinecone knowledge base."
+
+        # Format results with sources footer (mirrors _join_docs pattern)
+        parts: List[str] = []
+        sources: List[str] = []
+        total_chars = 0
+        max_chars = 1200
+
+        for r in results:
+            txt = r.get("text", "").strip()
+            if not txt:
+                continue
+            remaining = max_chars - total_chars
+            if remaining <= 0:
+                break
+            chunk = txt[:remaining]
+            parts.append(chunk)
+            total_chars += len(chunk)
+
+            ns  = r.get("namespace", "")
+            src = r.get("metadata", {}).get("source", f"PCES_{ns}")
+            if src and src not in sources:
+                sources.append(src)
+
+        body = "\n\n".join(parts)
+        if sources:
+            body += f"\n\nSources: {', '.join(sources)}"
+        return body
+
+    except Exception as exc:
+        logger.error("Pinecone_KB_Search error: %s", exc)
+        return f"Pinecone KB search error: {exc}"
+
+
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'Wikipedia_Search': Wikipedia_Search,
     'ArXiv_Search': ArXiv_Search,
     'Tavily_Search': Tavily_Search,
     'Internal_VectorDB': Internal_VectorDB,
-    'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search
+    'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search,
+    'Pinecone_KB_Search': Pinecone_KB_Search,
 }
 
 
@@ -548,5 +644,6 @@ def get_tool_descriptions() -> Dict[str, str]:
         'ArXiv_Search': "Search arXiv for recent research papers, scientific studies, and cutting-edge findings.",
         'Tavily_Search': "Search current web information for real-time medical updates, guidelines, and breaking news.",
         'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content.",
-        'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table."
+        'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table.",
+        'Pinecone_KB_Search': "Search PCES organisation Pinecone knowledge base for curated department clinical guidelines, protocols, and standard-of-care content.",
     }

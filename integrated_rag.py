@@ -23,7 +23,7 @@ except ImportError:
 
 # Import our custom modules
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
-from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, AVAILABLE_TOOLS
+from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 from utils.error_handlers import get_logger
 
@@ -76,8 +76,8 @@ class IntegratedMedicalRAG:
         """Setup tools with proper context injection."""
         tools = []
         
-        # Create Wikipedia, ArXiv, Tavily, and PostgreSQL tools (these don't need RAG manager)
-        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search])
+        # Create Wikipedia, ArXiv, Tavily, PostgreSQL, and Pinecone KB tools (these don't need RAG manager)
+        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search])
         
         # Create Internal_VectorDB tool with RAG manager injected using @tool decorator
         # ZeroShotAgent requires single-input tools — only expose `query`
