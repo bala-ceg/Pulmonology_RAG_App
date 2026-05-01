@@ -945,6 +945,16 @@ class MedicalQueryRouter:
                 if kw in query_lower:
                     tool_scores['Pinecone_KB_Search'] += 2
 
+            # Treatment/management queries override the generic "what is" Wikipedia trigger
+            TREATMENT_TRIGGERS = [
+                'treatment of', 'treatment for', 'management of', 'management for',
+                'therapy for', 'therapy of', 'care for', 'care of',
+                'how to treat', 'how to manage',
+            ]
+            if any(t in query_lower for t in TREATMENT_TRIGGERS):
+                tool_scores['Pinecone_KB_Search'] += 4
+                tool_scores['Wikipedia_Search']    = max(0, tool_scores['Wikipedia_Search'] - 2)
+
             # ── Context-aware adjustments ─────────────────────────────────
             has_session_content = (
                 session_id and self.rag_manager and
