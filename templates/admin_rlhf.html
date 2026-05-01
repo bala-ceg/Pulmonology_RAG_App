@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RLHF Training Admin Panel</title>
+    <title>SME Training - Doctor in the loop</title>
     <style>
         * {
             margin: 0;
@@ -718,8 +718,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>RLHF Training Admin Panel</h1>
-            <p>Reinforcement Learning from Human Feedback - Medical AI Training</p>
+            <h1>SME Training - Doctor in the loop</h1>
+            <p>Reinforcement Learning from Expert Doctor Feedback</p>
         </div>
 
         <!-- Experiments Tab -->
@@ -728,16 +728,16 @@
 
             <!-- Sub-navigation for experiments -->
             <div class="exp-subnav">
-                <button class="exp-subnav-btn active" onclick="showExpSection('ranked-data-section', this)">📋 Training Data</button>
-                <button class="exp-subnav-btn" onclick="showExpSection('sme-review-section', this)">👨‍⚕️ SME Review Queue</button>
+                <button class="exp-subnav-btn active" onclick="showExpSection('sme-review-section', this)">👨‍⚕️ SME Review Queue</button>
                 <button class="exp-subnav-btn" onclick="showExpSection('launch-section', this)">🚀 Launch Experiment</button>
                 <button class="exp-subnav-btn" onclick="showExpSection('progress-section', this)">📈 Training Progress</button>
                 <button class="exp-subnav-btn" onclick="showExpSection('test-section', this)">🔬 Test Model</button>
                 <button class="exp-subnav-btn" onclick="showExpSection('history-section', this)">📜 History</button>
+                <button class="exp-subnav-btn" onclick="showExpSection('ranked-data-section', this)">📋 Admin Training</button>
             </div>
 
             <!-- Ranked Training Data Section -->
-            <div id="ranked-data-section" class="exp-section active">
+            <div id="ranked-data-section" class="exp-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2>📋 Ranked Training Data</h2>
                     <div>
@@ -796,7 +796,7 @@
             </div>
 
             <!-- SME Review Queue Section -->
-            <div id="sme-review-section" class="exp-section">
+            <div id="sme-review-section" class="exp-section active">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2>👨‍⚕️ SME Review Queue</h2>
                     <div>
@@ -1089,9 +1089,8 @@
         }
 
         async function loadExperimentsTab() {
+            loadSMEReviewQueue();
             loadRankedDataStats();
-            await loadDepartments();
-            loadRankedData();
         }
 
         function showExpAlert(msg, type) {
@@ -1552,7 +1551,7 @@
                     btn.disabled = false;
                     btn.style.opacity = '1';
                 } else {
-                    info.innerHTML = `⚠️ No training data found for <strong>${dept}</strong>. Add data in the Training Data tab first.`;
+                    info.innerHTML = `⚠️ No training data found for <strong>${dept}</strong>. Add data in the Admin Training tab first.`;
                     dataInfo.innerHTML = '';
                     btn.disabled = true;
                     btn.style.opacity = '0.6';
