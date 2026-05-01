@@ -10,6 +10,7 @@ langchain-text-splitters
 
 # Vector database
 chromadb
+pinecone
 
 # Document processing
 pypdf
