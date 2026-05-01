@@ -789,208 +789,265 @@ class MedicalQueryRouter:
         """
         self.rag_manager = rag_manager
         
-        # Keywords for tool selection heuristics
-        self.arxiv_keywords = [
-            'latest', 'recent', 'new', 'research', 'study', 'paper', 'findings',
-            'experiment', 'trial', 'investigation', 'preprint', 'published',
-            'scientific', 'evidence', 'current research', 'recent developments',
-            'newest', 'breakthrough', 'cutting-edge', 'novel', 'innovative'
-        ]
-        
-        self.internal_keywords = [
-            'uploaded', 'my file', 'my document', 'my pdf', 'uploaded document',
-            'our protocol', 'our guideline', 'organization', 'my organization',
-            'internal', 'company', 'our study', 'my study', 'this document',
-            'uploaded content', 'my data', 'our data', 'session'
-        ]
-        
-        self.wikipedia_keywords = [
-            'what is', 'define', 'definition', 'explain', 'tell me about',
-            'overview', 'background', 'basic', 'general', 'introduction',
-            'simple explanation', 'layman', 'understand', 'meaning'
-        ]
-        
-        self.tavily_keywords = [
-            'current', 'latest', 'recent', 'today', 'this year', '2024', '2025',
-            'fda', 'who', 'cdc', 'ama', 'guidelines', 'recommendations',
-            'breaking', 'news', 'alert', 'recall', 'approval', 'regulatory',
-            'policy', 'update', 'announcement', 'current guidelines',
-            'latest recommendations', 'recent updates', 'safety alert'
-        ]
-        
+        # ----------------------------------------------------------------
+        # Routing rules (user-defined priority order):
+        #   1. Patient history      → PostgreSQL_Diagnosis_Search
+        #   2. Medical research     → ArXiv_Search + Tavily_Search (both)
+        #   3. General research     → Wikipedia_Search
+        #   4. General search       → Wikipedia_Search (else Pinecone_KB_Search)
+        #   5. Uploaded docs        → Internal_VectorDB
+        #   Default fallback        → Pinecone_KB_Search (PCES org KB)
+        # ----------------------------------------------------------------
+
+        # Patient history / EHR → PostgreSQL
         self.postgres_keywords = [
+            'patient history', 'patient record', 'patient data', 'my patient',
+            'ehr', 'electronic health', 'medical history', 'health record',
+            'case history', 'clinical history', 'admission record',
+            # legacy DB-specific terms
             'database', 'diagnoses available', 'diagnosis code', 'medical code',
             'p_diagnosis', 'diagnosis table', 'diagnostic code', 'condition code',
             'diagnoses in database', 'diagnosis from database', 'db diagnosis',
             'diagnosis records', 'medical records', 'diagnosis data',
-            'code d1', 'diagnostic database', 'hospital database', 'clinical records',
-            'diagnosis system', 'medical database', 'diagnosis lookup'
+            'diagnostic database', 'hospital database', 'clinical records',
+            'diagnosis system', 'medical database', 'diagnosis lookup',
+        ]
+
+        # Medical research → ArXiv + Tavily (both activated together)
+        self.medical_research_keywords = [
+            'medical research', 'clinical trial', 'randomized controlled',
+            'systematic review', 'meta-analysis', 'peer-reviewed',
+            'rct', 'cohort study', 'case-control', 'observational study',
+            'clinical study', 'research paper', 'journal article',
+            'evidence-based', 'latest research', 'recent research',
+            'new study', 'recent study', 'new paper', 'recent paper',
+            'breakthrough treatment', 'novel therapy', 'experimental',
+            'preprint', 'published findings', 'clinical evidence',
+        ]
+
+        # ArXiv for research papers / scientific findings
+        self.arxiv_keywords = [
+            'latest research', 'recent research', 'new research', 'medical research',
+            'research paper', 'research study', 'research findings', 'scientific paper',
+            'clinical trial', 'randomized trial', 'controlled trial',
+            'systematic review', 'meta-analysis', 'peer-reviewed',
+            'published findings', 'preprint', 'journal article',
+            'cutting-edge', 'novel therapy', 'breakthrough treatment',
+            'scientific evidence', 'clinical evidence',
+        ]
+
+        # Tavily for real-time / current web info
+        self.tavily_keywords = [
+            'current', 'latest', 'today', 'this year', '2024', '2025', '2026',
+            'fda', 'who', 'cdc', 'ama', 'guidelines', 'recommendations',
+            'breaking', 'news', 'alert', 'recall', 'approval', 'regulatory',
+            'policy', 'update', 'announcement', 'current guidelines',
+            'latest recommendations', 'recent updates', 'safety alert',
+            'real-time', 'live', 'now', 'currently',
+        ]
+
+        # General research / knowledge → Wikipedia
+        self.wikipedia_keywords = [
+            'what is', 'what are', 'define', 'definition', 'explain', 'tell me about',
+            'overview', 'background', 'basic', 'general', 'introduction',
+            'simple explanation', 'layman', 'understand', 'meaning',
+            'history of', 'how does', 'why does', 'what causes',
+        ]
+
+        # Uploaded docs → Internal_VectorDB
+        self.internal_keywords = [
+            'uploaded', 'my file', 'my document', 'my pdf', 'uploaded document',
+            'our protocol', 'our guideline', 'organization', 'my organization',
+            'internal', 'company', 'our study', 'my study', 'this document',
+            'uploaded content', 'my data', 'our data', 'session',
+        ]
+
+        # PCES dept KB → Pinecone (default for medical content not covered above)
+        self.pinecone_keywords = [
+            'protocol', 'guideline', 'standard of care', 'pces', 'pces kb',
+            'department protocol', 'clinical guideline', 'best practice',
+            'treatment protocol', 'care pathway', 'clinical pathway',
+            'cardiology', 'neurology', 'pulmonology', 'dentist', 'dental',
+            'general medicine', 'general_medicine',
+            'management of', 'treatment of', 'therapy for',
         ]
     
     def route_tools(self, query: str, session_id: str = None) -> Dict:
         """
-        Route query to appropriate tools with ranking and confidence scoring.
-        
-        Args:
-            query: User query string
-            session_id: Session identifier for checking user-specific content
-            
-        Returns:
-            Dictionary with ranked tools, confidence, and reasoning
+        Route query to appropriate tools using priority-based rules:
+
+        Priority order:
+          1. Patient history / EHR  → PostgreSQL_Diagnosis_Search
+          2. Medical research       → ArXiv_Search + Tavily_Search  (both)
+          3. General knowledge      → Wikipedia_Search
+          4. Uploaded documents     → Internal_VectorDB
+          5. General search         → Wikipedia_Search (else Pinecone_KB_Search)
+          Default fallback          → Pinecone_KB_Search (PCES org KB)
         """
         try:
             query_lower = query.lower()
-            
-            # Initialize scores for each tool
+
+            # Initialise scores for every tool
             tool_scores = {
-                'Wikipedia_Search': 0,
-                'ArXiv_Search': 0,
-                'Tavily_Search': 0,
-                'Internal_VectorDB': 0,
-                'PostgreSQL_Diagnosis_Search': 0
+                'Wikipedia_Search':           0,
+                'ArXiv_Search':               0,
+                'Tavily_Search':              0,
+                'Internal_VectorDB':          0,
+                'PostgreSQL_Diagnosis_Search': 0,
+                'Pinecone_KB_Search':         0,
             }
-            
-            # Keyword-based scoring
-            for keyword in self.arxiv_keywords:
-                if keyword in query_lower:
-                    tool_scores['ArXiv_Search'] += 2
-                    
-            for keyword in self.internal_keywords:
-                if keyword in query_lower:
-                    tool_scores['Internal_VectorDB'] += 3
-                    
-            for keyword in self.wikipedia_keywords:
-                if keyword in query_lower:
-                    tool_scores['Wikipedia_Search'] += 2
-                    
-            for keyword in self.tavily_keywords:
-                if keyword in query_lower:
-                    tool_scores['Tavily_Search'] += 2
-                    
-            for keyword in self.postgres_keywords:
-                if keyword in query_lower:
+
+            # ── PRIORITY 1: Patient history → PostgreSQL ─────────────────
+            for kw in self.postgres_keywords:
+                if kw in query_lower:
                     tool_scores['PostgreSQL_Diagnosis_Search'] += 3
-            
-            # Context-based adjustments - QUERY-CONTENT-AWARE ROUTING
-            # Check if session has content (without loading it)
-            has_session_content = (session_id and 
-                                 self.rag_manager and 
-                                 self.rag_manager.has_session_content(session_id))
-            
-            has_external_content = (self.rag_manager and 
-                                  self.rag_manager.has_external_content())
-            
-            # Calculate content relevance scores instead of unconditional boosting
-            pdf_relevance_score = self._calculate_pdf_relevance(query_lower)
-            wiki_relevance_score = self._calculate_wiki_relevance(query_lower)
-            arxiv_relevance_score = self._calculate_arxiv_relevance(query_lower)
-            tavily_relevance_score = self._calculate_tavily_relevance(query_lower)
+
+            # Strong boost for explicit patient-history patterns
+            if any(p in query_lower for p in ['patient history', 'patient record', 'my patient', 'ehr']):
+                tool_scores['PostgreSQL_Diagnosis_Search'] += 5
+
+            import re
+            if re.search(r'd1\d{3}', query_lower) or 'code d1' in query_lower:
+                tool_scores['PostgreSQL_Diagnosis_Search'] += 5
+
+            # ── PRIORITY 2: Medical research → ArXiv + Tavily ────────────
+            is_medical_research = any(kw in query_lower for kw in self.medical_research_keywords)
+            if is_medical_research:
+                # Activate BOTH ArXiv and Tavily for medical research
+                tool_scores['ArXiv_Search']  += 6
+                tool_scores['Tavily_Search'] += 6
+
+            # Individual keyword boosts (secondary signals)
+            for kw in self.arxiv_keywords:
+                if kw in query_lower:
+                    tool_scores['ArXiv_Search'] += 2
+
+            for kw in self.tavily_keywords:
+                if kw in query_lower:
+                    tool_scores['Tavily_Search'] += 2
+
+            # ── PRIORITY 3: General knowledge → Wikipedia ────────────────
+            for kw in self.wikipedia_keywords:
+                if kw in query_lower:
+                    tool_scores['Wikipedia_Search'] += 2
+
+            # Boost for Wh- questions (general search)
+            if query_lower.startswith(('what', 'how', 'why', 'when', 'where', 'who')):
+                tool_scores['Wikipedia_Search'] += 1
+
+            # ── PRIORITY 4: Uploaded docs → Internal_VectorDB ────────────
+            for kw in self.internal_keywords:
+                if kw in query_lower:
+                    tool_scores['Internal_VectorDB'] += 3
+
+            # ── PRIORITY 5: PCES KB → Pinecone ───────────────────────────
+            for kw in self.pinecone_keywords:
+                if kw in query_lower:
+                    tool_scores['Pinecone_KB_Search'] += 2
+
+            # ── Context-aware adjustments ─────────────────────────────────
+            has_session_content = (
+                session_id and self.rag_manager and
+                self.rag_manager.has_session_content(session_id)
+            )
+            has_external_content = (
+                self.rag_manager and self.rag_manager.has_external_content()
+            )
+
+            # Relevance refinement
+            pdf_relevance_score     = self._calculate_pdf_relevance(query_lower)
+            wiki_relevance_score    = self._calculate_wiki_relevance(query_lower)
+            arxiv_relevance_score   = self._calculate_arxiv_relevance(query_lower)
+            tavily_relevance_score  = self._calculate_tavily_relevance(query_lower)
             postgres_relevance_score = self._calculate_postgres_relevance(query_lower)
-            
-            # Apply relevance-based scoring  
-            tool_scores['Internal_VectorDB'] += pdf_relevance_score
-            tool_scores['Wikipedia_Search'] += wiki_relevance_score  
-            tool_scores['ArXiv_Search'] += arxiv_relevance_score
-            tool_scores['Tavily_Search'] += tavily_relevance_score
+            pinecone_relevance_score = self._calculate_pinecone_relevance(query_lower)
+
+            tool_scores['Internal_VectorDB']          += pdf_relevance_score
+            tool_scores['Wikipedia_Search']           += wiki_relevance_score
+            tool_scores['ArXiv_Search']               += arxiv_relevance_score
+            tool_scores['Tavily_Search']              += tavily_relevance_score
             tool_scores['PostgreSQL_Diagnosis_Search'] += postgres_relevance_score
-            
-            # Debug logging for routing decision factors
-            logger.info(f"🔍 Routing Analysis for: '{query}'")
-            logger.info(f"📊 Relevance Scores - PDF: {pdf_relevance_score}, Wiki: {wiki_relevance_score}, ArXiv: {arxiv_relevance_score}, Tavily: {tavily_relevance_score}")
-            logger.info(f"📁 Session Context - ID: {session_id}, Has Content: {has_session_content}")
-            logger.info(f"🎯 Current Tool Scores - {tool_scores}")
-            
-            # Only boost Internal_VectorDB if session has content AND query is relevant to PDF content
+            tool_scores['Pinecone_KB_Search']         += pinecone_relevance_score
+
+            # Session content boost
             if has_session_content and pdf_relevance_score > 0:
-                tool_scores['Internal_VectorDB'] += 1  # Modest boost for relevant session content
-                logger.info(f"🎯 Boosting Internal_VectorDB: Session content available and query relevant (session: {session_id})")
-            elif has_session_content and pdf_relevance_score == 0:
-                # Session has content but query isn't PDF-relevant
-                logger.info(f"📄 Session {session_id} has content but query not PDF-relevant - allowing content-based routing")
-            elif session_id:
-                # Session provided but has no content
-                logger.warning(f"⚠️  Session {session_id} has no content - routing to external sources")
+                tool_scores['Internal_VectorDB'] += 1
+            elif not has_session_content:
                 tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 2)
-            else:
-                # No session provided - prefer external sources for general queries
-                logger.warning(f"ℹ️  No session provided - routing to external sources")
-                tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 1)
-            
-            # Default scoring if no keywords match
+
+            logger.info("🔍 Routing Analysis for: '%s'", query)
+            logger.info("📊 Tool Scores: %s", tool_scores)
+            logger.info("📁 Session: %s, Has Content: %s", session_id, has_session_content)
+
+            # ── Default when nothing matched ──────────────────────────────
             if max(tool_scores.values()) == 0:
-                # Session-aware default hierarchy
-                if has_session_content:
-                    # Prioritize internal content when user has session-specific documents
-                    tool_scores['Internal_VectorDB'] = 4
+                # General search → Wikipedia; otherwise → Pinecone
+                if query_lower.startswith(('what', 'how', 'why', 'when', 'where', 'who')):
                     tool_scores['Wikipedia_Search'] = 3
-                    tool_scores['ArXiv_Search'] = 2
-                    tool_scores['Tavily_Search'] = 2
-                    tool_scores['PostgreSQL_Diagnosis_Search'] = 1
+                    tool_scores['Pinecone_KB_Search'] = 2
                 else:
-                    # Standard hierarchy when no session content
-                    tool_scores['Wikipedia_Search'] = 3
-                    tool_scores['ArXiv_Search'] = 2
-                    tool_scores['Tavily_Search'] = 2
-                    tool_scores['PostgreSQL_Diagnosis_Search'] = 1
-                    tool_scores['Internal_VectorDB'] = 0
-            
-            # Sort tools by score (descending)
-            ranked_tools = sorted(tool_scores.items(), 
-                                key=lambda x: x[1], 
-                                reverse=True)
-            
-            # Calculate confidence based on score differences
-            top_score = ranked_tools[0][1]
+                    # Medical content without specific signal → Pinecone first
+                    tool_scores['Pinecone_KB_Search'] = 4
+                    tool_scores['Wikipedia_Search']   = 3
+                    tool_scores['ArXiv_Search']       = 2
+
+            # ── Rank tools ────────────────────────────────────────────────
+            ranked_tools = sorted(
+                tool_scores.items(), key=lambda x: x[1], reverse=True
+            )
+
+            top_score    = ranked_tools[0][1]
             second_score = ranked_tools[1][1] if len(ranked_tools) > 1 else 0
-            
+
             if top_score <= 0:
-                confidence = 'low'
-                confidence_score = 0.3
+                confidence, confidence_score = 'low',    0.3
             elif top_score - second_score >= 3:
-                confidence = 'high'
-                confidence_score = 0.9
+                confidence, confidence_score = 'high',   0.9
             elif top_score - second_score >= 1:
-                confidence = 'medium'
-                confidence_score = 0.7
+                confidence, confidence_score = 'medium', 0.7
             else:
-                confidence = 'low'
-                confidence_score = 0.4
-            
-            # Generate reasoning
+                confidence, confidence_score = 'low',    0.4
+
             primary_tool = ranked_tools[0][0]
-            reasoning = self._generate_reasoning(query, primary_tool, tool_scores, 
-                                               has_session_content, has_external_content)
-            
-            # Final routing decision logging
-            logger.info(f"🏆 Final Routing Decision: {primary_tool} (confidence: {confidence})")
-            logger.info(f"💭 Reasoning: {reasoning}")
-            logger.info(f"📋 Ranked Tools: {[tool for tool, score in ranked_tools if score > 0]}")
-            
-            # Return top 1-2 tools as requested
-            selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
-            
+
+            # For medical research, always return ArXiv + Tavily as paired tools
+            if is_medical_research:
+                selected_tools = ['ArXiv_Search', 'Tavily_Search']
+            else:
+                selected_tools = [tool for tool, score in ranked_tools[:2] if score > 0]
+
+            reasoning = self._generate_reasoning(
+                query, primary_tool, tool_scores,
+                has_session_content, has_external_content
+            )
+
+            logger.info("🏆 Routing Decision: %s (confidence: %s)", primary_tool, confidence)
+            logger.info("💭 Reasoning: %s", reasoning)
+            logger.info("📋 Selected Tools: %s", selected_tools)
+
             return {
-                'ranked_tools': selected_tools,
-                'primary_tool': primary_tool,
-                'confidence': confidence,
-                'confidence_score': confidence_score,
-                'reasoning': reasoning,
-                'tool_scores': tool_scores,
-                'session_has_content': has_session_content
+                'ranked_tools':       selected_tools,
+                'primary_tool':       primary_tool,
+                'confidence':         confidence,
+                'confidence_score':   confidence_score,
+                'reasoning':          reasoning,
+                'tool_scores':        tool_scores,
+                'session_has_content': has_session_content,
             }
-            
+
         except Exception as e:
-            logger.error(f"Error in route_tools: {e}")
+            logger.error("Error in route_tools: %s", e)
             return {
-                'ranked_tools': ['Wikipedia_Search'],
-                'primary_tool': 'Wikipedia_Search',
-                'confidence': 'low',
-                'confidence_score': 0.3,
-                'reasoning': f"Error in routing, defaulting to Wikipedia: {str(e)}",
-                'tool_scores': {'Wikipedia_Search': 1, 'ArXiv_Search': 0, 'Internal_VectorDB': 0},
-                'session_has_content': False
+                'ranked_tools':       ['Pinecone_KB_Search'],
+                'primary_tool':       'Pinecone_KB_Search',
+                'confidence':         'low',
+                'confidence_score':   0.3,
+                'reasoning':          f"Error in routing, defaulting to Pinecone KB: {e}",
+                'tool_scores':        {'Pinecone_KB_Search': 1},
+                'session_has_content': False,
             }
-    
+
+
     def _generate_reasoning(self, query: str, primary_tool: str, scores: Dict, 
                           has_local: bool, has_external: bool) -> str:
         """Generate human-readable reasoning for tool selection."""
@@ -998,11 +1055,12 @@ class MedicalQueryRouter:
         query_lower = query.lower()
         reasons = []
         
-        if primary_tool == 'ArXiv_Search':
-            if any(kw in query_lower for kw in ['latest', 'recent', 'research', 'study']):
-                reasons.append("Query contains research-oriented keywords")
-            reasons.append("ArXiv selected for scientific papers and recent findings")
-        
+        if primary_tool in ('ArXiv_Search', 'Tavily_Search'):
+            if any(kw in query_lower for kw in self.medical_research_keywords):
+                reasons.append("Medical research query — routing to ArXiv + Tavily")
+            else:
+                reasons.append("Research/current-information query detected")
+
         elif primary_tool == 'Internal_VectorDB':
             if any(kw in query_lower for kw in ['uploaded', 'my', 'our']):
                 reasons.append("Query references user-specific or uploaded content")
@@ -1010,23 +1068,31 @@ class MedicalQueryRouter:
                 reasons.append("User has uploaded documents available")
             else:
                 reasons.append("WARNING: Internal documents requested but none available")
-        
+
         elif primary_tool == 'Wikipedia_Search':
             if any(kw in query_lower for kw in ['what is', 'define', 'explain']):
                 reasons.append("Query seeks definitions or general explanations")
-            reasons.append("Wikipedia selected for encyclopedic knowledge")
-        
-        # Add confidence reasoning
-        score_diff = scores[primary_tool] - max([s for k, s in scores.items() if k != primary_tool])
+            reasons.append("Wikipedia selected for general knowledge")
+
+        elif primary_tool == 'PostgreSQL_Diagnosis_Search':
+            reasons.append("Patient history / EHR / diagnosis-code query — routing to SQL")
+
+        elif primary_tool == 'Pinecone_KB_Search':
+            reasons.append("Department-specific or organisation-protocol query — routing to PCES KB")
+
+        # Confidence reasoning
+        other_scores = [s for k, s in scores.items() if k != primary_tool]
+        score_diff = scores.get(primary_tool, 0) - (max(other_scores) if other_scores else 0)
         if score_diff >= 3:
-            reasons.append("High confidence in tool selection based on keyword analysis")
+            reasons.append("High confidence in tool selection")
         elif score_diff >= 1:
-            reasons.append("Medium confidence - clear preference but alternatives possible")
+            reasons.append("Medium confidence — clear preference but alternatives considered")
         else:
-            reasons.append("Low confidence - multiple tools could be relevant")
-        
+            reasons.append("Low confidence — multiple tools could be relevant")
+
         return "; ".join(reasons) if reasons else "Default selection based on general query pattern"
-    
+
+
     def _calculate_pdf_relevance(self, query_lower: str) -> int:
         """Calculate relevance score for PDF/Internal content based on query terms."""
         pdf_indicators = [
@@ -1072,10 +1138,13 @@ class MedicalQueryRouter:
     def _calculate_arxiv_relevance(self, query_lower: str) -> int:
         """Calculate relevance score for ArXiv content based on query terms."""
         arxiv_indicators = [
-            'latest research', 'recent', 'new', 'research', 'study', 'paper', 'findings',  
-            'experiment', 'trial', 'investigation', 'preprint', 'published', 'scientific',
-            'evidence', 'current research', 'recent developments', 'newest', 'breakthrough',
-            'cutting-edge', 'novel', 'innovative', 'pulmonology', 'get me the latest'
+            'latest research', 'recent research', 'new research', 'medical research',
+            'research paper', 'research study', 'research findings', 'scientific paper',
+            'clinical trial', 'randomized trial', 'controlled trial',
+            'systematic review', 'meta-analysis', 'peer-reviewed',
+            'published findings', 'preprint', 'journal article',
+            'cutting-edge', 'novel therapy', 'breakthrough treatment',
+            'scientific evidence', 'clinical evidence',
         ]
         
         score = 0 
@@ -1083,8 +1152,8 @@ class MedicalQueryRouter:
             if indicator in query_lower:
                 score += 2
                 
-        # Strong boost for explicit research requests
-        if 'latest' in query_lower and 'research' in query_lower:
+        # Strong boost for explicit medical research
+        if 'medical research' in query_lower or 'clinical trial' in query_lower:
             score += 3
             
         return min(score, 8)  # Cap at 8 points
@@ -1117,20 +1186,29 @@ class MedicalQueryRouter:
         return min(score, 8)  # Cap at 8 points
     
     def _calculate_postgres_relevance(self, query_lower: str) -> int:
-        """Calculate relevance score for PostgreSQL diagnosis search based on query terms."""
+        """Calculate relevance score for PostgreSQL diagnosis search / patient history queries."""
         postgres_indicators = [
+            # Patient history / EHR terms
+            'patient history', 'patient record', 'patient data', 'my patient',
+            'ehr', 'electronic health', 'medical history', 'health record',
+            'case history', 'clinical history', 'admission record',
+            # Legacy DB terms
             'database', 'diagnoses available', 'diagnosis code', 'medical code',
             'p_diagnosis', 'diagnosis table', 'diagnostic code', 'condition code',
             'diagnoses in database', 'diagnosis from database', 'db diagnosis',
             'diagnosis records', 'medical records', 'diagnosis data',
             'diagnostic database', 'hospital database', 'clinical records',
-            'diagnosis system', 'medical database', 'diagnosis lookup'
+            'diagnosis system', 'medical database', 'diagnosis lookup',
         ]
         
         score = 0
         for indicator in postgres_indicators:
             if indicator in query_lower:
-                score += 3  # Higher weight for database-specific queries
+                score += 3
+
+        # Strong boost for patient history (priority 1)
+        if any(p in query_lower for p in ['patient history', 'patient record', 'my patient', 'ehr']):
+            score += 5
                 
         # Strong boost for explicit database requests
         if 'database' in query_lower and any(word in query_lower for word in ['diagnosis', 'diagnoses', 'medical']):
@@ -1146,3 +1224,26 @@ class MedicalQueryRouter:
             score += 4
             
         return min(score, 10)  # Cap at 10 points (higher than others for database queries)
+
+    def _calculate_pinecone_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for Pinecone PCES KB based on query terms."""
+        pinecone_indicators = [
+            'protocol', 'guideline', 'standard of care', 'pces', 'pces kb',
+            'department protocol', 'clinical guideline', 'best practice',
+            'treatment protocol', 'care pathway', 'clinical pathway',
+            'cardiology', 'neurology', 'pulmonology', 'dentist', 'dental',
+            'management of', 'treatment of', 'therapy for',
+        ]
+
+        score = 0
+        for indicator in pinecone_indicators:
+            if indicator in query_lower:
+                score += 2
+
+        # Strong boost for explicit PCES/protocol queries
+        if 'pces' in query_lower:
+            score += 4
+        if any(p in query_lower for p in ['protocol', 'guideline', 'standard of care']):
+            score += 2
+
+        return min(score, 8)

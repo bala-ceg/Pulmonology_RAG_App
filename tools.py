@@ -191,26 +191,22 @@ def _is_generic_content(content: str) -> bool:
 @tool
 def Wikipedia_Search(query: str) -> str:
     """
-    Search Wikipedia for factual, encyclopedic information.
-    
+    Search Wikipedia for general knowledge, definitions, and encyclopedic medical information.
+
     USE this tool when:
-    - User asks for definitions, explanations, or basic facts
-    - Query seeks general knowledge or background information
-    - User wants layman-friendly explanations of medical terms
-    - Need factual context about diseases, conditions, or treatments
-    - Query contains words like "what is", "define", "explain", "tell me about"
-    
+    - User asks for definitions, explanations, or basic facts about any topic
+    - Query is a general research / general knowledge question
+    - Query uses words like "what is", "what are", "define", "explain", "tell me about",
+      "overview", "background", "how does", "why does", "causes of", "history of"
+    - User wants layman-friendly explanations of medical terms or conditions
+    - General search query that does not specifically mention a department protocol,
+      uploaded documents, patient history, or latest research papers
+
     DO NOT use this tool when:
-    - User asks about "latest research", "recent papers", or "new studies"
-    - Query specifically mentions uploaded documents or "my files"
-    - User wants cutting-edge research or experimental findings
-    - Query is about very specific clinical protocols or guidelines
-    
-    Args:
-        query: The search query for Wikipedia
-        
-    Returns:
-        Plain string with concatenated Wikipedia content and sources footer
+    - Query asks for latest medical research / clinical studies (use ArXiv + Tavily)
+    - Query mentions uploaded documents or "my files" (use Internal_VectorDB)
+    - Query is about patient history or EHR records (use PostgreSQL)
+    - Query is about department-specific clinical protocols (use Pinecone_KB_Search)
     """
     try:
         logger.info(f"Wikipedia_Search: Searching for '{query}'")
@@ -239,27 +235,22 @@ def Wikipedia_Search(query: str) -> str:
 @tool
 def ArXiv_Search(query: str) -> str:
     """
-    Search arXiv for recent research papers and scientific studies.
-    
+    Search arXiv for medical research papers and scientific studies.
+    ALWAYS paired with Tavily_Search for medical research queries.
+
     USE this tool when:
-    - User asks about "latest research", "recent papers", or "new studies"
-    - Query contains words like "research", "study", "paper", "findings"
-    - User wants cutting-edge or experimental information
-    - Query asks about "recent developments" or "current research"
-    - Need scientific evidence or research-backed information
-    
+    - Query is about medical research: clinical trials, randomised controlled trials,
+      systematic reviews, meta-analyses, peer-reviewed studies, research papers
+    - User asks for "latest research", "recent study", "new paper", "clinical evidence",
+      "research findings", "evidence-based", "published results"
+    - Query mentions medical journals, preprints, or scientific evidence on a condition
+    - User asks for "breakthrough treatment" or "novel therapy" backed by studies
+
     DO NOT use this tool when:
-    - User asks for basic definitions or general explanations
-    - Query specifically mentions uploaded documents or "my files"
-    - User wants simple, layman-friendly information
-    - Query is about well-established, non-research topics
-    - User asks about clinical protocols from their own documents
-    
-    Args:
-        query: The search query for arXiv papers
-        
-    Returns:
-        Plain string with concatenated arXiv paper content and sources footer
+    - User asks general knowledge / definition questions (use Wikipedia)
+    - Query is about uploaded documents or "my files" (use Internal_VectorDB)
+    - Query is about patient history or EHR records (use PostgreSQL)
+    - Query is about department protocols (use Pinecone_KB_Search)
     """
     try:
         logger.info(f"ArXiv_Search: Searching for '{query}'")
@@ -288,28 +279,23 @@ def ArXiv_Search(query: str) -> str:
 @tool
 def Tavily_Search(query: str) -> str:
     """
-    Search current web information using Tavily API for real-time medical updates.
-    
+    Search current web for real-time medical updates, regulatory news, and breaking guidelines.
+    ALWAYS paired with ArXiv_Search for medical research queries.
+
     USE this tool when:
-    - User asks about "current", "latest", "recent" guidelines or protocols
-    - Query mentions specific organizations like "FDA", "WHO", "CDC", "AMA"
-    - Need real-time regulatory, policy, or breaking medical news
-    - Query contains words like "current guidelines", "latest recommendations", "recent updates"
-    - User asks about "today", "this year", "2024", "2025" or current time references
-    - Need information about drug recalls, safety alerts, or recent approvals
-    
+    - Query is about medical research — use together with ArXiv_Search
+    - User asks about "current", "latest", "recent" guidelines or recommendations
+    - Query mentions organisations: "FDA", "WHO", "CDC", "AMA", "NICE"
+    - Need real-time drug recalls, safety alerts, regulatory approvals, or policy updates
+    - User asks about "today", "this year", "2024", "2025", "2026" events
+    - Query explicitly uses words: "breaking news", "current guidelines", "recent updates",
+      "latest recommendations", "real-time"
+
     DO NOT use this tool when:
-    - User asks for basic definitions or general explanations (use Wikipedia)
-    - Query is about research papers or scientific studies (use ArXiv)
-    - User wants information from uploaded documents (use Internal_VectorDB)
-    - Query is about well-established medical knowledge that doesn't change frequently
-    - User asks historical or background information
-    
-    Args:
-        query: The search query for real-time web information
-        
-    Returns:
-        Plain string with concatenated web search results and sources footer
+    - User asks general knowledge questions (use Wikipedia)
+    - Query is about uploaded documents (use Internal_VectorDB)
+    - Query is about patient history or EHR (use PostgreSQL)
+    - Query is about historical / background information (use Wikipedia)
     """
     try:
         logger.info(f"Tavily_Search: Searching web for '{query}'")
@@ -378,29 +364,21 @@ def Tavily_Search(query: str) -> str:
 @tool
 def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> str:
     """
-    Search internal vector database containing uploaded PDFs and URLs.
-    
+    Search the user's uploaded documents (PDFs, URLs) — Main RAG + Adhoc RAG tool.
+
     USE this tool when:
-    - User specifically mentions "uploaded documents", "my files", or "my PDFs"
-    - Query refers to content that was previously uploaded to the system
+    - User specifically mentions "uploaded documents", "my files", "my PDFs", "my data"
+    - Query refers to content previously uploaded to the system
     - User asks about information "from the documents I uploaded"
     - Query mentions specific document names or content unique to uploaded files
-    - User wants to analyze their own organizational knowledge base
-    
+    - User wants to query their own organisational / session knowledge base
+
     DO NOT use this tool when:
     - User asks general medical questions without referencing uploaded content
-    - Query seeks widely available information that would be in Wikipedia
-    - User asks about latest research that would be in arXiv
+    - Query is about latest medical research (use ArXiv + Tavily)
+    - Query is about general knowledge / definitions (use Wikipedia)
+    - Query is about patient EHR / history records (use PostgreSQL)
     - No documents have been uploaded to the system
-    - Query is about general medical knowledge not specific to uploaded files
-    
-    Args:
-        query: The search query for internal documents
-        session_id: Session identifier for user-specific documents
-        rag_manager: RAG manager instance for accessing vector databases
-        
-    Returns:
-        Plain string with concatenated internal document content and sources footer
     """
     try:
         logger.info(f"Internal_VectorDB: Searching internal KB for '{query}' (session: {session_id})")
@@ -462,28 +440,21 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
 @tool
 def PostgreSQL_Diagnosis_Search(query: str) -> str:
     """
-    Search PostgreSQL database for medical diagnosis information from p_diagnosis table.
-    
+    Search PostgreSQL EHR database for patient history, diagnosis records, and medical codes.
+
     USE this tool when:
-    - User asks about specific medical diagnoses or conditions
-    - Query mentions diagnosis codes (ICD, medical codes)
-    - User wants information about available diagnoses in the database
-    - Query seeks specific diagnostic information from hospital/clinical records
-    - User asks "what diagnoses are available" or similar database queries
-    - Query contains words like "diagnosis", "diagnostic", "medical code", "condition code"
-    
+    - Query is about PATIENT HISTORY - "patient history", "patient record", "my patient",
+      "case history", "clinical history", "admission record", "EHR", "electronic health record"
+    - User asks about specific diagnosis codes (ICD codes, D1xxx codes)
+    - User wants data from hospital/clinical records in the database
+    - Query contains "medical records", "diagnosis records", "hospital database",
+      "p_diagnosis", "diagnosis code", "condition code", "medical code"
+
     DO NOT use this tool when:
-    - User asks for general medical information (use Wikipedia instead)
-    - Query is about treatment protocols or procedures
-    - User wants research papers or studies (use ArXiv instead) 
-    - Query is about current medical news (use Tavily instead)
-    - User asks about uploaded documents (use Internal_VectorDB instead)
-    
-    Args:
-        query: The search query for diagnosis information
-        
-    Returns:
-        Plain string with diagnosis information from database and sources footer
+    - User asks general medical knowledge questions (use Wikipedia or Pinecone)
+    - Query is about medical research papers (use ArXiv + Tavily)
+    - Query is about uploaded documents (use Internal_VectorDB)
+    - Query is about department protocols (use Pinecone_KB_Search)
     """
     try:
         logger.info(f"PostgreSQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
@@ -538,29 +509,25 @@ except ImportError:
 @tool
 def Pinecone_KB_Search(query: str) -> str:
     """
-    Search the PCES organisation Pinecone knowledge base for clinical guidelines,
-    department protocols, and curated medical content.
+    Search the PCES Pinecone organisation knowledge base - the DEFAULT tool for
+    clinical / medical queries that are not general knowledge, research papers,
+    patient history, or uploaded documents.
 
     USE this tool when:
-    - Query explicitly asks about PCES knowledge base or organisation protocols
-    - Query is department-specific and mentions neurology, cardiology, general medicine,
-      dentist / dental, or pulmonology
-    - User asks about clinical guidelines, best practices, or standard of care
-    - Query contains words like "protocol", "guideline", "standard of care", "PCES KB"
+    - Query is a general medical search that does NOT match Wikipedia (general knowledge),
+      ArXiv/Tavily (medical research), PostgreSQL (patient history), or Internal_VectorDB (uploads)
+    - User asks about clinical guidelines, protocols, treatment pathways, or standard of care
+    - Query is department-specific: cardiology, neurology, pulmonology, dentist/dental,
+      general medicine / general_medicine
+    - Query contains words like "protocol", "guideline", "standard of care", "PCES",
+      "management of", "treatment of", "therapy for", "care pathway", "best practice"
     - You need authoritative clinical content beyond what Wikipedia offers
-    - Query relates to department-level curated medical content
 
     DO NOT use this tool when:
-    - User asks for the latest research papers (use ArXiv instead)
-    - Query is about breaking news or real-time updates (use Tavily instead)
-    - User refers to their own uploaded documents (use Internal_VectorDB instead)
-    - Query asks for diagnosis codes from hospital records (use PostgreSQL instead)
-
-    Args:
-        query: The clinical or medical query to search
-
-    Returns:
-        Plain string with relevant clinical content and Sources footer
+    - User asks general knowledge / definition questions (use Wikipedia)
+    - Query is about medical research papers (use ArXiv + Tavily)
+    - Query is about patient EHR / history (use PostgreSQL)
+    - User refers to their own uploaded documents (use Internal_VectorDB)
     """
     if not _PINECONE_KB_AVAILABLE:
         return "Pinecone KB is not configured. Please set PINECONE_API_KEY in the environment."
