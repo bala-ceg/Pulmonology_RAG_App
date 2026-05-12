@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from typing import List, Dict, Optional, Tuple
 from langchain_core.documents import Document
 from dotenv import load_dotenv
@@ -35,6 +36,36 @@ import numpy as np
 from utils.error_handlers import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Threading-based timeout (safe in Flask/WSGI — same pattern as enhanced_tools)
+# ---------------------------------------------------------------------------
+
+def _run_with_timeout(func, args=(), kwargs=None, timeout_seconds: int = 15):
+    """Run *func* in a daemon thread and return its result within *timeout_seconds*.
+
+    Raises ``TimeoutError`` if the function doesn't finish in time.
+    """
+    if kwargs is None:
+        kwargs = {}
+    result_holder: List = [TimeoutError(f"Operation timed out after {timeout_seconds}s")]
+
+    def _target():
+        try:
+            result_holder[0] = func(*args, **kwargs)
+        except Exception as exc:
+            result_holder[0] = exc
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+
+    if thread.is_alive():
+        raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+    if isinstance(result_holder[0], Exception):
+        raise result_holder[0]
+    return result_holder[0]
 
 
 def _join_docs(docs: List[Document], max_chars: int = 1200) -> str:
@@ -211,9 +242,12 @@ def Wikipedia_Search(query: str) -> str:
     try:
         logger.info(f"Wikipedia_Search: Searching for '{query}'")
         
-        # Load Wikipedia documents
-        loader = WikipediaLoader(query=query, load_max_docs=3)
-        docs = loader.load()
+        # Load Wikipedia documents — 15 s timeout prevents indefinite blocking
+        loader = WikipediaLoader(query=query, load_max_docs=2)
+        try:
+            docs = _run_with_timeout(loader.load, timeout_seconds=15)
+        except TimeoutError:
+            return f"Wikipedia search timed out for '{query}'. Please try a shorter or more specific query."
         
         if not docs:
             return f"No Wikipedia articles found for '{query}'. The topic might be too specific or use different terminology."
@@ -255,9 +289,12 @@ def ArXiv_Search(query: str) -> str:
     try:
         logger.info(f"ArXiv_Search: Searching for '{query}'")
         
-        # Load arXiv documents
-        loader = ArxivLoader(query=query, load_max_docs=3)
-        docs = loader.load()
+        # Load arXiv documents — 15 s timeout prevents indefinite blocking
+        loader = ArxivLoader(query=query, load_max_docs=2)
+        try:
+            docs = _run_with_timeout(loader.load, timeout_seconds=15)
+        except TimeoutError:
+            return f"arXiv search timed out for '{query}'. Please try again with different terms."
         
         if not docs:
             return f"No arXiv papers found for '{query}'. Try using more specific scientific terminology or check if the topic has published research."
@@ -391,14 +428,13 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         if session_id:
             session_kb_loaded = rag_manager.load_session_vector_db(session_id)
             if not session_kb_loaded:
-                logger.warning(f"Internal_VectorDB: No session vector DB found for {session_id} - triggering Wikipedia fallback")
-                return f"No documents found for your session ({session_id}). Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
+                logger.warning(f"Internal_VectorDB: No session vector DB found for {session_id}")
+                return "No documents found for your session — no uploaded content available."
         
         # Check if we have local content
         if not rag_manager.kb_local or rag_manager.get_local_content_count() == 0:
-            logger.warning("Internal_VectorDB: No local content found - triggering Wikipedia fallback")
-            # Fallback to Wikipedia for better user experience
-            return Wikipedia_Search.invoke(query)
+            logger.warning("Internal_VectorDB: No local content found")
+            return "No relevant content found — no documents have been uploaded to the knowledge base."
         
         # Create retriever for local knowledge base
         retriever = rag_manager.kb_local.as_retriever(
@@ -410,8 +446,8 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         docs = guarded_retrieve(query, retriever, similarity_threshold=0.35)
         
         if docs is None:
-            logger.info("Internal_VectorDB: Guard triggered - falling back to Wikipedia")
-            return f"No relevant information found in uploaded documents. Searching general knowledge instead...\n\n{Wikipedia_Search.invoke(query)}"
+            logger.info("Internal_VectorDB: Guard triggered — no sufficiently similar docs")
+            return "No relevant content found in uploaded documents."
         
         # Add source type metadata for consistency
         for doc in docs:
@@ -423,10 +459,10 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
         
         logger.info(f"Internal_VectorDB: Found {len(docs)} relevant chunks, returned {len(result)} characters")
         
-        # If result is too generic or empty, fallback to Wikipedia
+        # If result is too generic or empty, let cascade continue
         if len(result) < 100 or _is_generic_content(result):
-            logger.info("Internal_VectorDB: Result too generic - falling back to Wikipedia")
-            return f"Limited relevant information in uploaded documents. Supplementing with general knowledge...\n\n{Wikipedia_Search.invoke(query)}"
+            logger.info("Internal_VectorDB: Result too generic — returning empty for cascade")
+            return "No relevant content found in uploaded documents."
         
         return result
         
@@ -467,11 +503,34 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
         
         # Search the diagnosis database
         result = enhanced_postgres_search(query)
-        
+
+        # Guard: if the result dict carries no real EHR content, return a clean
+        # empty signal so the cascade can continue to the next source.
+        content_text = (result.get('summary') or result.get('content') or '').strip()
+        _no_data_signals = (
+            'no medical diagnosis data',
+            'no diagnosis information',
+            'no data found',
+            'not found in the database',
+            'no records found',
+            'no current web information found',
+            'no relevant current information found',
+        )
+        if not content_text or any(sig in content_text.lower() for sig in _no_data_signals):
+            return "No medical diagnosis data found in the database."
+
         # Use the enhanced formatting system like other tools
         try:
             from enhanced_tools import format_enhanced_response
-            return format_enhanced_response(result)
+            formatted = format_enhanced_response(result)
+            # Strip HTML tags for cascade text-matching; if nothing left, treat as empty
+            import re as _re_pg
+            plain = _re_pg.sub(r'<[^>]+>', ' ', formatted).strip()
+            if not plain or any(sig in plain.lower() for sig in _no_data_signals):
+                return "No medical diagnosis data found in the database."
+            # Append a plain-text Sources footer that citations extractor can parse
+            sources_line = "\n\nSources:\n- Source: PostgreSQL EHR Database"
+            return formatted + sources_line
         except ImportError:
             # Fallback to simple formatting if enhanced_tools not available
             response_parts = []
@@ -484,17 +543,16 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
             if result.get('content'):
                 response_parts.append(f"**Detailed Information:**\n{result['content']}\n")
             
-            # Add sources
-            if result.get('citations'):
-                response_parts.append(f"**Sources:** {result['citations']}")
+            # Always include a citations line — use result citations or a default label
+            citation_text = result.get('citations') or "PostgreSQL EHR Database (pces_ehr_ccm)"
+            response_parts.append(f"**Sources:** {citation_text}")
             
             return "\n".join(response_parts) if response_parts else 'No diagnosis information found.'
         
     except Exception as e:
         error_msg = f"Error searching diagnosis database: {str(e)}"
         logger.error(error_msg)
-        # Fallback to Wikipedia for general medical information
-        return f"{error_msg}\n\nFalling back to general medical knowledge...\n\n{Wikipedia_Search.invoke(query)}"
+        return "No medical diagnosis data found in the database."
 
 
 # ---------------------------------------------------------------------------
@@ -533,36 +591,80 @@ def Pinecone_KB_Search(query: str) -> str:
         return "Pinecone KB is not configured. Please set PINECONE_API_KEY in the environment."
 
     try:
-        logger.info("Pinecone_KB_Search: querying for '%s'", query)
+        # Normalize query: replace lookalike Cyrillic/Unicode characters with ASCII
+        # (e.g. Cyrillic Ѕ→S, Т→T so "ЅVТ" becomes "SVT" for matching and embedding)
+        import unicodedata as _ud
+        _cyrillic_map = str.maketrans("ЅТАЕКМНОРСВХаеокрс", "STAEKMHOPCBXaeokpc")
+        query_normalized = query.translate(_cyrillic_map)
+        # Further normalize to ASCII where possible
+        query_normalized = _ud.normalize("NFKD", query_normalized)
+        query_normalized = "".join(c for c in query_normalized if ord(c) < 128 or not _ud.combining(c))
+        logger.info("Pinecone_KB_Search: querying for '%s' (normalized: '%s')", query, query_normalized)
         kb = get_pinecone_kb()
 
         # Try to detect a department from the query to narrow the namespace
         namespace: Optional[str] = None
-        q_lower = query.lower()
+        q_lower = query_normalized.lower()
         dept_keywords = {
-            "cardiology":       ["cardio", "heart", "cardiac", "atrial", "coronary", "ecg", "arrhythmia"],
-            "neurology":        ["neuro", "brain", "stroke", "seizure", "epilep", "parkinson", "migraine"],
-            "general_medicine": ["diabetes", "hypertension", "anaemia", "anemia", "kidney", "thyroid", "pneumonia"],
-            "dentist":          ["dental", "tooth", "teeth", "gum", "periodontal", "caries", "tmj", "oral"],
-            "pulmonology":      ["lung", "pulmon", "asthma", "copd", "respiratory", "breath", "inhaler", "sleep apnea"],
+            "cardiology":       ["cardio", "heart", "cardiac", "atrial", "coronary", "ecg", "arrhythmia",
+                                 "svt", "tachycardia", "bradycardia", "fibrillation", "flutter",
+                                 "diltiazem", "verapamil", "adenosine", "amiodarone", "digoxin",
+                                 "palpitation", "supraventricular", "ventricular", "ablation",
+                                 "hypertension", "blood pressure", "statin", "antiplatelet",
+                                 "rehabilitat", "revascular"],
+            "neurology":        ["neuro", "brain", "stroke", "seizure", "epilep", "parkinson", "migraine",
+                                 "dementia", "alzheimer", "multiple sclerosis", " ms ", "tpa", "alteplase",
+                                 "levetiracetam", "lamotrigine", "valproate", "natalizumab"],
+            "general_medicine": ["diabetes", "anaemia", "anemia", "kidney", "thyroid", "pneumonia",
+                                 "metformin", "insulin", "glp-1", "sglt", "ferrous", "levothyroxine",
+                                 "ckd", "haemoglobin", "hemoglobin", "curb-65"],
+            "dentist":          ["dental", "tooth", "teeth", "gum", "periodontal", "caries", "tmj", "oral",
+                                 "fluoride", "periodontitis", "abscess", "extraction", "root canal"],
+            "pulmonology":      ["lung", "pulmon", "asthma", "copd", "respiratory", "breath", "inhaler",
+                                 "sleep apnea", "apnoea", "obstructive sleep", "ics", "saba", "laba", "lama",
+                                 "nintedanib", "pirfenidone", "cpap", "embolism", "interstitial lung"],
         }
         for dept, kws in dept_keywords.items():
             if any(kw in q_lower for kw in kws):
                 namespace = dept
                 break
 
-        results = kb.query(query, namespace=namespace, top_k=5)
+        results = kb.query(query_normalized, namespace=namespace, top_k=5)
 
         if not results:
             return "No relevant content found in the PCES Pinecone knowledge base."
 
-        # Format results with sources footer (mirrors _join_docs pattern)
-        parts: List[str] = []
-        sources: List[str] = []
+        # ── Similarity threshold ────────────────────────────────────────────
+        # Only use results with a meaningful cosine similarity score.
+        # Results below the threshold are too loosely related to the query
+        # and would produce hallucinated or generic answers.
+        SIMILARITY_THRESHOLD = 0.60   # lowered from 0.70 — sample data may score 0.62-0.68
+        qualified = [r for r in results if r.get("score", 0.0) >= SIMILARITY_THRESHOLD]
+
+        logger.info(
+            "Pinecone: %d total results, %d above threshold %.2f (top score: %.3f)",
+            len(results),
+            len(qualified),
+            SIMILARITY_THRESHOLD,
+            results[0].get("score", 0.0) if results else 0.0,
+        )
+
+        if not qualified:
+            top_score = results[0].get("score", 0.0) if results else 0.0
+            return (
+                f"No relevant content found in the PCES Pinecone knowledge base "
+                f"(best similarity score {top_score:.3f} is below threshold {SIMILARITY_THRESHOLD})."
+            )
+
+        # Format results with detailed per-result citations + verbatim document excerpts
+        answer_parts: List[str] = []        # combined text for LLM answer
+        source_doc_blocks: List[str] = []   # per-result "Source Document" blocks shown to user
+        citation_lines: List[str] = []
+        seen_citations: set = set()
         total_chars = 0
         max_chars = 1200
 
-        for r in results:
+        for idx, r in enumerate(qualified, start=1):
             txt = r.get("text", "").strip()
             if not txt:
                 continue
@@ -570,17 +672,63 @@ def Pinecone_KB_Search(query: str) -> str:
             if remaining <= 0:
                 break
             chunk = txt[:remaining]
-            parts.append(chunk)
+            answer_parts.append(chunk)
             total_chars += len(chunk)
 
-            ns  = r.get("namespace", "")
-            src = r.get("metadata", {}).get("source", f"PCES_{ns}")
-            if src and src not in sources:
-                sources.append(src)
+            # ── Build metadata ───────────────────────────────────────────
+            meta      = r.get("metadata", {})
+            ns        = r.get("namespace", meta.get("namespace", ""))
+            score     = r.get("score", 0.0)
+            src       = meta.get("source") or meta.get("filename") or (f"PCES_{ns}" if ns else "PCES Pinecone KB")
+            title     = meta.get("title", "")
+            page      = meta.get("page") or meta.get("page_number")
+            url       = meta.get("url") or meta.get("link") or ""
+            dept      = (meta.get("department") or ns or "").replace("_", " ").title()
+            doc_id    = meta.get("id") or meta.get("doc_id") or ""
 
-        body = "\n\n".join(parts)
-        if sources:
-            body += f"\n\nSources: {', '.join(sources)}"
+            # ── Citation line ────────────────────────────────────────────
+            cite_parts = []
+            if dept:
+                cite_parts.append(f"Dept: {dept}")
+            if title and title != src:
+                cite_parts.append(f'"{title}"')
+            cite_parts.append(f"Source: {src}")
+            if page is not None:
+                cite_parts.append(f"Page {page}")
+            cite_parts.append(f"Relevance: {score * 100:.0f}%")
+            citation = f"[PCES Pinecone KB] {' | '.join(cite_parts)}"
+            if citation not in seen_citations:
+                seen_citations.add(citation)
+                citation_lines.append(citation)
+
+            # ── Source Document block (verbatim excerpt) ─────────────────
+            doc_header_parts = [f"Document {idx}"]
+            if dept:
+                doc_header_parts.append(f"Dept: {dept}")
+            if title and title != src:
+                doc_header_parts.append(f'Title: "{title}"')
+            doc_header_parts.append(f"Source: {src}")
+            if page is not None:
+                doc_header_parts.append(f"Page: {page}")
+            if url:
+                doc_header_parts.append(f"URL: {url}")
+            if doc_id:
+                doc_header_parts.append(f"ID: {doc_id}")
+            doc_header_parts.append(f"Relevance: {score * 100:.0f}%")
+
+            doc_block = (
+                f"[Source Document {idx}]\n"
+                f"{'  |  '.join(doc_header_parts)}\n"
+                f"Excerpt:\n"
+                f'  "{chunk}"\n'
+            )
+            source_doc_blocks.append(doc_block)
+
+        body = "\n\n".join(answer_parts)
+        if source_doc_blocks:
+            body += "\n\n---\nSource Documents (exact retrieved excerpts):\n\n" + "\n".join(source_doc_blocks)
+        if citation_lines:
+            body += "\n\nSources:\n" + "\n".join(f"- {c}" for c in citation_lines)
         return body
 
     except Exception as exc:

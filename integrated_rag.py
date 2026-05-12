@@ -22,12 +22,78 @@ except ImportError:
         return func
 
 # Import our custom modules
+from config import Config
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
 from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 from utils.error_handlers import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Citation extraction helper
+# ---------------------------------------------------------------------------
+
+# Map tool names to human-readable source labels used when no inline citation
+# is found in the response text.
+_TOOL_SOURCE_LABELS: Dict[str, str] = {
+    'Pinecone_KB_Search':          'PCES Pinecone Knowledge Base',
+    'Internal_VectorDB':           'Uploaded Documents (Adhoc VectorDB)',
+    'PostgreSQL_Diagnosis_Search': 'PostgreSQL EHR Database',
+    'ArXiv_Search':                'arXiv Research Papers',
+    'Tavily_Search':               'Web Search (Tavily)',
+    'Wikipedia_Search':            'Wikipedia',
+}
+
+
+def _extract_citations_from_response(response: str, primary_tool: str) -> List[str]:
+    """
+    Extract citation strings from the final Sources: bullet list in a tool response.
+
+    Handles two formats:
+    1. Multi-line bullet list produced by Pinecone_KB_Search:
+         Sources:
+         - [PCES Pinecone KB] Dept: Cardiology | Source: file.pdf | Relevance: 82%
+    2. Single-line comma-separated produced by _join_docs / other tools:
+         Sources: Wikipedia, arXiv:2301.12345
+
+    The Source Documents (verbatim excerpts) block that precedes Sources: is
+    intentionally ignored — only the structured Sources: bullet list is parsed.
+    Falls back to a labelled source so citations are never empty.
+    """
+    import re as _re
+
+    citations: List[str] = []
+
+    if response:
+        # Remove the "Source Documents" excerpt block before parsing, so that
+        # "Source: ..." lines inside the excerpt are not captured as citations.
+        clean = _re.sub(
+            r'---\s*\nSource Documents.*?(?=\nSources?:|\Z)',
+            '',
+            response,
+            flags=_re.IGNORECASE | _re.DOTALL,
+        )
+
+        # Now find the final Sources: block
+        sources_match = _re.search(
+            r'Sources?:\s*(.+?)(?:\n\n|\Z)', clean, _re.IGNORECASE | _re.DOTALL
+        )
+        if sources_match:
+            raw = sources_match.group(1).strip()
+            for entry in _re.split(r'\n', raw):
+                entry = _re.sub(r'^[\-\*\•]\s*', '', entry).strip()
+                if entry:
+                    citations.append(entry)
+
+    # Always include a fallback label so citations are never empty
+    label = _TOOL_SOURCE_LABELS.get(primary_tool, primary_tool)
+    fallback = f"Source: {label}"
+    if not any(label in c for c in citations):
+        citations.append(fallback)
+
+    return citations
 
 
 class IntegratedMedicalRAG:
@@ -47,13 +113,19 @@ class IntegratedMedicalRAG:
         self.openai_api_key = openai_api_key
         self.base_vector_path = base_vector_path
         
-        # Initialize OpenAI components
-        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+        # Initialize OpenAI components — use Config so the same model/key/base_url
+        # configured in .env is used here, matching llm_service.py everywhere else.
+        self.embeddings = OpenAIEmbeddings(
+            api_key=Config.OPENAI_API_KEY,
+            base_url=Config.OPENAI_BASE_URL,
+            model=Config.EMBEDDING_MODEL_NAME,
+        )
         self.llm = ChatOpenAI(
-            openai_api_key=openai_api_key,
-            model="gpt-4o-mini",
-            temperature=0.1,
-            request_timeout=30  # Add 30 second timeout
+            api_key=Config.OPENAI_API_KEY,
+            base_url=Config.OPENAI_BASE_URL,
+            model_name=Config.LLM_MODEL_NAME,
+            temperature=Config.LLM_DEFAULT_TEMPERATURE,
+            request_timeout=Config.LLM_REQUEST_TIMEOUT,
         )
         
         # Initialize RAG manager
@@ -105,7 +177,7 @@ class IntegratedMedicalRAG:
                     llm=self.llm,
                     agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
                     verbose=True,
-                    max_iterations=3,
+                    max_iterations=2,
                     early_stopping_method="generate",
                 )
 
@@ -119,77 +191,249 @@ class IntegratedMedicalRAG:
             logger.error(f"Error initializing agent: {e}")
             return None
     
+    # -----------------------------------------------------------------------
+    # Cascade order: Pinecone → Internal_VectorDB → PostgreSQL →
+    #                ArXiv → Tavily → Wikipedia
+    # -----------------------------------------------------------------------
+    _CASCADE_ORDER: List[str] = [
+        'Pinecone_KB_Search',
+        'Internal_VectorDB',
+        'PostgreSQL_Diagnosis_Search',
+        'ArXiv_Search',
+        'Tavily_Search',
+        'Wikipedia_Search',
+    ]
+
+    # Regex patterns for secrets that must NEVER appear in any response or prompt
+    import re as _re_module
+    _SECRET_PATTERNS: tuple = (
+        # Pinecone API keys  (pcsk_...)
+        _re_module.compile(r'pcsk_[A-Za-z0-9_]{10,}', _re_module.IGNORECASE),
+        # OpenAI keys  (sk-...)
+        _re_module.compile(r'sk-[A-Za-z0-9_\-]{20,}', _re_module.IGNORECASE),
+        # Generic API key assignment in env-file format  KEY="value" or KEY=value
+        _re_module.compile(
+            r'(?:PINECONE|OPENAI|TAVILY|AZURE|APIFY|HUGGINGFACE)_[A-Z_]+=[\"\']?[A-Za-z0-9_\-\.]{8,}[\"\']?',
+            _re_module.IGNORECASE,
+        ),
+        # Any bearer / token pattern
+        _re_module.compile(r'Bearer\s+[A-Za-z0-9_\-\.]{20,}', _re_module.IGNORECASE),
+    )
+
+    @classmethod
+    def _sanitize_secrets(cls, text: str) -> str:
+        """Strip API keys and secrets from any text before it reaches the LLM or user."""
+        if not text:
+            return text
+        for pat in cls._SECRET_PATTERNS:
+            text = pat.sub('[REDACTED]', text)
+        return text
+
+    # Responses that count as "no content found" — trigger next tool in cascade
+    _EMPTY_SIGNALS: tuple = (
+        # Generic empties
+        "no relevant content found",
+        "no results found",
+        "not configured",
+        "search error",
+        "i don't know",
+        "i cannot",
+        "no information",
+        "could not find",
+        "unable to find",
+        # Pinecone
+        "below threshold",
+        "is below threshold",
+        # PostgreSQL
+        "no diagnosis information found",
+        "no medical diagnosis data",
+        "not found in the database",
+        "no data found",
+        # Internal VectorDB
+        "no documents found for your session",
+        "not available. please ensure",
+        "limited relevant information in uploaded",
+        # Tool internal fallbacks — these mean the tool had no real answer
+        "falling back to general knowledge",
+        "falling back to general medical knowledge",
+        "searching general knowledge instead",
+        "supplementing with general knowledge",
+        "no relevant information found in uploaded",
+    )
+
+    def _is_empty_result(self, text: str, tool_name: str = "") -> bool:
+        """Return True when a tool response contains no useful content."""
+        if not text or not text.strip():
+            return True
+        lc = text.lower()
+        if any(sig in lc for sig in self._EMPTY_SIGNALS):
+            return True
+        # If a non-Wikipedia/non-Tavily tool silently fell back to Wikipedia
+        # (its response contains wikipedia.org links), treat as empty so the
+        # cascade routes properly to Wikipedia at the end.
+        if tool_name not in ("Wikipedia_Search", "Tavily_Search", "ArXiv_Search"):
+            if "wikipedia.org" in lc or "en.wikipedia.org" in lc:
+                logger.info(
+                    "Tool '%s' silently returned Wikipedia content — treating as empty for cascade",
+                    tool_name,
+                )
+                return True
+        return False
+
+    def _call_tool(self, tool_name: str, question: str, session_id: str) -> str:
+        """Execute a single tool by name and return its sanitized raw output."""
+        tool_map = {t.name: t for t in self.tools}
+        tool_fn = tool_map.get(tool_name)
+        if tool_fn is None:
+            return ""
+        try:
+            if tool_name == 'Internal_VectorDB':
+                result = Internal_VectorDB(question, session_id, self.rag_manager)
+            else:
+                result = tool_fn.func(question)
+            # Sanitize secrets BEFORE any further processing or LLM calls
+            return self._sanitize_secrets(result or "")
+        except Exception as exc:
+            logger.warning("Tool %s raised %s", tool_name, exc)
+            return ""
+
+    def _format_answer(self, raw_content: str, question: str, tool_name: str) -> str:
+        """
+        Use the LLM to produce a focused Q&A answer strictly from *raw_content*.
+        If the LLM call fails, return the raw content directly.
+        """
+        prompt = (
+            f"You are a medical Q&A assistant. Answer the following question "
+            f"using ONLY the content provided below. Do NOT add information not "
+            f"present in the content. Be concise and specific.\n\n"
+            f"Question: {question}\n\n"
+            f"Content:\n{raw_content}\n\n"
+            f"Answer:"
+        )
+        try:
+            result = self.llm.invoke(prompt)
+            answer = result.content if hasattr(result, "content") else str(result)
+            return answer.strip()
+        except Exception as exc:
+            logger.warning("LLM formatting failed (%s) — returning raw content", exc)
+            return raw_content
+
     def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
         """
-        Process a medical query using intelligent tool routing.
-        
-        Args:
-            question: User's medical question
-            session_id: Session identifier for user-specific content
-            patient_context: Patient problem context for medical consultation
-            
-        Returns:
-            Dictionary with response, routing info, and metadata
+        Cascade search: always try Pinecone_KB_Search first.
+        Only move to the next tool if the current one returns no content.
+
+        Cascade order:
+          1. Pinecone_KB_Search   (org KB — always first)
+          2. Internal_VectorDB    (uploaded / adhoc docs)
+          3. PostgreSQL_Diagnosis_Search
+          4. ArXiv_Search
+          5. Tavily_Search
+          6. Wikipedia_Search     (last resort)
         """
         try:
-            # Step 1: Route the query to appropriate tools
-            routing_result = self.router.route_tools(question, session_id)
-            
-            logger.info(f"Routing Decision: {routing_result['primary_tool']}")
-            logger.info(f"Confidence: {routing_result['confidence']}")
-            logger.info(f"Reasoning: {routing_result['reasoning']}")
-            
-            # Step 2: Use only the top 1-2 tools as suggested
-            allowed_tools = routing_result['ranked_tools'][:2]
-            
-            # Step 3: Execute query with selected tools
-            if self.agent:
-                # Temporarily restrict agent to selected tools
-                original_tools = self.agent.tools
-                
-                # Debug: Print tool matching
-                logger.info(f"Allowed tools: {allowed_tools}")
-                logger.info(f"Available tool names: {[tool.name for tool in self.tools]}")
-                
-                # Fixed tool filtering logic - exact name match (case insensitive)
-                self.agent.tools = [tool for tool in self.tools 
-                                  if any(tool.name.lower() == allowed_tool.lower() 
-                                        for allowed_tool in allowed_tools)]
-                
-                logger.info(f"Filtered tools: {[tool.name for tool in self.agent.tools]}")
-                
-                try:
-                    response = self.agent.run(question)
-                finally:
-                    # Restore original tools
-                    self.agent.tools = original_tools
-            else:
-                # Fallback: Direct tool execution
-                response = self._direct_tool_execution(question, allowed_tools[0], session_id, patient_context)
-            
-            # Step 4: Generate routing explanation
-            explanation = get_routing_explanation(
-                routing_result['primary_tool'],
-                routing_result['confidence'],
-                len(allowed_tools) > 1
+            tool_used: str = "Wikipedia_Search"
+            raw_content: str = ""
+
+            for tool_name in self._CASCADE_ORDER:
+                logger.info("Cascade: trying tool '%s'", tool_name)
+                result = self._call_tool(tool_name, question, session_id or "guest")
+                if not self._is_empty_result(result, tool_name):
+                    raw_content = result
+                    tool_used = tool_name
+                    logger.info("Cascade: '%s' returned content (%d chars)", tool_name, len(result))
+                    break
+                logger.info("Cascade: '%s' returned nothing — trying next", tool_name)
+
+            if not raw_content:
+                raw_content = "No relevant information found across all knowledge sources."
+
+            # Sanitize raw_content before sending to LLM — prevent secrets from
+            # leaking even if _call_tool result was not fully sanitized
+            raw_content = self._sanitize_secrets(raw_content)
+
+            # Extract Source Documents block BEFORE sending raw_content to LLM
+            # so it is kept as structured data and NOT embedded in the answer text.
+            import re as _re
+            source_documents: list = []  # list of dicts, one per retrieved doc
+            sd_block_match = _re.search(
+                r'---\s*\nSource Documents.*?(?=\nSources?:|\Z)',
+                raw_content,
+                _re.IGNORECASE | _re.DOTALL,
             )
-            
+            if sd_block_match:
+                sd_block_text = sd_block_match.group(0)
+                # Parse each [Source Document N] entry
+                for doc_match in _re.finditer(
+                    r'\[Source Document \d+\]\s*\n'
+                    r'([^\n]+)\n'          # header line: "Doc N | Dept | Source | Relevance"
+                    r'Excerpt:\s*\n'
+                    r'\s*"([^"]+)"',       # verbatim text in quotes
+                    sd_block_text,
+                    _re.IGNORECASE | _re.DOTALL,
+                ):
+                    header = doc_match.group(1).strip()
+                    excerpt = doc_match.group(2).strip()
+                    # Parse header fields (pipe-separated)
+                    fields = {
+                        p.split(':', 1)[0].strip(): p.split(':', 1)[1].strip()
+                        for p in header.split('  |  ')
+                        if ':' in p
+                    }
+                    source_documents.append({
+                        'header': header,
+                        'excerpt': excerpt,
+                        'fields': fields,
+                    })
+
+            # Format a focused Q&A answer from the raw tool content.
+            # The LLM only sees the medical text, NOT the Source Documents block.
+            content_for_llm = _re.sub(
+                r'---\s*\nSource Documents.*',
+                '',
+                raw_content,
+                flags=_re.IGNORECASE | _re.DOTALL,
+            ).strip()
+            answer = self._format_answer(content_for_llm, question, tool_used)
+
+            # The answer must NOT contain the Source Documents block — strip it
+            # if the LLM happened to reproduce it.
+            answer = _re.sub(
+                r'---\s*\nSource Documents.*',
+                '',
+                answer,
+                flags=_re.IGNORECASE | _re.DOTALL,
+            ).strip()
+
+            citations = _extract_citations_from_response(raw_content, tool_used)
+            # Final sanitization pass — ensure no secrets reach the user
+            answer = self._sanitize_secrets(answer)
+            citations = [self._sanitize_secrets(c) for c in citations]
+
             return {
-                'answer': response,
-                'routing_info': routing_result,
-                'explanation': explanation,
-                'tools_used': allowed_tools,
-                'session_id': session_id
+                'answer': answer,
+                'routing_info': {
+                    'primary_tool': tool_used,
+                    'confidence': 'high',
+                    'reasoning': f'Cascade search — first tool with results: {tool_used}',
+                    'ranked_tools': self._CASCADE_ORDER,
+                },
+                'explanation': f"Answer sourced from: {tool_used}",
+                'tools_used': [tool_used],
+                'session_id': session_id,
+                'citations': citations,
+                'source_documents': source_documents,
             }
-            
+
         except Exception as e:
-            logger.error(f"Error processing query: {e}")
+            logger.error("Error in cascade query: %s", e)
             return {
-                'answer': f"I encountered an error processing your question: {str(e)}. Please try rephrasing your question.",
+                'answer': f"I encountered an error processing your question: {str(e)}.",
                 'routing_info': {'error': str(e)},
                 'explanation': "Error occurred during processing",
                 'tools_used': ['Error'],
-                'session_id': session_id
+                'session_id': session_id,
+                'citations': [],
             }
     
     def _direct_tool_execution(self, question: str, tool_name: str, session_id: str = None, patient_context: str = None) -> str:

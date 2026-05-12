@@ -790,14 +790,28 @@ class MedicalQueryRouter:
         self.rag_manager = rag_manager
         
         # ----------------------------------------------------------------
-        # Routing rules (user-defined priority order):
-        #   1. Patient history      → PostgreSQL_Diagnosis_Search
-        #   2. Medical research     → ArXiv_Search + Tavily_Search (both)
-        #   3. General research     → Wikipedia_Search
-        #   4. General search       → Wikipedia_Search (else Pinecone_KB_Search)
-        #   5. Uploaded docs        → Internal_VectorDB
-        #   Default fallback        → Pinecone_KB_Search (PCES org KB)
+        # Base priority order (applied before keyword signals):
+        #   1. Pinecone_KB_Search        (PCES org KB — highest default priority)
+        #   2. Internal_VectorDB         (user-uploaded / adhoc documents)
+        #   3. PostgreSQL_Diagnosis_Search (patient EHR / diagnosis DB)
+        #   4. ArXiv_Search              (medical research papers)
+        #   5. Tavily_Search             (real-time web information)
+        #   6. Wikipedia_Search          (general knowledge — last resort)
+        #
+        # Strong keyword signals add on top of base scores and can override
+        # the default order (e.g., "patient history" +5 pushes Postgres above
+        # Pinecone; "latest research" +6 pushes ArXiv above Pinecone).
         # ----------------------------------------------------------------
+
+        # Base priority scores (initialised once; keyword boosts are additive)
+        self.BASE_PRIORITY_SCORES: Dict[str, int] = {
+            'Pinecone_KB_Search':          6,
+            'Internal_VectorDB':           5,
+            'PostgreSQL_Diagnosis_Search': 4,
+            'ArXiv_Search':                3,
+            'Tavily_Search':               2,
+            'Wikipedia_Search':            1,
+        }
 
         # Patient history / EHR → PostgreSQL
         self.postgres_keywords = [
@@ -874,28 +888,25 @@ class MedicalQueryRouter:
     
     def route_tools(self, query: str, session_id: str = None) -> Dict:
         """
-        Route query to appropriate tools using priority-based rules:
+        Route query to appropriate tools using base-priority scores plus keyword boosts.
 
-        Priority order:
-          1. Patient history / EHR  → PostgreSQL_Diagnosis_Search
-          2. Medical research       → ArXiv_Search + Tavily_Search  (both)
-          3. General knowledge      → Wikipedia_Search
-          4. Uploaded documents     → Internal_VectorDB
-          5. General search         → Wikipedia_Search (else Pinecone_KB_Search)
-          Default fallback          → Pinecone_KB_Search (PCES org KB)
+        Base priority order (default when no strong signals):
+          1. Pinecone_KB_Search          (PCES org KB)
+          2. Internal_VectorDB           (user-uploaded adhoc documents)
+          3. PostgreSQL_Diagnosis_Search (patient EHR / diagnosis data)
+          4. ArXiv_Search                (medical research papers)
+          5. Tavily_Search               (real-time web)
+          6. Wikipedia_Search            (general knowledge — last resort)
+
+        Keyword signals are additive on top of base scores and can override
+        the default order for queries with clear intent (e.g., "patient history"
+        +5 overrides Pinecone's base advantage).
         """
         try:
             query_lower = query.lower()
 
-            # Initialise scores for every tool
-            tool_scores = {
-                'Wikipedia_Search':           0,
-                'ArXiv_Search':               0,
-                'Tavily_Search':              0,
-                'Internal_VectorDB':          0,
-                'PostgreSQL_Diagnosis_Search': 0,
-                'Pinecone_KB_Search':         0,
-            }
+            # Initialise scores from base priority — Pinecone leads by default
+            tool_scores = dict(self.BASE_PRIORITY_SCORES)
 
             # ── PRIORITY 1: Patient history → PostgreSQL ─────────────────
             for kw in self.postgres_keywords:
@@ -940,6 +951,18 @@ class MedicalQueryRouter:
                 if kw in query_lower:
                     tool_scores['Internal_VectorDB'] += 3
 
+            # Strong override: user explicitly asking about their own uploaded content.
+            # Phrases like "my uploaded …", "what does my … say", "from my pdf/document"
+            # are unambiguous — give a hard boost so Pinecone/Wiki cannot win.
+            _explicit_upload_signals = [
+                'my uploaded', 'what does my', 'from my pdf', 'in my pdf',
+                'from my document', 'in my document', 'my file says',
+                'tell me from my', 'based on my',
+            ]
+            _has_explicit_upload = any(p in query_lower for p in _explicit_upload_signals)
+            if _has_explicit_upload:
+                tool_scores['Internal_VectorDB'] += 12  # Hard override
+
             # ── PRIORITY 5: PCES KB → Pinecone ───────────────────────────
             for kw in self.pinecone_keywords:
                 if kw in query_lower:
@@ -979,27 +1002,16 @@ class MedicalQueryRouter:
             tool_scores['PostgreSQL_Diagnosis_Search'] += postgres_relevance_score
             tool_scores['Pinecone_KB_Search']         += pinecone_relevance_score
 
-            # Session content boost
+            # Session content boost / penalty
+            # Skip penalty if the user explicitly asked about their own uploaded content
             if has_session_content and pdf_relevance_score > 0:
                 tool_scores['Internal_VectorDB'] += 1
-            elif not has_session_content:
+            elif not has_session_content and not _has_explicit_upload:
                 tool_scores['Internal_VectorDB'] = max(0, tool_scores['Internal_VectorDB'] - 2)
 
             logger.info("🔍 Routing Analysis for: '%s'", query)
             logger.info("📊 Tool Scores: %s", tool_scores)
             logger.info("📁 Session: %s, Has Content: %s", session_id, has_session_content)
-
-            # ── Default when nothing matched ──────────────────────────────
-            if max(tool_scores.values()) == 0:
-                # General search → Wikipedia; otherwise → Pinecone
-                if query_lower.startswith(('what', 'how', 'why', 'when', 'where', 'who')):
-                    tool_scores['Wikipedia_Search'] = 3
-                    tool_scores['Pinecone_KB_Search'] = 2
-                else:
-                    # Medical content without specific signal → Pinecone first
-                    tool_scores['Pinecone_KB_Search'] = 4
-                    tool_scores['Wikipedia_Search']   = 3
-                    tool_scores['ArXiv_Search']       = 2
 
             # ── Rank tools ────────────────────────────────────────────────
             ranked_tools = sorted(
@@ -1104,13 +1116,20 @@ class MedicalQueryRouter:
 
 
     def _calculate_pdf_relevance(self, query_lower: str) -> int:
-        """Calculate relevance score for PDF/Internal content based on query terms."""
+        """Calculate relevance score for PDF/Internal content based on query terms.
+
+        Only terms that are genuinely specific to uploaded research documents are
+        included.  Generic medical words (treatment, clinical, diagnosis, and…)
+        are intentionally excluded to prevent false boosts for clinical questions
+        that should route to Pinecone instead.
+        """
         pdf_indicators = [
+            # Statistical / research-paper specific terms
             'rdw', 'red blood cell distribution', 'mortality', 'copd', 'patients', 'study',
-            'analysis', 'cohort', 'clinical', 'medical research', 'hospital', 'treatment',
-            'diagnosis', 'outcome', 'statistical', 'regression', 'correlation', 'odds ratio',
-            'confidence interval', 'p value', 'significant', 'investigation', 'findings',
-            'results', 'conclusion', 'method', 'participant', 'baseline', 'characteristic'
+            'analysis', 'cohort', 'medical research', 'statistical', 'regression',
+            'correlation', 'odds ratio', 'confidence interval', 'p value', 'significant',
+            'investigation', 'findings', 'results', 'conclusion', 'participant',
+            'baseline', 'characteristic',
         ]
         
         score = 0
@@ -1118,10 +1137,13 @@ class MedicalQueryRouter:
             if indicator in query_lower:
                 score += 2
         
-        # Additional scoring for medical/research patterns
+        # Boost for explicit research/statistical relationship queries
         if any(pattern in query_lower for pattern in ['what was the relationship', 'increasing', 'levels']):
             score += 3
-        if any(pattern in query_lower for pattern in ['between', 'and', 'association']):
+        # Require "between … and" context (not bare "and") to avoid matching every sentence
+        if 'between' in query_lower and 'and' in query_lower:
+            score += 2
+        if 'association' in query_lower:
             score += 2
             
         return min(score, 8)  # Cap at 8 points
@@ -1238,11 +1260,19 @@ class MedicalQueryRouter:
     def _calculate_pinecone_relevance(self, query_lower: str) -> int:
         """Calculate relevance score for Pinecone PCES KB based on query terms."""
         pinecone_indicators = [
+            # Explicit PCES/protocol terms
             'protocol', 'guideline', 'standard of care', 'pces', 'pces kb',
             'department protocol', 'clinical guideline', 'best practice',
             'treatment protocol', 'care pathway', 'clinical pathway',
+            # Department names
             'cardiology', 'neurology', 'pulmonology', 'dentist', 'dental',
+            'general medicine', 'general_medicine',
+            # Clinical intent patterns
             'management of', 'treatment of', 'therapy for',
+            # Clinical decision / drug-choice patterns
+            'treatment of choice', 'drug of choice', 'first line', 'first-line',
+            'second line', 'second-line', 'accepted as', 'indicated for',
+            'termination of', 'conversion of',
         ]
 
         score = 0
@@ -1256,4 +1286,12 @@ class MedicalQueryRouter:
         if any(p in query_lower for p in ['protocol', 'guideline', 'standard of care']):
             score += 2
 
-        return min(score, 8)
+        # Boost for clinical drug/treatment choice questions
+        # (e.g. "is X accepted as treatment for Y?", "drug of choice for Y")
+        if any(p in query_lower for p in [
+            'treatment of choice', 'drug of choice', 'first line', 'first-line',
+            'accepted as', 'indicated for', 'termination of',
+        ]):
+            score += 3
+
+        return min(score, 10)
