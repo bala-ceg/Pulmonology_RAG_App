@@ -104,6 +104,16 @@ try:
 except ImportError:
     SCOPE_GUARD_AVAILABLE = False
 
+try:
+    from services.dept_lora_service import DeptLoRAService
+    _dept_lora_service = DeptLoRAService()
+    DEPT_LORA_AVAILABLE = True
+    logger.info("Department LoRA Service loaded")
+except Exception as _dla_err:
+    _dept_lora_service = None
+    DEPT_LORA_AVAILABLE = False
+    logger.warning("Department LoRA Service unavailable: %s", _dla_err)
+
 from psycopg import sql
 
 # ---------------------------------------------------------------------------
@@ -282,6 +292,8 @@ app.config.update(
         "DISCIPLINES_CONFIG": None,
         "LAST_SESSION_FOLDER": None,
         "MEDICAL_ROUTER": None,
+        "DEPT_LORA_SERVICE": _dept_lora_service,
+        "ACTIVE_DEPARTMENT": "",
     }
 )
 
@@ -330,6 +342,28 @@ try:
     from routes.documents import _can_upload_more_files as can_upload_more_files
 except Exception:
     pass
+
+# ---------------------------------------------------------------------------
+# Phase 2-A: auto-initialize MedicalQueryRouter at startup
+# Without this, the hybrid router is skipped on every query until a dept
+# is explicitly selected. With it, keyword/TF-IDF routing works immediately.
+# ---------------------------------------------------------------------------
+try:
+    from routes.disciplines import MedicalQueryRouter as _MQR, load_disciplines_config as _ldc
+    _startup_llm = app.config.get("LLM_INSTANCE")
+    if _startup_llm and app.config.get("MEDICAL_ROUTER") is None:
+        _startup_cfg = _ldc()
+        app.config["DISCIPLINES_CONFIG"] = _startup_cfg
+        app.config["MEDICAL_ROUTER"] = _MQR(_startup_llm, _startup_cfg)
+        import logging as _log
+        _log.getLogger(__name__).info(
+            "[PHASE2A] MedicalQueryRouter auto-initialized at startup"
+        )
+except Exception as _mqr_err:
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "[PHASE2A] MedicalQueryRouter startup init failed (non-fatal): %s", _mqr_err
+    )
 
 # ---------------------------------------------------------------------------
 # Entry point

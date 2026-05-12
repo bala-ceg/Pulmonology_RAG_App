@@ -273,17 +273,24 @@ class PineconeMedicalKB:
     # Sample-data seeder
     # ------------------------------------------------------------------
 
-    def seed_sample_data(self) -> Dict[str, int]:
+    def seed_sample_data(self, force_reseed: bool = False) -> Dict[str, int]:
         """
         Populate each department namespace with a handful of sample medical
         documents so that test queries return real results.
-        Only seeds if the namespace is currently empty.
+        Only seeds if the namespace is currently empty (unless force_reseed=True).
         """
         sample_data: Dict[str, List[str]] = {
             "cardiology": [
                 "Atrial fibrillation (AF) is the most common sustained cardiac arrhythmia, "
                 "characterised by irregular and often rapid heart rate. Management includes "
                 "rate control, rhythm control, and anticoagulation to prevent stroke.",
+                "Supraventricular tachycardia (SVT) is a rapid heart rhythm arising above "
+                "the bundle of His. Acute termination: vagal manoeuvres are first-line. "
+                "Adenosine 6 mg IV is the drug of choice for acute SVT. Diltiazem and "
+                "verapamil (non-dihydropyridine calcium channel blockers) are accepted as "
+                "treatments of choice for termination of SVT when adenosine fails or is "
+                "contraindicated. Beta-blockers are an alternative. DC cardioversion is "
+                "used for haemodynamically unstable patients.",
                 "Heart failure is a clinical syndrome in which the heart is unable to pump "
                 "sufficient blood to meet the body's needs. Treatment includes ACE inhibitors, "
                 "beta-blockers, and diuretics.",
@@ -315,6 +322,11 @@ class PineconeMedicalKB:
                 "and natalizumab reduce relapse rates and delay disability progression.",
             ],
             "general_medicine": [
+                "Type 2 diabetes mellitus symptoms include polyuria (frequent urination), "
+                "polydipsia (excessive thirst), polyphagia (increased hunger), unexplained "
+                "weight loss, fatigue, blurred vision, slow-healing wounds, and recurrent "
+                "infections. Many patients are asymptomatic at diagnosis. Risk factors include "
+                "obesity, family history, sedentary lifestyle, and age over 45.",
                 "Type 2 diabetes mellitus management includes lifestyle modification, metformin "
                 "as first-line pharmacotherapy, and addition of GLP-1 agonists or SGLT-2 "
                 "inhibitors for cardiovascular benefit in high-risk patients.",
@@ -372,10 +384,13 @@ class PineconeMedicalKB:
 
         for dept, docs in sample_data.items():
             existing_count = stats_before.get(dept, 0)
-            if existing_count > 0:
+            if existing_count > 0 and not force_reseed:
                 logger.info("Namespace '%s' already has %d vectors — skipping seed.", dept, existing_count)
                 seeded[dept] = 0
                 continue
+
+            if existing_count > 0 and force_reseed:
+                logger.info("Namespace '%s' has %d vectors — force re-seeding.", dept, existing_count)
 
             meta = [{"department": dept, "source": f"PCES_{dept}_sample", "source_type": "pinecone"}
                     for _ in docs]

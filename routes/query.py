@@ -30,6 +30,7 @@ import glob as glob_module
 import os
 import re
 import threading
+import time as _time
 import traceback
 from datetime import datetime
 
@@ -44,6 +45,54 @@ from utils.error_handlers import get_logger, handle_route_errors
 logger = get_logger(__name__)
 
 query_bp = Blueprint("query_bp", __name__)
+
+# ---------------------------------------------------------------------------
+# Phase 2-A trace collector
+# ---------------------------------------------------------------------------
+# Each request gets its own list of trace events stored in thread-local storage.
+# Call _trace(icon, step, detail) anywhere in the request to append an entry.
+# At response time, flush_trace() drains and returns the list.
+
+_tls = threading.local()
+
+# DEV_MODE: read once at import time; can be toggled by restarting the server.
+_DEV_MODE: bool = os.getenv("DEV_MODE", "false").strip().lower() == "true"
+
+
+def _trace(icon: str, step: str, detail: str = "") -> None:
+    """Append a structured trace event to the current request's trace list.
+
+    Events are only collected when DEV_MODE=true; in production the list stays
+    empty so no trace data is ever sent to the client.
+    """
+    if not _DEV_MODE:
+        return
+    if not hasattr(_tls, "events"):
+        _tls.events = []
+    _tls.events.append({
+        "t": round(_time.monotonic() * 1000),   # ms since process start (for delta calc in JS)
+        "icon": icon,
+        "step": step,
+        "detail": detail,
+    })
+    logger.info("[PHASE2A] %s %s  %s", icon, step, detail)
+
+
+def _flush_trace() -> list:
+    """Return and clear the trace list for this request."""
+    events = getattr(_tls, "events", [])
+    _tls.events = []
+    # Compute elapsed_ms relative to first event
+    if events:
+        t0 = events[0]["t"]
+        for e in events:
+            e["elapsed_ms"] = e["t"] - t0
+    return events
+
+
+def _dev_mode_enabled() -> bool:
+    """Expose DEV_MODE flag to response payloads so the UI can render its toggle."""
+    return _DEV_MODE
 
 # ---------------------------------------------------------------------------
 # Optional SME queue auto-insert
@@ -604,6 +653,126 @@ def handle_query():
     medical_router = _get_medical_router()
 
     try:
+        # ─────────────────────────────────────────────────────────────────────
+        # PHASE 2-A  –  01 Hybrid Router  →  02 Load Dept LoRA
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── TRACE: request entry ──────────────────────────────────────────────
+        _trace("►", "ENTRY",
+               f"query: {user_input[:100]!r} | doctor_dept: {doctor_department or '(none)'} | app_dept: {current_app.config.get('ACTIVE_DEPARTMENT') or '(none)'}")
+
+        # Resolve active department: prefer request payload, then app-level store
+        active_dept = (
+            doctor_department.strip()
+            or current_app.config.get("ACTIVE_DEPARTMENT", "")
+        )
+
+        # Build available-dept list for trace: all known depts + flag which have LoRA models
+        try:
+            from sft_experiment_manager import DEPARTMENTS as _DEPTS, get_best_model_path_for_dept as _gmp
+            _all_depts = list(_DEPTS.keys())
+            _depts_with_model = [d for d in _all_depts if _gmp(d)]
+        except Exception:
+            _all_depts = []
+            _depts_with_model = []
+
+        _dept_summary = (
+            f"resolved → {active_dept or '(none)'} | "
+            f"available ({len(_all_depts)}): {', '.join(_all_depts) or 'none'} | "
+            f"LoRA models ({len(_depts_with_model)}): {', '.join(_depts_with_model) or 'none'}"
+        )
+        _trace("🏥", "01-SELECTS-DEPT", _dept_summary)
+
+        hybrid_route: dict = {}
+        if medical_router is None:
+            _trace("⚠️", "01-HYBRID-ROUTER", "SKIPPED — MedicalRouter not initialised")
+        else:
+            try:
+                hybrid_route = medical_router.route_with_dept(query_input, active_dept or None)
+                _trace("🔀", "01-HYBRID-ROUTER",
+                       f"dept={hybrid_route.get('primary_dept')!r} | "
+                       f"use_lora={hybrid_route.get('use_dept_lora')} | "
+                       f"kb={hybrid_route.get('kb_routing')} | "
+                       f"conf={hybrid_route.get('confidence', 0):.0%} | "
+                       f"tfidf={hybrid_route.get('tfidf_score', 0):.3f} | "
+                       f"method={hybrid_route.get('routing_method')}")
+            except Exception as _hr_exc:
+                _trace("❌", "01-HYBRID-ROUTER", f"ERROR (non-fatal): {_hr_exc}")
+
+        # Minimum confidence required to invoke LoRA — low-confidence keyword hits
+        # (e.g. 4%) should fall straight through to the faster RAG pipeline.
+        _MIN_LORA_CONFIDENCE = float(os.environ.get("DEPT_LORA_MIN_CONFIDENCE", "0.60"))
+        # Master switch: set DEPT_LORA_INFERENCE_ENABLED=false to skip phi-2 inference
+        # (MPS/CPU inference blocks the request thread). The router still identifies dept.
+        _LORA_INFERENCE_ENABLED = os.environ.get("DEPT_LORA_INFERENCE_ENABLED", "false").strip().lower() == "true"
+        _route_conf = hybrid_route.get("confidence", 0.0)
+        _use_lora = (
+            _LORA_INFERENCE_ENABLED
+            and hybrid_route.get("use_dept_lora")
+            and _route_conf >= _MIN_LORA_CONFIDENCE
+        )
+
+        if not hybrid_route.get("use_dept_lora"):
+            _trace("⏭️", "02-LOAD-DEPT-LORA",
+                   f"SKIPPED — no trained LoRA model for dept={hybrid_route.get('primary_dept') or active_dept or '(none)'!r}")
+        elif not _LORA_INFERENCE_ENABLED:
+            _trace("🔒", "02-LOAD-DEPT-LORA",
+                   f"READY (inference disabled) — dept={hybrid_route.get('primary_dept')!r} model available "
+                   f"| set DEPT_LORA_INFERENCE_ENABLED=true to enable")
+        elif not _use_lora:
+            _trace("⏭️", "02-LOAD-DEPT-LORA",
+                   f"SKIPPED — confidence {_route_conf:.0%} < threshold {_MIN_LORA_CONFIDENCE:.0%} "
+                   f"(dept={hybrid_route.get('primary_dept')!r}) → falling back to RAG")
+        elif hybrid_route.get("primary_dept"):
+            dept_lora = current_app.config.get("DEPT_LORA_SERVICE")
+            if dept_lora is None:
+                _trace("⚠️", "02-LOAD-DEPT-LORA", "SKIPPED — DEPT_LORA_SERVICE not registered")
+            else:
+                _trace("🧠", "02-LOAD-DEPT-LORA",
+                       f"invoking LoRA for dept={hybrid_route['primary_dept']!r} | query_len={len(query_input)}")
+                try:
+                    lora_result = dept_lora.generate(
+                        hybrid_route["primary_dept"], query_input
+                    )
+                    if lora_result.get("success") and lora_result.get("response"):
+                        _trace("✅", "02-LOAD-DEPT-LORA",
+                               f"SUCCESS | device={lora_result.get('device','?')} | "
+                               f"tokens={lora_result.get('tokens_generated','?')} | "
+                               f"elapsed={lora_result.get('elapsed_seconds','?')}s")
+                        lora_response = lora_result["response"]
+                        dept_label = hybrid_route["primary_dept"]
+                        lora_footer = (
+                            f"\n\n**Dept Model:** {dept_label} fine-tuned LoRA "
+                            f"| Device: {lora_result.get('device', 'cpu')} "
+                            f"| Tokens: {lora_result.get('tokens_generated', '?')} "
+                            f"| {lora_result.get('elapsed_seconds', '?')}s"
+                        )
+                        final_msg = guard_disclaimer + _clean_response_text(lora_response) + lora_footer
+                        _trace("◄", "RESPONSE_VIA_LORA",
+                               f"dept={dept_label!r} | response_len={len(lora_response)}")
+                        _queue_sme_entry(user_input, final_msg, doctor_name, doctor_department)
+                        return jsonify({
+                            "response": True,
+                            "message": final_msg,
+                            "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
+                            "routing_details": {
+                                "disciplines": [hybrid_route.get("primary_dept", "")],
+                                "sources": [],
+                                "method": "dept_lora",
+                                "confidence": f"{hybrid_route.get('confidence', 0):.0%}",
+                                "dept_lora_used": True,
+                                "kb_routing": hybrid_route.get("kb_routing", ""),
+                            },
+                        })
+                    else:
+                        _trace("⏭️", "02-LOAD-DEPT-LORA",
+                               f"generate failed → falling through | error={lora_result.get('error','unknown')}")
+                except Exception as _lora_exc:
+                    _trace("❌", "02-LOAD-DEPT-LORA", f"EXCEPTION (falling through): {_lora_exc}")
+
+        _trace("➡️", "RAG-PIPELINE", "continuing to standard RAG pipeline")
+
         # 🎯 INTEGRATED MEDICAL RAG SYSTEM WITH INTELLIGENT TOOL ROUTING
         if integrated_rag_system is not None:
             logger.info("Using Integrated Medical RAG System with Tool Routing")
@@ -621,14 +790,101 @@ def handle_query():
                 answer = integrated_result["answer"]
                 routing_info = integrated_result.get("routing_info", {})
                 tools_used = integrated_result.get("tools_used", [])
-                _queue_sme_entry(user_input, answer, doctor_name, doctor_department)
+                citations = integrated_result.get("citations", [])
+                source_documents = integrated_result.get("source_documents", [])
+
+                # Last-resort secret sanitizer — strip any API keys that may have
+                # leaked through from tool outputs before sending to the user
+                import re as _re_secrets
+                _SECRET_RE = [
+                    _re_secrets.compile(r'pcsk_[A-Za-z0-9_]{10,}', _re_secrets.I),
+                    _re_secrets.compile(r'sk-[A-Za-z0-9_\-]{20,}', _re_secrets.I),
+                    _re_secrets.compile(
+                        r'(?:PINECONE|OPENAI|TAVILY|AZURE|APIFY|HUGGINGFACE)_[A-Z_]+=[\"\']?[A-Za-z0-9_\-\.]{8,}[\"\']?',
+                        _re_secrets.I,
+                    ),
+                ]
+                def _scrub(text: str) -> str:
+                    for pat in _SECRET_RE:
+                        text = pat.sub('[REDACTED]', text)
+                    return text
+
+                answer = _scrub(answer)
+                citations = [_scrub(c) for c in citations]
+
+                # ── Build the citations + source-documents section as HTML ──────────
+                # The frontend checks for '<div' to decide whether to render as HTML
+                # vs markdown. We use HTML so the source document cards render cleanly.
+                cit_html_parts = ['<strong>Citations:</strong><ul style="margin:6px 0 0 16px;padding:0;">']
+                for c in citations:
+                    cit_html_parts.append(f'<li style="margin-bottom:4px;">{c}</li>')
+                cit_html_parts.append('</ul>')
+
+                if source_documents:
+                    cit_html_parts.append(
+                        '<hr style="margin:12px 0;border:none;border-top:1px solid #dee2e6;">'
+                        '<strong style="color:#495057;">&#128196; Source Documents</strong>'
+                    )
+                    for i, doc in enumerate(source_documents, start=1):
+                        fields = doc.get('fields', {})
+                        dept    = fields.get('Dept', '')
+                        src     = fields.get('Source', fields.get('Document', ''))
+                        rel     = fields.get('Relevance', '')
+                        page    = fields.get('Page', '')
+                        url     = fields.get('URL', '')
+                        excerpt = doc.get('excerpt', '')
+
+                        # Badge colour by relevance
+                        try:
+                            rel_val = int(rel.rstrip('%'))
+                            badge_color = '#28a745' if rel_val >= 70 else '#fd7e14' if rel_val >= 50 else '#6c757d'
+                        except Exception:
+                            badge_color = '#6c757d'
+
+                        meta_items = []
+                        if dept:
+                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">🏥 {dept}</span>')
+                        if src:
+                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">📄 {src}</span>')
+                        if page:
+                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">p.{page}</span>')
+                        if rel:
+                            meta_items.append(f'<span style="background:{badge_color};color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">{rel} match</span>')
+                        if url:
+                            meta_items.append(f'<a href="{url}" target="_blank" style="font-size:11px;">🔗 Link</a>')
+
+                        meta_html = ' &nbsp;'.join(meta_items)
+                        excerpt_html = excerpt.replace('<', '&lt;').replace('>', '&gt;')
+
+                        cit_html_parts.append(
+                            f'<div style="margin-top:10px;border:1px solid #dee2e6;border-radius:6px;'
+                            f'padding:10px 12px;background:#f8f9fa;">'
+                            f'<div style="font-size:12px;font-weight:600;color:#343a40;margin-bottom:6px;">'
+                            f'Document {i} &nbsp; {meta_html}</div>'
+                            f'<div style="font-size:13px;color:#495057;line-height:1.6;'
+                            f'border-left:3px solid #007bff;padding-left:10px;'
+                            f'background:#fff;border-radius:0 4px 4px 0;padding:8px 10px;">'
+                            f'&ldquo;{excerpt_html}&rdquo;</div>'
+                            f'</div>'
+                        )
+
+                citations_html = ''.join(cit_html_parts)
+
+                # Main message body: disclaimer + clean answer (plain text/markdown only)
+                message_body = guard_disclaimer + answer
+                # Append the HTML citations block — frontend detects '<div' and renders as HTML
+                message_body += "\n\n**Citations:**\n" + citations_html
+
+                _queue_sme_entry(user_input, message_body, doctor_name, doctor_department)
                 return jsonify(
                     {
                         "response": True,
-                        "message": guard_disclaimer + answer,
+                        "message": message_body,
+                        "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
                         "routing_details": {
                             "disciplines": tools_used,
-                            "sources": routing_info.get("sources", []),
+                            "sources": citations,
                             "method": routing_info.get("confidence", "medium"),
                             "confidence": routing_info.get("confidence", "medium"),
                         },
@@ -673,6 +929,8 @@ def handle_query():
                     {
                         "response": True,
                         "message": guard_disclaimer + final_response,
+                        "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
                         "routing_details": {
                             "disciplines": routing_info.get("sources_queried", []),
                             "sources": rag_result["citations"],
@@ -820,6 +1078,8 @@ def handle_query():
                 {
                     "response": True,
                     "message": guard_disclaimer + final_response,
+                    "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
                     "routing_details": {
                         "disciplines": relevant_disciplines,
                         "sources": all_citations,
@@ -856,6 +1116,8 @@ def handle_query():
                 {
                     "response": True,
                     "message": _clean_response_text(fallback_response),
+                    "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
                     "routing_details": {
                         "disciplines": relevant_disciplines,
                         "sources": [],
@@ -871,6 +1133,8 @@ def handle_query():
             {
                 "response": False,
                 "message": f"An error occurred while processing your query: {exc}",
+                "trace": _flush_trace(),
+                            "dev_mode": _dev_mode_enabled(),
             }
         )
 

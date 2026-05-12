@@ -2172,6 +2172,11 @@
                         <h1>PATIENT CARE ENHANCED SERVICES - PCES</h1>
                     </div>
                     <div class="header-right" style="position:relative;">
+                        <!-- DEV_MODE trace toggle — injected by JS when server confirms dev_mode=true -->
+                        <span id="dev-trace-toggle" style="display:none;margin-right:12px;cursor:pointer;font-size:12px;
+                            background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:3px 9px;
+                            color:#856404;user-select:none;" title="Developer mode: toggle routing traces"
+                            onclick="toggleDevTraces()">🛠 Traces <span id="dev-trace-state">ON</span></span>
                         <span id="logged-in-doctor" style="display:none;" onclick="toggleDoctorPopup(event)">🩺 <span id="logged-in-doctor-name"></span></span>
                         <div class="doctor-popup" id="doctor-popup">
                             <div class="doctor-popup-row">
@@ -2600,7 +2605,41 @@
         let messageCount = 0;
         const MAX_MESSAGES = 20;
 
-        function addMessage(role, content) {
+        // ── Dev-mode trace toggle ────────────────────────────────────────────
+        // Preference stored in localStorage so it survives page refresh.
+        // The server must confirm dev_mode=true before the toggle becomes visible.
+        let _devModeAvailable = false;
+
+        function _initDevModeFromResponse(devMode) {
+            if (!devMode) return;                          // server says DEV_MODE=false
+            _devModeAvailable = true;
+            const btn = document.getElementById('dev-trace-toggle');
+            if (btn) btn.style.display = 'inline-block';
+            // Restore saved preference (default: ON when dev mode is available)
+            if (localStorage.getItem('pces_traces_enabled') === null) {
+                localStorage.setItem('pces_traces_enabled', 'true');
+            }
+            _syncDevTraceLabel();
+        }
+
+        function _tracesEnabled() {
+            return _devModeAvailable && localStorage.getItem('pces_traces_enabled') !== 'false';
+        }
+
+        function _syncDevTraceLabel() {
+            const el = document.getElementById('dev-trace-state');
+            if (el) el.textContent = _tracesEnabled() ? 'ON' : 'OFF';
+            const btn = document.getElementById('dev-trace-toggle');
+            if (btn) btn.style.opacity = _tracesEnabled() ? '1' : '0.55';
+        }
+
+        function toggleDevTraces() {
+            const next = !_tracesEnabled();
+            localStorage.setItem('pces_traces_enabled', next ? 'true' : 'false');
+            _syncDevTraceLabel();
+        }
+
+        function addMessage(role, content, traceEvents) {
             const messageDiv = document.createElement("div");
             messageDiv.className = `message ${role === 'user' ? 'user-message' : 'ai-message'}`;
 
@@ -2610,13 +2649,15 @@
             // For AI responses, check if there are citations and handle them separately
             if (role === 'ai') {
                 // Split content into main response and citations
-                const citationsIndex = content.indexOf('**Citations:**');
+                const CITATIONS_MARKER = '**Citations:**';
+                const citationsIndex = content.indexOf(CITATIONS_MARKER);
                 let mainContent = content;
                 let citationsContent = '';
                 
                 if (citationsIndex !== -1) {
                     mainContent = content.substring(0, citationsIndex).trim();
-                    citationsContent = content.substring(citationsIndex).trim();
+                    // Strip the marker itself so it doesn't render twice alongside the HTML heading
+                    citationsContent = content.substring(citationsIndex + CITATIONS_MARKER.length).trim();
                 }
                 
                 // Check if content is HTML or markdown
@@ -2644,6 +2685,11 @@
                 } else {
                     messageDiv.appendChild(messageContentDiv);
                 }
+
+                // ── Phase 2-A trace panel ─────────────────────────────────────
+                if (traceEvents && traceEvents.length > 0 && _tracesEnabled()) {
+                    messageDiv.appendChild(buildTracePanel(traceEvents));
+                }
             } else {
                 // For user messages, just use text content
                 messageContentDiv.textContent = content.trim();
@@ -2663,6 +2709,82 @@
             messages.push({ role, content });
             messageCount++;
             updateButtonsState();
+        }
+
+        /**
+         * Build a collapsible "🔍 Routing Trace" panel from the trace event array
+         * returned by the server in data.trace.
+         */
+        function buildTracePanel(events) {
+            const panelId = 'trace-' + Date.now();
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-top:8px;';
+
+            // Toggle button
+            const btn = document.createElement('button');
+            btn.style.cssText = `
+                background:none;border:1px solid #ced4da;border-radius:4px;
+                padding:3px 10px;font-size:11px;color:#6c757d;cursor:pointer;
+                display:flex;align-items:center;gap:4px;
+            `;
+            btn.innerHTML = '🔍 <span>Show Routing Trace</span> <span style="font-size:9px;">▼</span>';
+            btn.setAttribute('aria-expanded', 'false');
+
+            // Panel body
+            const panel = document.createElement('div');
+            panel.id = panelId;
+            panel.style.cssText = `
+                display:none;margin-top:6px;padding:8px 10px;
+                background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;
+                font-family:monospace;font-size:11.5px;line-height:1.7;
+            `;
+
+            // Build rows
+            const t0 = events[0].t;
+            events.forEach((ev, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:8px;padding:2px 0;border-bottom:1px solid #e9ecef;';
+
+                const elapsed = ev.elapsed_ms !== undefined ? ev.elapsed_ms : (ev.t - t0);
+                const ts = document.createElement('span');
+                ts.style.cssText = 'color:#adb5bd;min-width:52px;text-align:right;flex-shrink:0;';
+                ts.textContent = `+${elapsed}ms`;
+
+                const icon = document.createElement('span');
+                icon.style.cssText = 'min-width:20px;text-align:center;flex-shrink:0;';
+                icon.textContent = ev.icon || '·';
+
+                const step = document.createElement('span');
+                step.style.cssText = 'color:#495057;font-weight:600;min-width:160px;flex-shrink:0;';
+                step.textContent = ev.step;
+
+                const detail = document.createElement('span');
+                detail.style.cssText = 'color:#6c757d;word-break:break-word;';
+                detail.textContent = ev.detail || '';
+
+                row.append(ts, icon, step, detail);
+                panel.appendChild(row);
+            });
+
+            // Toggle logic
+            btn.addEventListener('click', () => {
+                const expanded = btn.getAttribute('aria-expanded') === 'true';
+                if (expanded) {
+                    panel.style.display = 'none';
+                    btn.setAttribute('aria-expanded', 'false');
+                    btn.querySelector('span:first-of-type').textContent = 'Show Routing Trace';
+                    btn.querySelector('span:last-of-type').textContent = '▼';
+                } else {
+                    panel.style.display = 'block';
+                    btn.setAttribute('aria-expanded', 'true');
+                    btn.querySelector('span:first-of-type').textContent = 'Hide Routing Trace';
+                    btn.querySelector('span:last-of-type').textContent = '▲';
+                }
+            });
+
+            wrapper.appendChild(btn);
+            wrapper.appendChild(panel);
+            return wrapper;
         }
 
         function editMessage(messageDiv, originalContent) {
@@ -2765,7 +2887,8 @@
                 const data = await response.json();
                 if (data.response) {
                     const aiMessage = data.message;
-                    addMessage('ai', aiMessage);
+                    _initDevModeFromResponse(data.dev_mode);
+                    addMessage('ai', aiMessage, data.trace || []);
                     
                     // Update routing status with details
                     if (data.routing_details) {
@@ -2954,7 +3077,8 @@
                 const data = await response.json();
                 if (data.response) {
                     const aiMessage = data.message;
-                    addMessage('ai', aiMessage);
+                    _initDevModeFromResponse(data.dev_mode);
+                    addMessage('ai', aiMessage, data.trace || []);
                     sendBtn.disabled = false;
                     saveBtn.disabled = false;
                 } else {
@@ -2996,7 +3120,8 @@
                 const data = await response.json();
                 if (data.response) {
                     const aiMessage = data.message;
-                    addMessage('ai', aiMessage);
+                    _initDevModeFromResponse(data.dev_mode);
+                    addMessage('ai', aiMessage, data.trace || []);
                     sendBtn.disabled = false;
                     saveBtn.disabled = false;
                 } else {
@@ -3614,21 +3739,44 @@ Generated on: ${new Date().toLocaleString()}
         function renderMarkdown(text) {
             // Remove emojis first
             text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
-            
+
+            // If the block already contains HTML tags, return as-is
+            if (/<(div|ul|ol|li|table|h[1-6]|strong|em|a\s)[^>]*>/i.test(text)) {
+                return text;
+            }
+
             // Convert markdown to HTML
             text = text
-                // Headers (process first)
-                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-                
-                // Bold text
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                
-                // Convert line breaks
+                // Horizontal rule  --- or ***
+                .replace(/^[-*]{3,}\s*$/gm, '<hr style="margin:10px 0;border:none;border-top:1px solid #dee2e6;">')
+
+                // Headers (process before bold to avoid conflicts)
+                .replace(/^### (.*)$/gm, '<h4 style="margin:10px 0 4px;color:#495057;">$1</h4>')
+                .replace(/^## (.*)$/gm,  '<h3 style="margin:12px 0 6px;color:#343a40;">$1</h3>')
+                .replace(/^# (.*)$/gm,   '<h2 style="margin:14px 0 6px;color:#212529;">$1</h2>')
+
+                // Bold and italic
+                .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+                .replace(/\*\*(.+?)\*\*/g,      '<strong>$1</strong>')
+                .replace(/_(.+?)_/g,             '<em>$1</em>')
+
+                // Bullet list items  - item  or  * item
+                .replace(/^[ \t]*[-*] (.+)$/gm, '<li style="margin-bottom:3px;">$1</li>')
+
+                // Wrap consecutive <li> blocks in <ul>
+                .replace(/(<li[^>]*>.*?<\/li>(\s*<li[^>]*>.*?<\/li>)*)/gs,
+                         '<ul style="margin:6px 0 6px 18px;padding:0;">$1</ul>')
+
+                // Numbered list  1. item
+                .replace(/^[ \t]*\d+\. (.+)$/gm, '<li style="margin-bottom:3px;">$1</li>')
+
+                // Inline code
+                .replace(/`([^`]+)`/g, '<code style="background:#f1f3f5;padding:1px 5px;border-radius:3px;font-size:90%;">$1</code>')
+
+                // Convert paragraph breaks and remaining line breaks
                 .replace(/\n\n/g, '<br><br>')
-                .replace(/\n/g, '<br>');
-                
+                .replace(/\n/g,   '<br>');
+
             return text;
         }
 

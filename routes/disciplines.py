@@ -32,6 +32,15 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 from config import Config
 from utils.error_handlers import get_logger, handle_route_errors
 
+# Optional — graceful if sft_experiment_manager or dept_lora_service are unavailable
+try:
+    from sft_experiment_manager import get_best_model_path_for_dept as _get_best_model_path
+    _DEPT_MODEL_LOOKUP_AVAILABLE = True
+except Exception:
+    _DEPT_MODEL_LOOKUP_AVAILABLE = False
+    def _get_best_model_path(_dept: str):  # type: ignore[misc]
+        return None
+
 logger = get_logger(__name__)
 
 disciplines_bp = Blueprint("disciplines_bp", __name__)
@@ -230,7 +239,9 @@ class MedicalQueryRouter:
         for discipline_id, keywords in self.discipline_keywords.items():
             keyword_matches = sum(1 for kw in keywords if kw in query_lower)
             if keyword_matches > 0:
-                confidence = min(keyword_matches / len(keywords) * 100, 95)
+                # Scale by absolute match count, not fraction of keyword list.
+                # 1 specific match → 65%, 2 matches → 80%, 3+ → 90%+
+                confidence = min(50 + keyword_matches * 15, 95)
                 relevant_disciplines.append(discipline_id)
                 confidence_scores[discipline_id] = confidence
 
@@ -266,7 +277,159 @@ class MedicalQueryRouter:
             "routing_method": "hybrid" if relevant_disciplines else "default",
         }
 
-    def _ai_analyze_query(self, query: str) -> list[str]:
+    def route_with_dept(
+        self,
+        query: str,
+        selected_dept: str | None = None,
+    ) -> dict:
+        """Hybrid routing combining explicit dept selection, TF-IDF gate, and keyword matching.
+
+        This is the Phase 2-A "01 – Hybrid Router" implementation.
+
+        Priority order:
+        1. **Explicit dept selection** (confidence ≈ 0.90) — highest weight.
+        2. **TF-IDF lexical gate** — decides whether local or external KB should be queried.
+        3. **Keyword matching** (existing ``analyze_query`` logic) — tiebreaker / augmentation.
+
+        Args:
+            query:         The user's natural-language medical query.
+            selected_dept: Department explicitly chosen by the user in the UI (may be None).
+
+        Returns:
+            A dict with keys:
+            - ``primary_dept``   (str)  — canonical dept name to route to.
+            - ``use_dept_lora``  (bool) — True if a trained LoRA model exists for primary_dept.
+            - ``kb_routing``     (str)  — ``"local"`` | ``"external"`` | ``"both"``.
+            - ``confidence``     (float) 0-1.
+            - ``routing_method`` (str)  — description of signals used.
+            - ``disciplines``    (list) — ordered list of relevant discipline IDs (compat shim).
+        """
+        kb_routing = "external"
+        tfidf_score = 0.0
+
+        logger.info(
+            "[PHASE2A] HybridRouter.route_with_dept  ENTER  selected_dept=%r  query=%r",
+            selected_dept, query[:100],
+        )
+
+        # --- Signal 2: TF-IDF lexical gate ---
+        rag_manager = current_app.config.get("RAG_MANAGER")
+        if rag_manager and hasattr(rag_manager, "lexical_gate"):
+            try:
+                use_local, tfidf_score = rag_manager.lexical_gate.should_query_local_first(query)
+                kb_routing = "local" if use_local else "external"
+                logger.info(
+                    "[PHASE2A] HybridRouter  SIGNAL-2 TF-IDF  score=%.4f  threshold=%.2f  kb_routing=%s",
+                    tfidf_score, rag_manager.lexical_gate.threshold, kb_routing,
+                )
+            except Exception as exc:
+                logger.warning("[PHASE2A] HybridRouter  SIGNAL-2 TF-IDF  ERROR: %s", exc)
+        else:
+            logger.info("[PHASE2A] HybridRouter  SIGNAL-2 TF-IDF  SKIPPED — no RAG_MANAGER/lexical_gate")
+
+        # --- Signal 1: Explicit dept selection ---
+        if selected_dept:
+            primary_dept = selected_dept
+            confidence = 0.90
+            routing_method = "explicit_dept"
+            if kb_routing == "local":
+                routing_method += "+tfidf_local"
+            logger.info(
+                "[PHASE2A] HybridRouter  SIGNAL-1 EXPLICIT DEPT  dept=%r  confidence=%.2f",
+                primary_dept, confidence,
+            )
+        else:
+            # --- Signal 3: keyword + AI fallback ---
+            logger.info("[PHASE2A] HybridRouter  SIGNAL-1 skipped (no explicit dept) → SIGNAL-3 KEYWORD")
+            keyword_result = self.analyze_query(query)
+            primary_dept_id = keyword_result["disciplines"][0] if keyword_result["disciplines"] else "family_medicine"
+            # Map discipline id back to a display name for LoRA lookup
+            primary_dept = self._discipline_id_to_dept_name(primary_dept_id)
+            confidence = max(keyword_result["confidence_scores"].values(), default=0.60) / 100.0
+            routing_method = keyword_result.get("routing_method", "keyword")
+            if tfidf_score >= 0.3:
+                routing_method += "+tfidf_local"
+            logger.info(
+                "[PHASE2A] HybridRouter  SIGNAL-3 KEYWORD  primary_disc=%r  primary_dept=%r  conf=%.2f",
+                primary_dept_id, primary_dept, confidence,
+            )
+
+        # --- Check LoRA availability ---
+        use_dept_lora = False
+        if _DEPT_MODEL_LOOKUP_AVAILABLE and primary_dept:
+            try:
+                model_path = _get_best_model_path(primary_dept)
+                use_dept_lora = bool(model_path)
+                logger.info(
+                    "[PHASE2A] HybridRouter  LORA-CHECK  dept=%r  use_dept_lora=%s  model_path=%r",
+                    primary_dept, use_dept_lora, model_path,
+                )
+            except Exception as _le:
+                logger.warning("[PHASE2A] HybridRouter  LORA-CHECK  ERROR: %s", _le)
+                use_dept_lora = False
+        else:
+            logger.info(
+                "[PHASE2A] HybridRouter  LORA-CHECK  SKIPPED  "
+                "(lookup_available=%s  primary_dept=%r)",
+                _DEPT_MODEL_LOOKUP_AVAILABLE, primary_dept,
+            )
+
+        # Also fall back to kb_routing="both" when tfidf score is borderline
+        if 0.2 <= tfidf_score < 0.3:
+            kb_routing = "both"
+
+        # Build compat disciplines list
+        disciplines = (
+            [self._dept_name_to_discipline_id(primary_dept)]
+            if primary_dept
+            else ["family_medicine"]
+        )
+
+        result = {
+            "primary_dept": primary_dept,
+            "use_dept_lora": use_dept_lora,
+            "kb_routing": kb_routing,
+            "confidence": round(confidence, 3),
+            "routing_method": routing_method,
+            "tfidf_score": round(tfidf_score, 4),
+            # backward-compat keys consumed by existing query route
+            "disciplines": disciplines,
+            "confidence_scores": {primary_dept: round(confidence * 100, 1)},
+        }
+        logger.info(
+            "[PHASE2A] HybridRouter.route_with_dept  EXIT  → %s",
+            {k: v for k, v in result.items() if k not in ("disciplines", "confidence_scores")},
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    # Department ↔ discipline ID helpers
+    # ------------------------------------------------------------------
+
+    def _discipline_id_to_dept_name(self, discipline_id: str) -> str:
+        """Map a discipline config id (e.g. ``"cardiology"``) to a dept display name."""
+        _DISC_TO_DEPT = {
+            "family_medicine": "General Medicine",
+            "cardiology": "Cardiology",
+            "neurology": "Neurology",
+            "pulmonology": "Pulmonology",
+            "doctors_files": "General Medicine",
+        }
+        # Try built-in map first; fall back to title-casing the id
+        return _DISC_TO_DEPT.get(discipline_id, discipline_id.replace("_", " ").title())
+
+    def _dept_name_to_discipline_id(self, dept_name: str) -> str:
+        """Map a dept display name back to a discipline config id where possible."""
+        _DEPT_TO_DISC = {
+            "cardiology": "cardiology",
+            "neurology": "neurology",
+            "pulmonology": "pulmonology",
+            "family medicine": "family_medicine",
+            "general medicine": "family_medicine",
+        }
+        return _DEPT_TO_DISC.get(dept_name.lower(), dept_name.lower().replace(" ", "_"))
+
+
         try:
             discipline_names = [d["name"] for d in self.disciplines]
             prompt = f"""
@@ -390,7 +553,104 @@ def validate_disciplines():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
-@disciplines_bp.route("/search_doctors", methods=["GET"])
+@disciplines_bp.route("/api/set_department", methods=["POST"])
+@handle_route_errors
+def set_department():
+    """Store the user's selected department in app.config for the current session.
+
+    Phase 2-A: '01 – Selects Dept' step.
+
+    Request JSON::
+
+        { "department": "Cardiology", "session_id": "<optional>" }
+
+    Response JSON::
+
+        {
+            "success": true,
+            "department": "Cardiology",
+            "has_trained_model": true,
+            "model_path": "sft_models/Cardiology_experiment_1"
+        }
+    """
+    data = request.get_json(silent=True) or {}
+    dept = (data.get("department") or "").strip()
+    if not dept:
+        return jsonify({"success": False, "error": "department is required"}), 400
+
+    current_app.config["ACTIVE_DEPARTMENT"] = dept
+
+    # Reinitialise hybrid router for new dept context
+    llm = current_app.config.get("LLM_INSTANCE")
+    if llm:
+        cfg = current_app.config.get("DISCIPLINES_CONFIG") or load_disciplines_config()
+        current_app.config["MEDICAL_ROUTER"] = MedicalQueryRouter(llm, cfg)
+
+    # Check if a trained LoRA model is available for this dept
+    model_path = None
+    if _DEPT_MODEL_LOOKUP_AVAILABLE:
+        try:
+            model_path = _get_best_model_path(dept)
+        except Exception:
+            pass
+
+    logger.info("Active department set to: %s (has_model=%s)", dept, model_path is not None)
+    return jsonify({
+        "success": True,
+        "department": dept,
+        "has_trained_model": model_path is not None,
+        "model_path": model_path or "",
+    })
+
+
+@disciplines_bp.route("/api/dept_model_status", methods=["GET"])
+@handle_route_errors
+def dept_model_status():
+    """Return whether a trained LoRA model is available for the currently active department.
+
+    Phase 2-A: '02 – Trained Model – Load Dept LoRA' readiness check.
+
+    Query params:
+        department (optional): override the active dept for a one-off check.
+
+    Response JSON::
+
+        {
+            "success": true,
+            "department": "Cardiology",
+            "has_trained_model": true,
+            "model_path": "sft_models/Cardiology_experiment_1",
+            "lora_available": true
+        }
+    """
+    dept = (
+        request.args.get("department", "").strip()
+        or current_app.config.get("ACTIVE_DEPARTMENT", "")
+    )
+
+    if not dept:
+        return jsonify({
+            "success": True,
+            "department": None,
+            "has_trained_model": False,
+            "model_path": "",
+            "lora_available": False,
+        })
+
+    model_path = None
+    if _DEPT_MODEL_LOOKUP_AVAILABLE:
+        try:
+            model_path = _get_best_model_path(dept)
+        except Exception:
+            pass
+
+    return jsonify({
+        "success": True,
+        "department": dept,
+        "has_trained_model": model_path is not None,
+        "model_path": model_path or "",
+        "lora_available": model_path is not None,
+    })
 @handle_route_errors
 def search_doctors():
     """Search for doctors by first_name and last_name from pces_users table."""

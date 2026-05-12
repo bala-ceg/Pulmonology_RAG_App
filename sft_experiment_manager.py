@@ -14,6 +14,7 @@ Integrates with pces_rlhf_experiments module via sys.path.
 """
 
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -23,6 +24,8 @@ import time
 import uuid
 from collections import OrderedDict
 from datetime import datetime
+
+_sft_logger = logging.getLogger(__name__)
 from pathlib import Path
 
 try:
@@ -2006,6 +2009,79 @@ def seed_sample_doctors():
         return {"success": True, "message": f"Seeded {added} sample doctors", "added": added}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# Department LoRA – best-model lookup
+# ============================================================================
+
+def get_best_model_path_for_dept(dept_name: str) -> str | None:
+    """Return the model_output_path of the most recently completed LoRA experiment for *dept_name*.
+
+    Performs a case-insensitive match against the ``department`` column of
+    ``sft_experiments``.  The path is only returned when the adapter files
+    actually exist on disk (``adapter_config.json`` present).
+
+    Args:
+        dept_name: Medical department name (e.g. ``"Cardiology"``, ``"Pulmonology"``).
+
+    Returns:
+        Absolute or relative path to the LoRA adapter directory, or ``None``
+        if no usable completed experiment is found.
+    """
+    if not dept_name:
+        return None
+    _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  LOOKUP  dept=%r", dept_name)
+    try:
+        with _connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT model_output_path, model_name
+                       FROM sft_experiments
+                       WHERE status = %s
+                         AND LOWER(department) = LOWER(%s)
+                         AND model_output_path IS NOT NULL
+                       ORDER BY completed_at DESC
+                       LIMIT 5""",
+                    ("completed", dept_name),
+                )
+                rows = cur.fetchall()
+    except Exception as e:
+        _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  DB ERROR  dept=%r  error=%s", dept_name, e)
+        return None
+
+    _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  DB rows=%d  dept=%r", len(rows), dept_name)
+
+    for row in rows:
+        path = row[0]
+        adapter_ok = path and os.path.isdir(path) and os.path.exists(
+            os.path.join(path, "adapter_config.json")
+        )
+        _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  checking path=%r  adapter_exists=%s", path, adapter_ok)
+        if adapter_ok:
+            _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  FOUND (DB)  path=%r", path)
+            return path
+
+    # Fallback: scan sft_models/ directory for a matching folder pattern
+    safe_dept = re.sub(r'[^a-zA-Z0-9_-]', '_', dept_name)
+    if os.path.isdir(SFT_MODELS_DIR):
+        candidates = sorted(
+            [
+                d for d in os.listdir(SFT_MODELS_DIR)
+                if d.lower().startswith(safe_dept.lower())
+                and os.path.isdir(os.path.join(SFT_MODELS_DIR, d))
+                and os.path.exists(os.path.join(SFT_MODELS_DIR, d, "adapter_config.json"))
+            ],
+            reverse=True,
+        )
+        _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  DISK SCAN  safe_dept=%r  candidates=%s", safe_dept, candidates)
+        if candidates:
+            found = os.path.join(SFT_MODELS_DIR, candidates[0])
+            _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  FOUND (DISK)  path=%r", found)
+            return found
+
+    _sft_logger.debug("[PHASE2A] get_best_model_path_for_dept  NOT FOUND  dept=%r", dept_name)
+    return None
 
 
 # ============================================================================
