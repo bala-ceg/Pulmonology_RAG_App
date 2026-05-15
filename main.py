@@ -277,6 +277,13 @@ integrated_rag_system = rag_service.integrated_rag_system
 scope_guard = rag_service.scope_guard
 
 # ---------------------------------------------------------------------------
+# Build Context Service — initialise with rag_manager
+# ---------------------------------------------------------------------------
+from services.context_service import context_service as _context_service
+
+_context_service.initialize(rag_manager)
+
+# ---------------------------------------------------------------------------
 # Store shared state on app.config for Blueprint access
 # ---------------------------------------------------------------------------
 app.config.update(
