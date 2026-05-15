@@ -376,4 +376,4 @@ except Exception as _mqr_err:
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=3000, use_reloader=False)
+    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("FLASK_PORT", "3000")), use_reloader=False)

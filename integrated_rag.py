@@ -204,16 +204,19 @@ class IntegratedMedicalRAG:
             return None
     
     # -----------------------------------------------------------------------
-    # Cascade order: Pinecone → AdHocRAG → Internal_VectorDB → PostgreSQL →
-    #                ArXiv → Tavily → Wikipedia
+    # Cascade order: Pinecone → AdHocRAG → Internal_VectorDB →
+    #                ArXiv → Tavily → PostgreSQL → Wikipedia
+    #
+    # PostgreSQL is placed AFTER ArXiv/Tavily so general/research queries
+    # never wait on the potentially-slow DB connection timeout.
     # -----------------------------------------------------------------------
     _CASCADE_ORDER: List[str] = [
         'Pinecone_KB_Search',
         'AdHocRAG_Search',
         'Internal_VectorDB',
-        'PostgreSQL_Diagnosis_Search',
         'ArXiv_Search',
         'Tavily_Search',
+        'PostgreSQL_Diagnosis_Search',
         'Wikipedia_Search',
     ]
 
@@ -257,15 +260,23 @@ class IntegratedMedicalRAG:
         # Pinecone
         "below threshold",
         "is below threshold",
-        # PostgreSQL
+        # PostgreSQL — errors & timeouts treated as empty so cascade continues
         "no diagnosis information found",
         "no medical diagnosis data",
         "not found in the database",
         "no data found",
+        "error searching diagnosis database",
+        "connection timeout",
+        "technical error in accessing",
+        "unavailable due to a technical error",
         # Internal VectorDB
         "no documents found for your session",
         "not available. please ensure",
         "limited relevant information in uploaded",
+        # AdHoc RAG
+        "no adhoc documents found",
+        "no relevant content found in adhoc",
+        "ad hoc rag store is not initialised",
         # Tool internal fallbacks — these mean the tool had no real answer
         "falling back to general knowledge",
         "falling back to general medical knowledge",
