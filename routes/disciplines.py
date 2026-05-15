@@ -205,6 +205,44 @@ class MedicalQueryRouter:
                 "CT brain", "memory loss", "confusion", "dizziness", "numbness",
                 "tingling", "weakness", "paralysis", "spinal cord", "nerve",
             ],
+            "pulmonology": [
+                "lung", "pulmonary", "respiratory", "breathing", "breath", "COPD",
+                "asthma", "bronchitis", "pneumonia", "emphysema", "IPF",
+                "interstitial lung", "pleural", "pleura", "trachea", "bronchial",
+                "inhaler", "spirometry", "oxygen", "hypoxia", "dyspnea",
+                "shortness of breath", "cough", "wheeze", "wheezing",
+                "pulmonologist", "ventilation", "ARDS", "pulmonary fibrosis",
+                "sarcoidosis", "alpha-1 antitrypsin", "A1AT",
+            ],
+            "oncology": [
+                "cancer", "tumor", "malignant", "malignancy", "chemotherapy",
+                "radiation", "oncology", "carcinoma", "lymphoma", "leukemia",
+                "metastasis", "biopsy", "immunotherapy", "targeted therapy",
+                "oncologist", "staging", "remission",
+            ],
+            "diabetes": [
+                "diabetes", "diabetic", "insulin", "glucose", "blood sugar",
+                "hyperglycemia", "hypoglycemia", "HbA1c", "metformin",
+                "type 1 diabetes", "type 2 diabetes", "gestational diabetes",
+                "endocrinology", "pancreas",
+            ],
+            "nephrology": [
+                "kidney", "renal", "nephrology", "dialysis", "creatinine",
+                "GFR", "proteinuria", "kidney disease", "CKD", "AKI",
+                "glomerulonephritis", "nephrologist",
+            ],
+            "gastroenterology": [
+                "stomach", "gastric", "intestine", "bowel", "colon", "liver",
+                "hepatic", "GI", "gastrointestinal", "Crohn", "colitis",
+                "IBD", "IBS", "gastroenterology", "endoscopy", "colonoscopy",
+                "diarrhea", "constipation", "nausea", "vomiting", "acid reflux",
+                "GERD", "peptic ulcer",
+            ],
+            "infectious_disease": [
+                "infection", "infectious", "bacteria", "viral", "virus", "sepsis",
+                "antibiotic", "antiviral", "HIV", "AIDS", "tuberculosis", "TB",
+                "COVID", "SARS", "influenza", "malaria", "fungal", "parasitic",
+            ],
             "doctors_files": [
                 "my files", "my documents", "uploaded", "document", "file", "PDF",
                 "article", "my upload", "personal documents", "doctor's files",
@@ -256,10 +294,8 @@ class MedicalQueryRouter:
                 confidence_scores["doctors_files"] = 85
 
         if not relevant_disciplines:
-            relevant_disciplines = self._ai_analyze_query(query)
-            for d in relevant_disciplines:
-                confidence_scores[d] = 70
-            if has_files and "doctors_files" not in relevant_disciplines:
+            # No keyword match — include session files if present, else fall through to default
+            if has_files:
                 relevant_disciplines.append("doctors_files")
                 confidence_scores["doctors_files"] = 75
 
