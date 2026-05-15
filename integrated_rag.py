@@ -327,9 +327,12 @@ class IntegratedMedicalRAG:
         If the LLM call fails, return the raw content directly.
         """
         prompt = (
-            f"You are a medical Q&A assistant. Answer the following question "
-            f"using ONLY the content provided below. Do NOT add information not "
-            f"present in the content. Be concise and specific.\n\n"
+            f"You are a medical Q&A assistant. Use the content below as your "
+            f"primary reference to answer the question. Synthesize and summarise "
+            f"the relevant information from the content. If the content provides "
+            f"partial information, use it and clearly indicate what is covered. "
+            f"Only if the content is completely unrelated to the question should "
+            f"you state that the content does not address it.\n\n"
             f"Question: {question}\n\n"
             f"Content:\n{raw_content}\n\n"
             f"Answer:"
