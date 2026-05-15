@@ -94,9 +94,38 @@ def _dev_mode_enabled() -> bool:
     """Expose DEV_MODE flag to response payloads so the UI can render its toggle."""
     return _DEV_MODE
 
+
 # ---------------------------------------------------------------------------
-# Optional SME queue auto-insert
+# Dept/LoRA availability cache — built once at first request, never rescanned
 # ---------------------------------------------------------------------------
+_dept_lora_cache: dict | None = None   # {"all": [...], "with_model": [...]}
+_dept_lora_cache_lock = threading.Lock()
+
+
+def _get_dept_lora_availability() -> dict:
+    """Return cached dict of all departments and which have LoRA models.
+
+    The scan (32 DB + disk lookups) runs only once per process lifetime.
+    Subsequent calls return the cached result instantly.
+    """
+    global _dept_lora_cache
+    if _dept_lora_cache is not None:
+        return _dept_lora_cache
+    with _dept_lora_cache_lock:
+        if _dept_lora_cache is not None:   # double-checked locking
+            return _dept_lora_cache
+        try:
+            from sft_experiment_manager import DEPARTMENTS as _DEPTS, get_best_model_path_for_dept as _gmp
+            all_depts = list(_DEPTS.keys())
+            with_model = [d for d in all_depts if _gmp(d)]
+        except Exception:
+            all_depts, with_model = [], []
+        _dept_lora_cache = {"all": all_depts, "with_model": with_model}
+        logger.info("[PHASE2A] dept/LoRA cache built: %d depts, %d with model: %s",
+                    len(all_depts), len(with_model), with_model)
+    return _dept_lora_cache
+
+
 try:
     from sft_experiment_manager import add_sme_queue_entry as _add_sme_queue_entry, DEPARTMENTS as _DEPARTMENTS
     _SME_QUEUE_AVAILABLE = True
@@ -616,6 +645,23 @@ def handle_query():
             }
         )
 
+    # ── Extract adhoc context from request and inject into AdHocRAG_Search ──
+    _doctor_id: str = (request.json.get("doctor_id") or "").strip()
+    _patient_id: str | None = (request.json.get("patient_id") or "").strip() or None
+    try:
+        from tools import _set_adhoc_context as _sac
+        from services.context_service import context_service as _ctx_svc
+        from config import Config as _Cfg
+        _rag_mgr = _get_rag_manager()
+        _sac(
+            rag_manager=_rag_mgr,
+            tenant_id=_Cfg.TENANT_ID,
+            doctor_id=_doctor_id,
+            patient_id=_patient_id,
+        )
+    except Exception as _adhoc_init_exc:
+        logger.debug("AdHoc context injection skipped: %s", _adhoc_init_exc)
+
     scope_guard = _get_scope_guard()
     guard_disclaimer = ""
     if scope_guard is not None:
@@ -668,13 +714,9 @@ def handle_query():
         )
 
         # Build available-dept list for trace: all known depts + flag which have LoRA models
-        try:
-            from sft_experiment_manager import DEPARTMENTS as _DEPTS, get_best_model_path_for_dept as _gmp
-            _all_depts = list(_DEPTS.keys())
-            _depts_with_model = [d for d in _all_depts if _gmp(d)]
-        except Exception:
-            _all_depts = []
-            _depts_with_model = []
+        _dept_avail = _get_dept_lora_availability()
+        _all_depts = _dept_avail["all"]
+        _depts_with_model = _dept_avail["with_model"]
 
         _dept_summary = (
             f"resolved → {active_dept or '(none)'} | "

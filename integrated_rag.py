@@ -24,7 +24,7 @@ except ImportError:
 # Import our custom modules
 from config import Config
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
-from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search, AVAILABLE_TOOLS
+from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search, AdHocRAG_Search, _set_adhoc_context, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 from utils.error_handlers import get_logger
 
@@ -40,6 +40,7 @@ logger = get_logger(__name__)
 _TOOL_SOURCE_LABELS: Dict[str, str] = {
     'Pinecone_KB_Search':          'PCES Pinecone Knowledge Base',
     'Internal_VectorDB':           'Uploaded Documents (Adhoc VectorDB)',
+    'AdHocRAG_Search':             'Ad Hoc RAG (Doctor/Patient Documents)',
     'PostgreSQL_Diagnosis_Search': 'PostgreSQL EHR Database',
     'ArXiv_Search':                'arXiv Research Papers',
     'Tavily_Search':               'Web Search (Tavily)',
@@ -148,8 +149,19 @@ class IntegratedMedicalRAG:
         """Setup tools with proper context injection."""
         tools = []
         
-        # Create Wikipedia, ArXiv, Tavily, PostgreSQL, and Pinecone KB tools (these don't need RAG manager)
+        # Create Wikipedia, ArXiv, Tavily, PostgreSQL, Pinecone KB, and AdHocRAG tools
+        # (these don't need RAG manager injected via closure)
         tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search])
+
+        # Inject rag_manager into the AdHocRAG_Search tool via module-level holder
+        from config import Config as _Config
+        _set_adhoc_context(
+            rag_manager=self.rag_manager,
+            tenant_id=_Config.TENANT_ID,
+            doctor_id="",      # overridden per-request via _set_adhoc_context in query route
+            patient_id=None,
+        )
+        tools.append(AdHocRAG_Search)
         
         # Create Internal_VectorDB tool with RAG manager injected using @tool decorator
         # ZeroShotAgent requires single-input tools — only expose `query`
@@ -192,11 +204,12 @@ class IntegratedMedicalRAG:
             return None
     
     # -----------------------------------------------------------------------
-    # Cascade order: Pinecone → Internal_VectorDB → PostgreSQL →
+    # Cascade order: Pinecone → AdHocRAG → Internal_VectorDB → PostgreSQL →
     #                ArXiv → Tavily → Wikipedia
     # -----------------------------------------------------------------------
     _CASCADE_ORDER: List[str] = [
         'Pinecone_KB_Search',
+        'AdHocRAG_Search',
         'Internal_VectorDB',
         'PostgreSQL_Diagnosis_Search',
         'ArXiv_Search',
