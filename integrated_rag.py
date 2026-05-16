@@ -348,32 +348,96 @@ class IntegratedMedicalRAG:
             logger.warning("LLM formatting failed (%s) — returning raw content", exc)
             return raw_content
 
+    # Tools that always run in parallel regardless of other results.
+    # Pinecone (local org KB) + Tavily (real-time web) give complementary
+    # structured and live knowledge for every query.
+    _PARALLEL_TOOLS: List[str] = [
+        'Pinecone_KB_Search',
+        'Tavily_Search',
+    ]
+
+    # Fallback cascade: tried sequentially only when ALL parallel tools return empty.
+    _FALLBACK_CASCADE: List[str] = [
+        'AdHocRAG_Search',
+        'Internal_VectorDB',
+        'ArXiv_Search',
+        'PostgreSQL_Diagnosis_Search',
+        'Wikipedia_Search',
+    ]
+
+    def _run_parallel_tools(
+        self,
+        question: str,
+        session_id: str,
+        tool_names: List[str],
+        timeout: float = 20.0,
+    ) -> Dict[str, str]:
+        """Run *tool_names* concurrently and return {tool_name: result} for non-empty results."""
+        import concurrent.futures as _cf
+        results: Dict[str, str] = {}
+        with _cf.ThreadPoolExecutor(max_workers=len(tool_names)) as executor:
+            futures = {
+                executor.submit(self._call_tool, name, question, session_id): name
+                for name in tool_names
+            }
+            for future in _cf.as_completed(futures, timeout=timeout):
+                name = futures[future]
+                try:
+                    result = future.result()
+                    if not self._is_empty_result(result, name):
+                        results[name] = result
+                        logger.info("Parallel tool '%s' returned %d chars", name, len(result))
+                    else:
+                        logger.info("Parallel tool '%s' returned nothing", name)
+                except Exception as exc:
+                    logger.warning("Parallel tool '%s' raised %s", name, exc)
+        return results
+
     def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
         """
-        Cascade search: always try Pinecone_KB_Search first.
-        Only move to the next tool if the current one returns no content.
+        Multi-tool parallel query: always runs Pinecone_KB_Search + Tavily_Search
+        simultaneously, merges their results, then falls back to the sequential
+        cascade only when both return empty.
 
-        Cascade order:
-          1. Pinecone_KB_Search   (org KB — always first)
-          2. Internal_VectorDB    (uploaded / adhoc docs)
-          3. PostgreSQL_Diagnosis_Search
-          4. ArXiv_Search
-          5. Tavily_Search
-          6. Wikipedia_Search     (last resort)
+        Strategy:
+          Phase 1 (parallel)  — Pinecone_KB_Search + Tavily_Search run together
+          Phase 2 (fallback)  — AdHocRAG → Internal_VectorDB → ArXiv → PostgreSQL → Wikipedia
         """
         try:
-            tool_used: str = "Wikipedia_Search"
+            tools_used: List[str] = []
             raw_content: str = ""
 
-            for tool_name in self._CASCADE_ORDER:
-                logger.info("Cascade: trying tool '%s'", tool_name)
-                result = self._call_tool(tool_name, question, session_id or "guest")
-                if not self._is_empty_result(result, tool_name):
-                    raw_content = result
-                    tool_used = tool_name
-                    logger.info("Cascade: '%s' returned content (%d chars)", tool_name, len(result))
-                    break
-                logger.info("Cascade: '%s' returned nothing — trying next", tool_name)
+            # ── Phase 1: run Pinecone + Tavily in parallel ──────────────────
+            logger.info("Multi-tool: running parallel tools %s", self._PARALLEL_TOOLS)
+            parallel_results = self._run_parallel_tools(
+                question, session_id or "guest", self._PARALLEL_TOOLS
+            )
+
+            if parallel_results:
+                # Merge all parallel results in a fixed order (Pinecone first)
+                parts = []
+                for name in self._PARALLEL_TOOLS:
+                    if name in parallel_results:
+                        label = _TOOL_SOURCE_LABELS.get(name, name)
+                        parts.append(f"[{label}]\n{parallel_results[name]}")
+                        tools_used.append(name)
+                raw_content = "\n\n---\n\n".join(parts)
+                logger.info("Multi-tool: merged %d parallel results (%d chars)",
+                            len(parallel_results), len(raw_content))
+
+            # ── Phase 2: fallback cascade when parallel tools found nothing ──
+            if not raw_content:
+                logger.info("Multi-tool: parallel tools empty — running fallback cascade")
+                for tool_name in self._FALLBACK_CASCADE:
+                    logger.info("Fallback cascade: trying '%s'", tool_name)
+                    result = self._call_tool(tool_name, question, session_id or "guest")
+                    if not self._is_empty_result(result, tool_name):
+                        raw_content = result
+                        tools_used = [tool_name]
+                        logger.info("Fallback cascade: '%s' returned %d chars",
+                                    tool_name, len(result))
+                        break
+                    logger.info("Fallback cascade: '%s' returned nothing — next", tool_name)
 
             if not raw_content:
                 raw_content = "No relevant information found across all knowledge sources."
@@ -424,7 +488,7 @@ class IntegratedMedicalRAG:
                 raw_content,
                 flags=_re.IGNORECASE | _re.DOTALL,
             ).strip()
-            answer = self._format_answer(content_for_llm, question, tool_used)
+            answer = self._format_answer(content_for_llm, question, ", ".join(tools_used) if tools_used else "unknown")
 
             # The answer must NOT contain the Source Documents block — strip it
             # if the LLM happened to reproduce it.
@@ -435,7 +499,8 @@ class IntegratedMedicalRAG:
                 flags=_re.IGNORECASE | _re.DOTALL,
             ).strip()
 
-            citations = _extract_citations_from_response(raw_content, tool_used)
+            primary_tool = tools_used[0] if tools_used else "Wikipedia_Search"
+            citations = _extract_citations_from_response(raw_content, primary_tool)
             # Final sanitization pass — ensure no secrets reach the user
             answer = self._sanitize_secrets(answer)
             citations = [self._sanitize_secrets(c) for c in citations]
@@ -443,13 +508,13 @@ class IntegratedMedicalRAG:
             return {
                 'answer': answer,
                 'routing_info': {
-                    'primary_tool': tool_used,
+                    'primary_tool': primary_tool,
                     'confidence': 'high',
-                    'reasoning': f'Cascade search — first tool with results: {tool_used}',
-                    'ranked_tools': self._CASCADE_ORDER,
+                    'reasoning': f'Multi-tool query — tools used: {", ".join(tools_used)}',
+                    'ranked_tools': self._PARALLEL_TOOLS + self._FALLBACK_CASCADE,
                 },
-                'explanation': f"Answer sourced from: {tool_used}",
-                'tools_used': [tool_used],
+                'explanation': f"Answer sourced from: {', '.join(tools_used)}",
+                'tools_used': tools_used,
                 'session_id': session_id,
                 'citations': citations,
                 'source_documents': source_documents,
