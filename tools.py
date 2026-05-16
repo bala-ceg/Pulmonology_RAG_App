@@ -638,7 +638,7 @@ def Pinecone_KB_Search(query: str) -> str:
         # Only use results with a meaningful cosine similarity score.
         # Results below the threshold are too loosely related to the query
         # and would produce hallucinated or generic answers.
-        SIMILARITY_THRESHOLD = 0.60   # lowered from 0.70 — sample data may score 0.62-0.68
+        SIMILARITY_THRESHOLD = float(os.getenv("PINECONE_SIMILARITY_THRESHOLD", "0.45"))
         qualified = [r for r in results if r.get("score", 0.0) >= SIMILARITY_THRESHOLD]
 
         logger.info(
@@ -736,12 +736,94 @@ def Pinecone_KB_Search(query: str) -> str:
         return f"Pinecone KB search error: {exc}"
 
 
+# ---------------------------------------------------------------------------
+# Ad Hoc RAG tool — module-level context holder (injected by IntegratedMedicalRAG)
+# ---------------------------------------------------------------------------
+
+# Holds the TwoStoreRAGManager and adhoc context (set by IntegratedMedicalRAG._setup_tools)
+_adhoc_rag_manager_holder: List = [None]
+_adhoc_context_holder: dict = {}
+
+
+def _set_adhoc_context(rag_manager, tenant_id: str, doctor_id: str, patient_id: str | None) -> None:
+    """Inject adhoc context used by AdHocRAG_Search at query time."""
+    _adhoc_rag_manager_holder[0] = rag_manager
+    _adhoc_context_holder.update({
+        "tenant_id": tenant_id,
+        "doctor_id": doctor_id,
+        "patient_id": patient_id,
+    })
+
+
+@tool
+def AdHocRAG_Search(query: str) -> str:
+    """
+    Search doctor-uploaded and patient-specific documents from the Ad Hoc RAG store.
+
+    USE this tool when:
+    - Query references a patient's specific clinical notes, uploaded MRI/lab reports,
+      consultation documents, or session-specific PDFs uploaded by the doctor
+    - User asks about "the patient's documents", "uploaded case notes", "my uploaded files",
+      "the patient file", "session documents", or refers to doctor-specific case materials
+    - Query is about a specific patient's test results, imaging notes, or medical history
+      uploaded for this consultation
+    - Doctor asks to search through the files they uploaded for a patient/case
+
+    DO NOT use this tool when:
+    - Query is about general medical knowledge (use Wikipedia or Pinecone_KB_Search)
+    - Query is about published research (use ArXiv_Search or Tavily_Search)
+    - Query is about structured EHR/diagnosis database records (use PostgreSQL_Diagnosis_Search)
+    - No adhoc documents have been uploaded for this doctor/patient session
+    """
+    from config import Config as _Config
+
+    rag_manager = _adhoc_rag_manager_holder[0]
+    tenant_id: str = _adhoc_context_holder.get("tenant_id") or _Config.TENANT_ID
+    doctor_id: str = _adhoc_context_holder.get("doctor_id") or "unknown_doctor"
+    patient_id: str | None = _adhoc_context_holder.get("patient_id")
+
+    logger.info(
+        "AdHocRAG_Search: query=%r tenant=%s doctor=%s patient=%s",
+        query[:60], tenant_id, doctor_id, patient_id,
+    )
+
+    if rag_manager is None:
+        return "Ad Hoc RAG store is not initialised — no adhoc documents available."
+
+    try:
+        docs = _run_with_timeout(
+            rag_manager.retrieve_adhoc,
+            args=(query, tenant_id, doctor_id, patient_id),
+            timeout_seconds=15,
+        )
+    except TimeoutError:
+        return "Ad Hoc RAG search timed out. Please try again."
+    except Exception as exc:
+        logger.error("AdHocRAG_Search error: %s", exc)
+        return f"Error searching Ad Hoc RAG: {exc}"
+
+    if not docs:
+        return "No adhoc documents found for this doctor/patient session."
+
+    for doc in docs:
+        doc.metadata.setdefault("source_type", "adhoc")
+
+    result = _join_docs(docs, max_chars=1200)
+
+    if len(result) < 50 or _is_generic_content(result):
+        return "No relevant content found in adhoc documents."
+
+    logger.info("AdHocRAG_Search: returning %d chars from %d chunks", len(result), len(docs))
+    return result
+
+
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'Wikipedia_Search': Wikipedia_Search,
     'ArXiv_Search': ArXiv_Search,
     'Tavily_Search': Tavily_Search,
     'Internal_VectorDB': Internal_VectorDB,
+    'AdHocRAG_Search': AdHocRAG_Search,
     'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search,
     'Pinecone_KB_Search': Pinecone_KB_Search,
 }
@@ -759,6 +841,7 @@ def get_tool_descriptions() -> Dict[str, str]:
         'ArXiv_Search': "Search arXiv for recent research papers, scientific studies, and cutting-edge findings.",
         'Tavily_Search': "Search current web information for real-time medical updates, guidelines, and breaking news.",
         'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content.",
+        'AdHocRAG_Search': "Search doctor-uploaded patient-specific clinical notes, case files, and session documents in the Ad Hoc RAG store.",
         'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table.",
         'Pinecone_KB_Search': "Search PCES organisation Pinecone knowledge base for curated department clinical guidelines, protocols, and standard-of-care content.",
     }

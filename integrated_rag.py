@@ -326,18 +326,22 @@ class IntegratedMedicalRAG:
 
     def _format_answer(self, raw_content: str, question: str, tool_name: str) -> str:
         """
-        Use the LLM to produce a focused Q&A answer strictly from *raw_content*.
-        If the LLM call fails, return the raw content directly.
+        Use the LLM to produce a focused Q&A answer from *raw_content*.
+        Content may be merged from multiple sources (separated by ---).
         """
         prompt = (
-            f"You are a medical Q&A assistant. Use the content below as your "
-            f"primary reference to answer the question. Synthesize and summarise "
-            f"the relevant information from the content. If the content provides "
-            f"partial information, use it and clearly indicate what is covered. "
-            f"Only if the content is completely unrelated to the question should "
-            f"you state that the content does not address it.\n\n"
+            f"You are a medical Q&A assistant. The content below is retrieved from "
+            f"one or more medical knowledge sources. Read ALL sections carefully and "
+            f"synthesize a complete, accurate answer to the question.\n\n"
+            f"Instructions:\n"
+            f"- Combine relevant information from ALL sections provided\n"
+            f"- If one section covers the topic better than another, prioritise it but "
+            f"do not ignore the others\n"
+            f"- Be concise and specific\n"
+            f"- Only say the content does not address the question if NONE of the "
+            f"sections contain relevant information\n\n"
             f"Question: {question}\n\n"
-            f"Content:\n{raw_content}\n\n"
+            f"Retrieved Content:\n{raw_content}\n\n"
             f"Answer:"
         )
         try:

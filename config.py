@@ -71,6 +71,7 @@ class Config:
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "128"))
     RETRIEVAL_K: int = int(os.getenv("RETRIEVAL_K", "2"))
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))
+    PINECONE_SIMILARITY_THRESHOLD: float = float(os.getenv("PINECONE_SIMILARITY_THRESHOLD", "0.45"))
     TFIDF_LOCAL_THRESHOLD: float = float(os.getenv("TFIDF_LOCAL_THRESHOLD", "0.3"))
 
     # ------------------------------------------------------------------
@@ -78,6 +79,28 @@ class Config:
     # ------------------------------------------------------------------
     MAX_FILES_PER_SESSION: int = int(os.getenv("MAX_FILES_PER_SESSION", "10"))
     MAX_URLS_PER_SESSION: int = int(os.getenv("MAX_URLS_PER_SESSION", "3"))
+
+    # ------------------------------------------------------------------
+    # Ad Hoc RAG
+    # ------------------------------------------------------------------
+    TENANT_ID: str = os.getenv("TENANT_ID", "default_tenant")
+    ADHOC_VECTOR_DB_PATH: str = os.getenv("ADHOC_VECTOR_DB_PATH", "./vector_dbs/adhoc/")
+    ADHOC_CHUNK_SIZE: int = int(os.getenv("ADHOC_CHUNK_SIZE", "500"))
+    ADHOC_CHUNK_OVERLAP: int = int(os.getenv("ADHOC_CHUNK_OVERLAP", "100"))
+    ADHOC_MAX_PAGES: int = int(os.getenv("ADHOC_MAX_PAGES", "40"))
+    ADHOC_MAX_MB: int = int(os.getenv("ADHOC_MAX_MB", "20"))
+    ADHOC_RETENTION_DAYS: int = int(os.getenv("ADHOC_RETENTION_DAYS", "90"))
+
+    # ------------------------------------------------------------------
+    # Build Context
+    # ------------------------------------------------------------------
+    MAX_CONTEXT_CHUNKS: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "10"))
+    CONTEXT_RETRIEVAL_TIMEOUT: int = int(os.getenv("CONTEXT_RETRIEVAL_TIMEOUT", "15"))
+    # Keywords that trigger external API calls in BuildContextService
+    EXTERNAL_API_KEYWORDS: list[str] = [
+        "rare", "unknown", "latest", "research", "clinical trial",
+        "new treatment", "recent study", "evidence", "pubmed", "arxiv",
+    ]
 
     # ------------------------------------------------------------------
     # Audio / Whisper
@@ -145,5 +168,6 @@ class Config:
             cls.VECTOR_DB_PATH,
             cls.ORGANIZATION_KB_PATH,
             cls.ORGANIZATION_VECTOR_DB_PATH,
+            cls.ADHOC_VECTOR_DB_PATH,
         ):
             os.makedirs(path, exist_ok=True)
