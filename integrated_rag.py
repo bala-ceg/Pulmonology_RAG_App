@@ -352,21 +352,27 @@ class IntegratedMedicalRAG:
             logger.warning("LLM formatting failed (%s) — returning raw content", exc)
             return raw_content
 
-    # Tools that always run in parallel regardless of other results.
-    # Pinecone (local org KB) + Tavily (real-time web) give complementary
-    # structured and live knowledge for every query.
-    _PARALLEL_TOOLS: List[str] = [
+    # All tools the planner is allowed to select.
+    # _FALLBACK_CASCADE is used when the planner fails or selects no tools.
+    _ALL_SELECTABLE_TOOLS: List[str] = [
         'Pinecone_KB_Search',
         'Tavily_Search',
+        'ArXiv_Search',
+        'Wikipedia_Search',
+        'AdHocRAG_Search',
+        'Internal_VectorDB',
+        'PostgreSQL_Diagnosis_Search',
     ]
 
-    # Fallback cascade: tried sequentially only when ALL parallel tools return empty.
+    _FALLBACK_TOOL: str = 'Tavily_Search'
+
     _FALLBACK_CASCADE: List[str] = [
         'AdHocRAG_Search',
         'Internal_VectorDB',
         'ArXiv_Search',
         'PostgreSQL_Diagnosis_Search',
         'Wikipedia_Search',
+        'Tavily_Search',
     ]
 
     def _run_parallel_tools(
@@ -376,10 +382,12 @@ class IntegratedMedicalRAG:
         tool_names: List[str],
         timeout: float = 20.0,
     ) -> Dict[str, str]:
-        """Run *tool_names* concurrently and return {tool_name: result} for non-empty results."""
+        """Run *tool_names* concurrently; return {tool_name: result} for non-empty results."""
         import concurrent.futures as _cf
         results: Dict[str, str] = {}
-        with _cf.ThreadPoolExecutor(max_workers=len(tool_names)) as executor:
+        if not tool_names:
+            return results
+        with _cf.ThreadPoolExecutor(max_workers=max(len(tool_names), 1)) as executor:
             futures = {
                 executor.submit(self._call_tool, name, question, session_id): name
                 for name in tool_names
@@ -397,51 +405,150 @@ class IntegratedMedicalRAG:
                     logger.warning("Parallel tool '%s' raised %s", name, exc)
         return results
 
+    # Compact one-line descriptions shown to the planner LLM
+    _PLANNER_TOOL_DESCRIPTIONS: Dict[str, str] = {
+        'Pinecone_KB_Search':          'PCES org KB — dept clinical guidelines, protocols, standard-of-care (cardiology, neurology, pulmonology, etc.)',
+        'Tavily_Search':               'Live web search — real-time news, current guidelines, general medical questions',
+        'ArXiv_Search':                'Scientific papers — clinical trials, RCTs, recent research, evidence-based medicine',
+        'Wikipedia_Search':            'Encyclopedic facts — definitions, anatomy, basic biology, general knowledge',
+        'AdHocRAG_Search':             'Doctor/patient session docs — uploaded case notes, patient-specific clinical files',
+        'Internal_VectorDB':           'Session-uploaded PDFs/URLs — user uploaded documents in current session',
+        'PostgreSQL_Diagnosis_Search': 'EHR database — patient diagnosis records, ICD codes, clinical history by patient ID',
+    }
+
+    # Planner LLM call timeout (seconds)
+    _PLANNER_TIMEOUT: float = 8.0
+
+    def _plan_tools(self, question: str) -> List[str]:
+        """
+        Ask the LLM which tools are relevant for *question*.
+
+        Returns an ordered list of tool names (up to 3) that the LLM deems
+        relevant. Falls back to [_FALLBACK_TOOL] on any error or timeout.
+
+        The planner uses a separate low-temperature call so it acts as a
+        deterministic router, not a generative response.
+        """
+        import json as _json
+        import threading as _threading
+
+        tool_lines = "\n".join(
+            f"  - {name}: {desc}"
+            for name, desc in self._PLANNER_TOOL_DESCRIPTIONS.items()
+        )
+
+        planner_prompt = (
+            "You are a medical query router. Given a user query, select the 1-3 most "
+            "relevant tools to answer it. Return ONLY a JSON array of tool names, "
+            "no explanation.\n\n"
+            f"Available tools:\n{tool_lines}\n\n"
+            "Selection rules:\n"
+            "- For clinical guidelines / protocols / standard-of-care → include Pinecone_KB_Search\n"
+            "- For current/real-time/general medical questions → include Tavily_Search\n"
+            "- For research papers / clinical trials / 'latest research' → include ArXiv_Search\n"
+            "- For definitions / anatomy / basic facts → include Wikipedia_Search\n"
+            "- For patient-specific uploaded files (session docs) → include AdHocRAG_Search or Internal_VectorDB\n"
+            "- For patient EHR / diagnosis history → include PostgreSQL_Diagnosis_Search\n"
+            "- Most clinical questions need BOTH Pinecone_KB_Search AND Tavily_Search\n"
+            "- Research questions need BOTH ArXiv_Search AND Tavily_Search\n\n"
+            f"Query: {question}\n\n"
+            "Return JSON array only, e.g.: [\"Pinecone_KB_Search\", \"Tavily_Search\"]"
+        )
+
+        result_holder: Dict[str, Any] = {}
+
+        def _call_planner():
+            try:
+                resp = self.llm.invoke(planner_prompt)
+                result_holder['raw'] = resp.content if hasattr(resp, 'content') else str(resp)
+            except Exception as exc:
+                result_holder['error'] = str(exc)
+
+        thread = _threading.Thread(target=_call_planner, daemon=True)
+        thread.start()
+        thread.join(timeout=self._PLANNER_TIMEOUT)
+
+        if 'error' in result_holder:
+            logger.warning("Tool planner error: %s — using fallback", result_holder['error'])
+            return [self._FALLBACK_TOOL]
+
+        if not result_holder.get('raw'):
+            logger.warning("Tool planner timed out (%.1fs) — using fallback", self._PLANNER_TIMEOUT)
+            return [self._FALLBACK_TOOL]
+
+        # Extract JSON array from the response (LLM sometimes wraps it in markdown)
+        raw = result_holder['raw'].strip()
+        try:
+            # Strip markdown code fences if present
+            import re as _re
+            json_match = _re.search(r'\[.*?\]', raw, _re.DOTALL)
+            if json_match:
+                selected = _json.loads(json_match.group(0))
+            else:
+                selected = _json.loads(raw)
+
+            # Validate — only keep known tool names
+            valid = [t for t in selected if t in self._ALL_SELECTABLE_TOOLS]
+            if not valid:
+                logger.warning("Planner returned no valid tools from %r — fallback", selected)
+                return [self._FALLBACK_TOOL]
+
+            logger.info("Tool planner selected: %s", valid)
+            return valid
+
+        except (_json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Planner JSON parse failed (%s) raw=%r — fallback", exc, raw[:100])
+            return [self._FALLBACK_TOOL]
+
     def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
         """
-        Multi-tool parallel query: always runs Pinecone_KB_Search + Tavily_Search
-        simultaneously, merges their results, then falls back to the sequential
-        cascade only when both return empty.
+        LLM-driven multi-tool parallel query.
 
         Strategy:
-          Phase 1 (parallel)  — Pinecone_KB_Search + Tavily_Search run together
-          Phase 2 (fallback)  — AdHocRAG → Internal_VectorDB → ArXiv → PostgreSQL → Wikipedia
+          Phase 0 (plan)     — LLM selects relevant tools for this query (~0.3s)
+          Phase 1 (parallel) — Selected tools run simultaneously via ThreadPoolExecutor
+          Phase 2 (fallback) — If all planned tools return empty, try Tavily → Wikipedia
         """
         try:
             tools_used: List[str] = []
             raw_content: str = ""
 
-            # ── Phase 1: run Pinecone + Tavily in parallel ──────────────────
-            logger.info("Multi-tool: running parallel tools %s", self._PARALLEL_TOOLS)
+            # ── Phase 0: LLM tool planner ────────────────────────────────────
+            planned_tools = self._plan_tools(question)
+            logger.info("Planned tools for query: %s", planned_tools)
+
+            # ── Phase 1: run planned tools in parallel ───────────────────────
             parallel_results = self._run_parallel_tools(
-                question, session_id or "guest", self._PARALLEL_TOOLS
+                question, session_id or "guest", planned_tools
             )
 
             if parallel_results:
-                # Merge all parallel results in a fixed order (Pinecone first)
+                # Merge results in planned order so Pinecone always leads
                 parts = []
-                for name in self._PARALLEL_TOOLS:
+                for name in planned_tools:
                     if name in parallel_results:
                         label = _TOOL_SOURCE_LABELS.get(name, name)
                         parts.append(f"[{label}]\n{parallel_results[name]}")
                         tools_used.append(name)
                 raw_content = "\n\n---\n\n".join(parts)
-                logger.info("Multi-tool: merged %d parallel results (%d chars)",
-                            len(parallel_results), len(raw_content))
+                logger.info("Multi-tool: merged %d/%d planned tools (%d chars)",
+                            len(parallel_results), len(planned_tools), len(raw_content))
 
-            # ── Phase 2: fallback cascade when parallel tools found nothing ──
+            # ── Phase 2: fallback when ALL planned tools returned empty ──────
             if not raw_content:
-                logger.info("Multi-tool: parallel tools empty — running fallback cascade")
+                logger.info("All planned tools empty — running fallback cascade")
                 for tool_name in self._FALLBACK_CASCADE:
-                    logger.info("Fallback cascade: trying '%s'", tool_name)
+                    if tool_name in planned_tools:
+                        continue   # already tried
+                    logger.info("Fallback: trying '%s'", tool_name)
                     result = self._call_tool(tool_name, question, session_id or "guest")
                     if not self._is_empty_result(result, tool_name):
                         raw_content = result
                         tools_used = [tool_name]
-                        logger.info("Fallback cascade: '%s' returned %d chars",
-                                    tool_name, len(result))
+                        logger.info("Fallback: '%s' returned %d chars", tool_name, len(result))
                         break
-                    logger.info("Fallback cascade: '%s' returned nothing — next", tool_name)
+                    logger.info("Fallback: '%s' returned nothing — next", tool_name)
+
 
             if not raw_content:
                 raw_content = "No relevant information found across all knowledge sources."
@@ -514,8 +621,9 @@ class IntegratedMedicalRAG:
                 'routing_info': {
                     'primary_tool': primary_tool,
                     'confidence': 'high',
-                    'reasoning': f'Multi-tool query — tools used: {", ".join(tools_used)}',
-                    'ranked_tools': self._PARALLEL_TOOLS + self._FALLBACK_CASCADE,
+                    'reasoning': f'LLM planned: {", ".join(planned_tools)} → executed: {", ".join(tools_used)}',
+                    'planned_tools': planned_tools,
+                    'ranked_tools': self._ALL_SELECTABLE_TOOLS,
                 },
                 'explanation': f"Answer sourced from: {', '.join(tools_used)}",
                 'tools_used': tools_used,
