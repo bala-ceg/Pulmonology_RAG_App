@@ -730,11 +730,11 @@ def search_doctors():
 @handle_route_errors
 def search_patients():
     """Search for patients by first_name and last_name from patient table."""
-    try:
-        query = request.args.get("q", "").strip().lower()
-        if not query:
-            return jsonify([])
+    query = request.args.get("q", "").strip().lower()
+    if not query:
+        return jsonify([])
 
+    try:
         with _db_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
@@ -763,8 +763,8 @@ def search_patients():
         return jsonify(patients)
 
     except Exception as exc:
-        logger.error("Error searching patients: %s", exc)
-        return jsonify({"error": str(exc)}), 500
+        logger.warning("search_patients: DB unavailable (%s) — returning empty list", exc)
+        return jsonify([])
 
 
 @disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])
@@ -787,7 +787,7 @@ def get_patient_info(patient_id: str):
                 row = cursor.fetchone()
 
         if not row:
-            return jsonify({"error": "Patient not found"}), 404
+            return jsonify({"db_available": True, "error": "Patient not found"}), 404
 
         pid, first, last, dob, gender = row
         full_name = f"{first or ''} {last or ''}".strip()
@@ -812,6 +812,14 @@ def get_patient_info(patient_id: str):
         })
 
     except Exception as exc:
-        logger.error("Error fetching patient info for %s: %s", patient_id, exc)
-        # Return partial info so UI can still show name from autocomplete
-        return jsonify({"error": str(exc), "patient_id": patient_id}), 500
+        logger.warning("get_patient_info: DB unavailable for %s (%s) — returning partial", patient_id, exc)
+        # Return partial data so the UI can still show patient_id from autocomplete
+        return jsonify({
+            "patient_id": patient_id,
+            "full_name": None,
+            "age": None,
+            "gender": "—",
+            "db_available": False,
+        })
+
+

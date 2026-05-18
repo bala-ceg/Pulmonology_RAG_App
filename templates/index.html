@@ -2709,8 +2709,8 @@
                 const resp = await fetch(`/search_patients?q=${encodeURIComponent(q)}`);
                 const items = await resp.json();
                 dd.innerHTML = '';
-                if (!items.length) {
-                    dd.innerHTML = '<div class="pi-search-item no-results">No patients found</div>';
+                if (!Array.isArray(items) || !items.length) {
+                    dd.innerHTML = '<div class="pi-search-item no-results">No patients found (DB may be unavailable)</div>';
                 } else {
                     items.forEach(item => {
                         const div = document.createElement('div');
