@@ -767,6 +767,73 @@ def search_patients():
         return jsonify([])
 
 
+@disciplines_bp.route("/api/patient/search", methods=["GET"])
+@handle_route_errors
+def search_patients_advanced():
+    """Search patients by first, last, middle name and/or DOB."""
+    first  = (request.args.get("first",  "") or "").strip()
+    last   = (request.args.get("last",   "") or "").strip()
+    middle = (request.args.get("middle", "") or "").strip()
+    dob    = (request.args.get("dob",    "") or "").strip()
+
+    if not any([first, last, middle, dob]):
+        return jsonify([])
+
+    try:
+        conditions = []
+        params = []
+
+        if first:
+            conditions.append("LOWER(first_name) LIKE %s")
+            params.append(f"%{first.lower()}%")
+        if last:
+            conditions.append("LOWER(last_name) LIKE %s")
+            params.append(f"%{last.lower()}%")
+        if middle:
+            conditions.append("LOWER(middle_name) LIKE %s")
+            params.append(f"%{middle.lower()}%")
+        if dob:
+            conditions.append("CAST(date_of_birth AS TEXT) LIKE %s")
+            params.append(f"%{dob}%")
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+        sql_q = f"""
+            SELECT patient_id, first_name, middle_name, last_name,
+                   date_of_birth, address1, city, state, zip
+            FROM patient
+            WHERE {where}
+            ORDER BY last_name, first_name
+            LIMIT 20
+        """
+
+        with _db_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(sql_q, params)
+                rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            pid, fn, mn, ln, dob_val, addr1, city, state, zipcode = row
+            parts = [p for p in [fn, mn, ln] if p]
+            results.append({
+                "patient_id":   str(pid) if pid else "",
+                "first_name":   fn or "",
+                "middle_name":  mn or "",
+                "last_name":    ln or "",
+                "full_name":    " ".join(parts),
+                "dob":          str(dob_val)[:10] if dob_val else "",
+                "address1":     addr1 or "",
+                "city":         city or "",
+                "state":        state or "",
+                "zip":          zipcode or "",
+            })
+        return jsonify(results)
+
+    except Exception as exc:
+        logger.warning("search_patients_advanced: DB unavailable (%s) — returning []", exc)
+        return jsonify([])
+
+
 @disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])
 @handle_route_errors
 def get_patient_info(patient_id: str):

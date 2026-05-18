@@ -421,84 +421,29 @@ class IntegratedMedicalRAG:
 
     def _plan_tools(self, question: str) -> List[str]:
         """
-        Ask the LLM which tools are relevant for *question*.
+        Select ALL available tools to run in parallel.
 
-        Returns an ordered list of tool names (up to 3) that the LLM deems
-        relevant. Falls back to [_FALLBACK_TOOL] on any error or timeout.
-
-        The planner uses a separate low-temperature call so it acts as a
-        deterministic router, not a generative response.
+        AdHocRAG_Search is included only when the adhoc KB is loaded (i.e.
+        the doctor has uploaded session-specific documents). All other tools
+        always run so results are merged from every knowledge source.
         """
-        import json as _json
-        import threading as _threading
+        tools = [t for t in self._ALL_SELECTABLE_TOOLS]
 
-        tool_lines = "\n".join(
-            f"  - {name}: {desc}"
-            for name, desc in self._PLANNER_TOOL_DESCRIPTIONS.items()
-        )
-
-        planner_prompt = (
-            "You are a medical query router. Given a user query, select the 1-3 most "
-            "relevant tools to answer it. Return ONLY a JSON array of tool names, "
-            "no explanation.\n\n"
-            f"Available tools:\n{tool_lines}\n\n"
-            "Selection rules:\n"
-            "- For clinical guidelines / protocols / standard-of-care → include Pinecone_KB_Search\n"
-            "- For current/real-time/general medical questions → include Tavily_Search\n"
-            "- For research papers / clinical trials / 'latest research' → include ArXiv_Search\n"
-            "- For definitions / anatomy / basic facts → include Wikipedia_Search\n"
-            "- For patient-specific uploaded files (session docs) → include AdHocRAG_Search or Internal_VectorDB\n"
-            "- For patient EHR / diagnosis history → include PostgreSQL_Diagnosis_Search\n"
-            "- Most clinical questions need BOTH Pinecone_KB_Search AND Tavily_Search\n"
-            "- Research questions need BOTH ArXiv_Search AND Tavily_Search\n\n"
-            f"Query: {question}\n\n"
-            "Return JSON array only, e.g.: [\"Pinecone_KB_Search\", \"Tavily_Search\"]"
-        )
-
-        result_holder: Dict[str, Any] = {}
-
-        def _call_planner():
-            try:
-                resp = self.llm.invoke(planner_prompt)
-                result_holder['raw'] = resp.content if hasattr(resp, 'content') else str(resp)
-            except Exception as exc:
-                result_holder['error'] = str(exc)
-
-        thread = _threading.Thread(target=_call_planner, daemon=True)
-        thread.start()
-        thread.join(timeout=self._PLANNER_TIMEOUT)
-
-        if 'error' in result_holder:
-            logger.warning("Tool planner error: %s — using fallback", result_holder['error'])
-            return [self._FALLBACK_TOOL]
-
-        if not result_holder.get('raw'):
-            logger.warning("Tool planner timed out (%.1fs) — using fallback", self._PLANNER_TIMEOUT)
-            return [self._FALLBACK_TOOL]
-
-        # Extract JSON array from the response (LLM sometimes wraps it in markdown)
-        raw = result_holder['raw'].strip()
+        # Skip AdHocRAG_Search when no adhoc documents have been uploaded yet
+        adhoc_kb_ready = False
         try:
-            # Strip markdown code fences if present
-            import re as _re
-            json_match = _re.search(r'\[.*?\]', raw, _re.DOTALL)
-            if json_match:
-                selected = _json.loads(json_match.group(0))
-            else:
-                selected = _json.loads(raw)
+            rag_mgr = getattr(self, 'rag_manager', None)
+            if rag_mgr and getattr(rag_mgr, 'adhoc_kb', None) is not None:
+                adhoc_kb_ready = True
+        except Exception:
+            pass
 
-            # Validate — only keep known tool names
-            valid = [t for t in selected if t in self._ALL_SELECTABLE_TOOLS]
-            if not valid:
-                logger.warning("Planner returned no valid tools from %r — fallback", selected)
-                return [self._FALLBACK_TOOL]
+        if not adhoc_kb_ready and 'AdHocRAG_Search' in tools:
+            tools.remove('AdHocRAG_Search')
+            logger.info("_plan_tools: adhoc KB not loaded — skipping AdHocRAG_Search")
 
-            logger.info("Tool planner selected: %s", valid)
-            return valid
-
-        except (_json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Planner JSON parse failed (%s) raw=%r — fallback", exc, raw[:100])
-            return [self._FALLBACK_TOOL]
+        logger.info("_plan_tools: running all tools in parallel: %s", tools)
+        return tools
 
     def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
         """
