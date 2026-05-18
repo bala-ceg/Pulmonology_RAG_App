@@ -1611,12 +1611,20 @@
             font-size: 12px;
             transition: border-color 0.2s, background 0.2s;
             min-height: 48px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .patient-info-section:not(.has-patient):hover {
+            border-color: #26a69a;
+            background: #e8f5e9;
         }
 
         .patient-info-section.has-patient {
             border: 1.5px solid #00897b;
             background: #e0f2f1;
             color: #004d40;
+            cursor: default;
         }
 
         .patient-info-section .pi-placeholder {
@@ -1630,6 +1638,11 @@
             display: none;
         }
 
+        .patient-info-section.is-searching .pi-placeholder,
+        .patient-info-section.is-searching .patient-info-chips {
+            display: none;
+        }
+
         .patient-info-chips {
             display: none;
             flex-wrap: wrap;
@@ -1638,6 +1651,24 @@
 
         .patient-info-section.has-patient .patient-info-chips {
             display: flex;
+        }
+
+        /* Clear button shown when patient is set */
+        .pi-clear-btn {
+            display: none;
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            background: none;
+            border: none;
+            color: #00897b;
+            font-size: 13px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 2px;
+        }
+        .patient-info-section.has-patient .pi-clear-btn {
+            display: block;
         }
 
         .pi-chip {
@@ -1657,6 +1688,52 @@
             color: #00695c;
             font-weight: 600;
         }
+
+        /* Inline patient search */
+        .pi-search-wrap {
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .patient-info-section.is-searching .pi-search-wrap {
+            display: flex;
+        }
+        .pi-search-input {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #80cbc4;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .pi-search-input:focus {
+            border-color: #00897b;
+            box-shadow: 0 0 0 2px rgba(0,137,123,0.15);
+        }
+        .pi-search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #80cbc4;
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            z-index: 200;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .pi-search-item {
+            padding: 7px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            color: #333;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .pi-search-item:last-child { border-bottom: none; }
+        .pi-search-item:hover { background: #e0f2f1; color: #004d40; }
+        .pi-search-item.no-results { color: #90a4ae; font-style: italic; cursor: default; }
 
         /* ── Patient Problem Section (70%) ──────────────────────── */
         .patient-problem-section {
@@ -2287,13 +2364,21 @@
             <!-- Problem Row Section -->
             <div class="problem-row">
               <!-- Patient Info — 30% left -->
-              <div class="patient-info-section" id="patient-info-section">
-                <span class="pi-placeholder">No patient selected</span>
+              <div class="patient-info-section" id="patient-info-section" onclick="openPatientInlineSearch(event)" title="Click to search for a patient">
+                <button class="pi-clear-btn" onclick="event.stopPropagation(); clearPatientInfoBar()" title="Clear patient">✕</button>
+                <span class="pi-placeholder">🔍 Click to select patient</span>
                 <div class="patient-info-chips" id="patient-info-chips">
                   <span class="pi-chip"><span class="pi-label">👤</span> <span id="pi-name">—</span></span>
                   <span class="pi-chip"><span class="pi-label">🪪</span> <span id="pi-id">—</span></span>
                   <span class="pi-chip"><span class="pi-label">🎂</span> <span id="pi-age">—</span></span>
                   <span class="pi-chip"><span class="pi-label">⚧</span> <span id="pi-gender">—</span></span>
+                </div>
+                <!-- Inline search (shown when section is clicked) -->
+                <div class="pi-search-wrap" id="pi-search-wrap">
+                  <input type="text" id="pi-search-input" class="pi-search-input"
+                         placeholder="Type patient name…" autocomplete="off"
+                         onclick="event.stopPropagation()">
+                  <div class="pi-search-dropdown" id="pi-search-dropdown" style="display:none;"></div>
                 </div>
               </div>
               <!-- Patient Problem — 70% right -->
@@ -2554,7 +2639,11 @@
             document.getElementById('pi-id').textContent     = data.patient_id || '—';
             document.getElementById('pi-age').textContent    = data.age != null ? data.age + 'y' : '—';
             document.getElementById('pi-gender').textContent = data.gender     || '—';
+            section.classList.remove('is-searching');
             section.classList.add('has-patient');
+            // Close inline search
+            const dd = document.getElementById('pi-search-dropdown');
+            if (dd) dd.style.display = 'none';
         }
 
         function clearPatientInfoBar() {
@@ -2563,8 +2652,88 @@
             ['pi-name','pi-id','pi-age','pi-gender'].forEach(id => {
                 document.getElementById(id).textContent = '—';
             });
-            section.classList.remove('has-patient');
+            section.classList.remove('has-patient', 'is-searching');
             window.selectedPatientId = null;
+            const inp = document.getElementById('pi-search-input');
+            if (inp) inp.value = '';
+            const dd = document.getElementById('pi-search-dropdown');
+            if (dd) dd.style.display = 'none';
+        }
+
+        /* ── Inline patient search ─────────────────────────── */
+        function openPatientInlineSearch(e) {
+            const section = document.getElementById('patient-info-section');
+            if (!section || section.classList.contains('has-patient')) return;
+            e.stopPropagation();
+            section.classList.add('is-searching');
+            const inp = document.getElementById('pi-search-input');
+            if (inp) { inp.value = ''; inp.focus(); }
+        }
+
+        // Close inline search when clicking outside
+        document.addEventListener('click', function(e) {
+            const section = document.getElementById('patient-info-section');
+            if (section && section.classList.contains('is-searching') && !section.contains(e.target)) {
+                section.classList.remove('is-searching');
+                const dd = document.getElementById('pi-search-dropdown');
+                if (dd) dd.style.display = 'none';
+            }
+        });
+
+        // Wire up the inline search input once DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const inp = document.getElementById('pi-search-input');
+            if (!inp) return;
+            let _piTimer = null;
+            inp.addEventListener('input', function() {
+                clearTimeout(_piTimer);
+                const q = inp.value.trim();
+                if (q.length < 2) {
+                    document.getElementById('pi-search-dropdown').style.display = 'none';
+                    return;
+                }
+                _piTimer = setTimeout(() => fetchPiResults(q), 280);
+            });
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const section = document.getElementById('patient-info-section');
+                    if (section) section.classList.remove('is-searching');
+                    document.getElementById('pi-search-dropdown').style.display = 'none';
+                }
+            });
+        });
+
+        async function fetchPiResults(q) {
+            const dd = document.getElementById('pi-search-dropdown');
+            try {
+                const resp = await fetch(`/search_patients?q=${encodeURIComponent(q)}`);
+                const items = await resp.json();
+                dd.innerHTML = '';
+                if (!items.length) {
+                    dd.innerHTML = '<div class="pi-search-item no-results">No patients found</div>';
+                } else {
+                    items.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'pi-search-item';
+                        div.textContent = item.full_name;
+                        div.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            dd.style.display = 'none';
+                            window.selectedPatientId = item.patient_id;
+                            setPatientInfoBar({ full_name: item.full_name, patient_id: item.patient_id, age: null, gender: null });
+                            fetch(`/api/patient/${encodeURIComponent(item.patient_id)}`)
+                                .then(r => r.json())
+                                .then(data => { if (!data.error) setPatientInfoBar(data); })
+                                .catch(() => {});
+                        });
+                        dd.appendChild(div);
+                    });
+                }
+                dd.style.display = 'block';
+            } catch(err) {
+                dd.innerHTML = '<div class="pi-search-item no-results">Search unavailable</div>';
+                dd.style.display = 'block';
+            }
         }
 
         function selectSuggestion(fullName, type, patientId = null) {
