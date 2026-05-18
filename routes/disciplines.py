@@ -765,3 +765,53 @@ def search_patients():
     except Exception as exc:
         logger.error("Error searching patients: %s", exc)
         return jsonify({"error": str(exc)}), 500
+
+
+@disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])
+@handle_route_errors
+def get_patient_info(patient_id: str):
+    """Return basic demographic info for a single patient."""
+    try:
+        with _db_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT patient_id, first_name, last_name,
+                           date_of_birth, gender
+                    FROM patient
+                    WHERE patient_id = %s
+                    LIMIT 1
+                    """,
+                    (patient_id,),
+                )
+                row = cursor.fetchone()
+
+        if not row:
+            return jsonify({"error": "Patient not found"}), 404
+
+        pid, first, last, dob, gender = row
+        full_name = f"{first or ''} {last or ''}".strip()
+
+        age = None
+        if dob:
+            from datetime import date as _date
+            today = _date.today()
+            try:
+                birth = dob if hasattr(dob, "year") else _date.fromisoformat(str(dob)[:10])
+                age = today.year - birth.year - (
+                    (today.month, today.day) < (birth.month, birth.day)
+                )
+            except Exception:
+                age = None
+
+        return jsonify({
+            "patient_id": str(pid),
+            "full_name": full_name,
+            "age": age,
+            "gender": gender or "—",
+        })
+
+    except Exception as exc:
+        logger.error("Error fetching patient info for %s: %s", patient_id, exc)
+        # Return partial info so UI can still show name from autocomplete
+        return jsonify({"error": str(exc), "patient_id": patient_id}), 500
