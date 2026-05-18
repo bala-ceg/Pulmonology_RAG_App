@@ -1596,6 +1596,106 @@
             flex-shrink: 0;
         }
 
+        /* ── Patient Search Modal ───────────────────────────────── */
+        .patient-search-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .patient-search-modal-overlay.open {
+            display: flex;
+        }
+        .patient-search-modal {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+            width: 680px;
+            max-width: 96vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .psm-header {
+            padding: 18px 24px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .psm-header h2 { margin: 0; font-size: 17px; color: #004d40; }
+        .psm-close {
+            background: none; border: none; font-size: 20px;
+            cursor: pointer; color: #757575; line-height: 1;
+        }
+        .psm-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 16px 24px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .psm-field { display: flex; flex-direction: column; gap: 4px; }
+        .psm-field label { font-size: 11px; font-weight: 600; color: #555; }
+        .psm-field input {
+            padding: 7px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+        .psm-field input:focus { border-color: #00897b; box-shadow: 0 0 0 2px rgba(0,137,123,.15); }
+        .psm-search-btn {
+            grid-column: 1 / -1;
+            padding: 9px;
+            background: #00897b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        .psm-search-btn:hover { background: #00695c; }
+        .psm-results {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 24px 16px;
+        }
+        .psm-results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .psm-results-table th {
+            text-align: left;
+            padding: 7px 8px;
+            background: #e0f2f1;
+            color: #00695c;
+            font-weight: 600;
+            border-bottom: 2px solid #80cbc4;
+            white-space: nowrap;
+        }
+        .psm-results-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+        }
+        .psm-results-table tr:hover td { background: #f0fdf9; cursor: pointer; }
+        .psm-no-results {
+            text-align: center;
+            color: #90a4ae;
+            font-style: italic;
+            padding: 24px 0;
+            font-size: 13px;
+        }
+
         /* ── Patient Info Section (30%) ─────────────────────────── */
         .patient-info-section {
             flex: 0 0 30%;
@@ -1634,106 +1734,62 @@
             font-style: italic;
         }
 
-        .patient-info-section.has-patient .pi-placeholder {
-            display: none;
-        }
+        .patient-info-section.has-patient .pi-placeholder { display: none; }
 
-        .patient-info-section.is-searching .pi-placeholder,
-        .patient-info-section.is-searching .patient-info-chips {
-            display: none;
-        }
+        .patient-info-chips { display: none; flex-wrap: wrap; gap: 4px; }
+        .patient-info-section.has-patient .patient-info-chips { display: flex; }
 
-        .patient-info-chips {
-            display: none;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-
-        .patient-info-section.has-patient .patient-info-chips {
-            display: flex;
-        }
-
-        /* Clear button shown when patient is set */
         .pi-clear-btn {
             display: none;
             position: absolute;
-            top: 4px;
-            right: 6px;
-            background: none;
-            border: none;
-            color: #00897b;
-            font-size: 13px;
-            cursor: pointer;
-            line-height: 1;
-            padding: 0 2px;
+            top: 4px; right: 6px;
+            background: none; border: none;
+            color: #00897b; font-size: 13px;
+            cursor: pointer; line-height: 1; padding: 0 2px;
         }
-        .patient-info-section.has-patient .pi-clear-btn {
-            display: block;
-        }
+        .patient-info-section.has-patient .pi-clear-btn { display: block; }
 
         .pi-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            background: #b2dfdb;
-            color: #004d40;
-            border-radius: 12px;
-            padding: 2px 8px;
-            font-size: 11px;
-            font-weight: 500;
-            white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #b2dfdb; color: #004d40;
+            border-radius: 12px; padding: 2px 8px;
+            font-size: 11px; font-weight: 500; white-space: nowrap;
         }
+        .pi-chip .pi-label { color: #00695c; font-weight: 600; }
 
-        .pi-chip .pi-label {
-            color: #00695c;
-            font-weight: 600;
-        }
-
-        /* Inline patient search */
-        .pi-search-wrap {
+        /* ── Empty-problem warning modal ────────────────────────── */
+        .ep-modal-overlay {
             display: none;
-            flex-direction: column;
-            gap: 4px;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1100;
+            align-items: center;
+            justify-content: center;
         }
-        .patient-info-section.is-searching .pi-search-wrap {
-            display: flex;
+        .ep-modal-overlay.open { display: flex; }
+        .ep-modal {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+            padding: 28px 32px;
+            max-width: 420px;
+            width: 90vw;
+            text-align: center;
         }
-        .pi-search-input {
-            width: 100%;
-            padding: 5px 8px;
-            border: 1px solid #80cbc4;
-            border-radius: 6px;
-            font-size: 12px;
-            outline: none;
-            box-sizing: border-box;
+        .ep-modal p { margin: 0 0 20px; font-size: 15px; color: #333; }
+        .ep-modal .ep-btns { display: flex; gap: 12px; justify-content: center; }
+        .ep-modal .ep-yes {
+            padding: 9px 28px; background: #00897b; color: white;
+            border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
         }
-        .pi-search-input:focus {
-            border-color: #00897b;
-            box-shadow: 0 0 0 2px rgba(0,137,123,0.15);
+        .ep-modal .ep-yes:hover { background: #00695c; }
+        .ep-modal .ep-no {
+            padding: 9px 28px; background: #f5f5f5; color: #555;
+            border: 1px solid #ccc; border-radius: 6px; font-size: 14px; cursor: pointer;
         }
-        .pi-search-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: white;
-            border: 1px solid #80cbc4;
-            border-radius: 0 0 6px 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-            z-index: 200;
-            max-height: 180px;
-            overflow-y: auto;
-        }
-        .pi-search-item {
-            padding: 7px 10px;
-            font-size: 12px;
-            cursor: pointer;
-            color: #333;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .pi-search-item:last-child { border-bottom: none; }
-        .pi-search-item:hover { background: #e0f2f1; color: #004d40; }
-        .pi-search-item.no-results { color: #90a4ae; font-style: italic; cursor: default; }
+        .ep-modal .ep-no:hover { background: #ececec; }
+
 
         /* ── Patient Problem Section (70%) ──────────────────────── */
         .patient-problem-section {
@@ -2363,22 +2419,12 @@
             
             <!-- Problem Row Section -->
             <div class="problem-row">
-              <!-- Patient Info — 30% left -->
-              <div class="patient-info-section" id="patient-info-section" onclick="openPatientInlineSearch(event)" title="Click to search for a patient">
+              <!-- Patient Info — 30% left (click opens search modal) -->
+              <div class="patient-info-section" id="patient-info-section" onclick="openPatientSearchModal()" title="Click to select patient">
                 <button class="pi-clear-btn" onclick="event.stopPropagation(); clearPatientInfoBar()" title="Clear patient">✕</button>
                 <span class="pi-placeholder">🔍 Click to select patient</span>
                 <div class="patient-info-chips" id="patient-info-chips">
                   <span class="pi-chip"><span class="pi-label">👤</span> <span id="pi-name">—</span></span>
-                  <span class="pi-chip"><span class="pi-label">🪪</span> <span id="pi-id">—</span></span>
-                  <span class="pi-chip"><span class="pi-label">🎂</span> <span id="pi-age">—</span></span>
-                  <span class="pi-chip"><span class="pi-label">⚧</span> <span id="pi-gender">—</span></span>
-                </div>
-                <!-- Inline search (shown when section is clicked) -->
-                <div class="pi-search-wrap" id="pi-search-wrap">
-                  <input type="text" id="pi-search-input" class="pi-search-input"
-                         placeholder="Type patient name…" autocomplete="off"
-                         onclick="event.stopPropagation()">
-                  <div class="pi-search-dropdown" id="pi-search-dropdown" style="display:none;"></div>
                 </div>
               </div>
               <!-- Patient Problem — 70% right -->
@@ -2390,7 +2436,7 @@
             
             <div class="chat-input">
                 <input type="text" id="user-input" placeholder="Type your message...">
-                <button id="send-btn" onclick="requireAuth(() => sendMessage())">Generate</button>
+                <button id="send-btn" disabled onclick="requireAuth(() => sendMessage())">Generate</button>
                 <button id="plain-english-btn" onclick="requireAuth(() => refineInput())">Plain English</button>
                 <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save as PDF</button>
                 <button id="voice-btn" onclick="requireAuth(() => startRecording())">Start Recording</button>
@@ -2632,108 +2678,142 @@
             }
         }
 
+        const _PROBLEM_PLACEHOLDER = 'No patient problem defined';
+        let _epPendingCallback = null; // callback to run if user confirms "proceed anyway"
+
         function setPatientInfoBar(data) {
             const section = document.getElementById('patient-info-section');
             if (!section) return;
-            document.getElementById('pi-name').textContent   = data.full_name  || '—';
-            document.getElementById('pi-id').textContent     = data.patient_id || '—';
-            document.getElementById('pi-age').textContent    = data.age != null ? data.age + 'y' : '—';
-            document.getElementById('pi-gender').textContent = data.gender     || '—';
-            section.classList.remove('is-searching');
+            document.getElementById('pi-name').textContent = data.full_name || '—';
             section.classList.add('has-patient');
-            // Close inline search
-            const dd = document.getElementById('pi-search-dropdown');
-            if (dd) dd.style.display = 'none';
+            // Enable Generate button
+            const btn = document.getElementById('send-btn');
+            if (btn) btn.disabled = false;
         }
 
         function clearPatientInfoBar() {
             const section = document.getElementById('patient-info-section');
             if (!section) return;
-            ['pi-name','pi-id','pi-age','pi-gender'].forEach(id => {
-                document.getElementById(id).textContent = '—';
-            });
-            section.classList.remove('has-patient', 'is-searching');
+            const nameEl = document.getElementById('pi-name');
+            if (nameEl) nameEl.textContent = '—';
+            section.classList.remove('has-patient');
             window.selectedPatientId = null;
-            const inp = document.getElementById('pi-search-input');
-            if (inp) inp.value = '';
-            const dd = document.getElementById('pi-search-dropdown');
-            if (dd) dd.style.display = 'none';
+            // Disable Generate button until patient re-selected
+            const btn = document.getElementById('send-btn');
+            if (btn) btn.disabled = true;
         }
 
-        /* ── Inline patient search ─────────────────────────── */
-        function openPatientInlineSearch(e) {
+        /* ── Patient Search Modal ──────────────────────────── */
+        function openPatientSearchModal() {
             const section = document.getElementById('patient-info-section');
-            if (!section || section.classList.contains('has-patient')) return;
-            e.stopPropagation();
-            section.classList.add('is-searching');
-            const inp = document.getElementById('pi-search-input');
-            if (inp) { inp.value = ''; inp.focus(); }
-        }
-
-        // Close inline search when clicking outside
-        document.addEventListener('click', function(e) {
-            const section = document.getElementById('patient-info-section');
-            if (section && section.classList.contains('is-searching') && !section.contains(e.target)) {
-                section.classList.remove('is-searching');
-                const dd = document.getElementById('pi-search-dropdown');
-                if (dd) dd.style.display = 'none';
+            if (section && section.classList.contains('has-patient')) return; // already set
+            const overlay = document.getElementById('patient-search-modal-overlay');
+            if (overlay) {
+                overlay.classList.add('open');
+                // Reset form & results
+                ['psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                document.getElementById('psm-results-table').style.display = 'none';
+                document.getElementById('psm-no-results-msg').style.display = 'none';
+                document.getElementById('psm-results-body').innerHTML = '';
+                // Focus first field
+                setTimeout(() => { const f = document.getElementById('psm-first'); if (f) f.focus(); }, 100);
             }
+        }
+
+        function closePatientSearchModal() {
+            const overlay = document.getElementById('patient-search-modal-overlay');
+            if (overlay) overlay.classList.remove('open');
+        }
+
+        // Close on backdrop click
+        document.getElementById('patient-search-modal-overlay') &&
+        document.getElementById('patient-search-modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) closePatientSearchModal();
         });
 
-        // Wire up the inline search input once DOM is ready
-        document.addEventListener('DOMContentLoaded', function() {
-            const inp = document.getElementById('pi-search-input');
-            if (!inp) return;
-            let _piTimer = null;
-            inp.addEventListener('input', function() {
-                clearTimeout(_piTimer);
-                const q = inp.value.trim();
-                if (q.length < 2) {
-                    document.getElementById('pi-search-dropdown').style.display = 'none';
+        // Allow Enter key in search fields to trigger search
+        ['psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') runPatientSearch(); });
+        });
+
+        async function runPatientSearch() {
+            const first  = (document.getElementById('psm-first').value  || '').trim();
+            const last   = (document.getElementById('psm-last').value   || '').trim();
+            const middle = (document.getElementById('psm-middle').value || '').trim();
+            const dob    = (document.getElementById('psm-dob').value    || '').trim();
+
+            if (!first && !last && !middle && !dob) {
+                alert('Please enter at least one search field.');
+                return;
+            }
+
+            const params = new URLSearchParams();
+            if (first)  params.set('first',  first);
+            if (last)   params.set('last',   last);
+            if (middle) params.set('middle', middle);
+            if (dob)    params.set('dob',    dob);
+
+            const tbody = document.getElementById('psm-results-body');
+            const table = document.getElementById('psm-results-table');
+            const noMsg = document.getElementById('psm-no-results-msg');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#90a4ae;padding:16px;">Searching…</td></tr>';
+            table.style.display = 'table';
+            noMsg.style.display = 'none';
+
+            try {
+                const resp = await fetch(`/api/patient/search?${params}`);
+                const rows = await resp.json();
+                tbody.innerHTML = '';
+                if (!Array.isArray(rows) || !rows.length) {
+                    table.style.display = 'none';
+                    noMsg.style.display = 'block';
                     return;
                 }
-                _piTimer = setTimeout(() => fetchPiResults(q), 280);
-            });
-            inp.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    const section = document.getElementById('patient-info-section');
-                    if (section) section.classList.remove('is-searching');
-                    document.getElementById('pi-search-dropdown').style.display = 'none';
-                }
-            });
-        });
-
-        async function fetchPiResults(q) {
-            const dd = document.getElementById('pi-search-dropdown');
-            try {
-                const resp = await fetch(`/search_patients?q=${encodeURIComponent(q)}`);
-                const items = await resp.json();
-                dd.innerHTML = '';
-                if (!Array.isArray(items) || !items.length) {
-                    dd.innerHTML = '<div class="pi-search-item no-results">No patients found (DB may be unavailable)</div>';
-                } else {
-                    items.forEach(item => {
-                        const div = document.createElement('div');
-                        div.className = 'pi-search-item';
-                        div.textContent = item.full_name;
-                        div.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            dd.style.display = 'none';
-                            window.selectedPatientId = item.patient_id;
-                            setPatientInfoBar({ full_name: item.full_name, patient_id: item.patient_id, age: null, gender: null });
-                            fetch(`/api/patient/${encodeURIComponent(item.patient_id)}`)
-                                .then(r => r.json())
-                                .then(data => { if (!data.error) setPatientInfoBar(data); })
-                                .catch(() => {});
-                        });
-                        dd.appendChild(div);
-                    });
-                }
-                dd.style.display = 'block';
+                rows.forEach(p => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${p.full_name || '—'}</td>
+                        <td>${p.dob || '—'}</td>
+                        <td>${p.address1 || '—'}</td>
+                        <td>${p.city || '—'}</td>
+                        <td>${p.state || '—'}</td>
+                        <td>${p.zip || '—'}</td>`;
+                    tr.addEventListener('click', () => selectPatientFromModal(p));
+                    tbody.appendChild(tr);
+                });
             } catch(err) {
-                dd.innerHTML = '<div class="pi-search-item no-results">Search unavailable</div>';
-                dd.style.display = 'block';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#c62828;padding:16px;">Search unavailable (DB may be down)</td></tr>';
             }
+        }
+
+        function selectPatientFromModal(p) {
+            window.selectedPatientId = p.patient_id;
+            setPatientInfoBar({ full_name: p.full_name, patient_id: p.patient_id });
+            closePatientSearchModal();
+        }
+
+        /* ── Empty-problem warning modal ───────────────────── */
+        function openEpModal(callback) {
+            _epPendingCallback = callback;
+            document.getElementById('ep-modal-overlay').classList.add('open');
+        }
+        function closeEpModal() {
+            document.getElementById('ep-modal-overlay').classList.remove('open');
+            _epPendingCallback = null;
+        }
+        function epProceed() {
+            closeEpModal();
+            if (_epPendingCallback) _epPendingCallback();
+        }
+        function epCancel() {
+            closeEpModal();
+            // Clear the doctor's typed query
+            const inp = document.getElementById('user-input');
+            if (inp) inp.value = '';
         }
 
         function selectSuggestion(fullName, type, patientId = null) {
@@ -2748,8 +2828,8 @@
                 window.selectedPatientId = patientId;
                 console.log('Selected patient ID:', patientId);
                 // Populate patient info bar immediately with name from autocomplete
-                setPatientInfoBar({ full_name: fullName, patient_id: patientId, age: null, gender: null });
-                // Then fetch full demographics
+                setPatientInfoBar({ full_name: fullName, patient_id: patientId });
+                // Then fetch full demographics (for recording modal display)
                 fetch(`/api/patient/${encodeURIComponent(patientId)}`)
                     .then(r => r.json())
                     .then(data => { if (!data.error) setPatientInfoBar(data); })
@@ -3141,6 +3221,21 @@
             const message = userInput.value.trim();
             if (!message) return;
 
+            // Check if patient problem is empty/placeholder
+            const patientProblemElement = document.getElementById('problem-text');
+            const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
+            const problemEmpty = !patientProblem || patientProblem === _PROBLEM_PLACEHOLDER;
+
+            if (problemEmpty) {
+                // Show warning modal; pass the actual send logic as callback
+                openEpModal(() => _doSendMessage(message, ''));
+                return;
+            }
+
+            _doSendMessage(message, patientProblem);
+        }
+
+        async function _doSendMessage(message, patientProblem) {
             addMessage('user', message);
             userInput.value = '';
             sendBtn.disabled = true;
@@ -3150,16 +3245,12 @@
             updateRoutingStatus('Analyzing query and routing to relevant medical disciplines...');
 
             try {
-                // Get patient problem context from the editable element
-                const patientProblemElement = document.getElementById('problem-text');
-                const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
-                
                 const response = await fetch('/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         data: message,
-                        patient_problem: patientProblem,  // Include patient problem as context
+                        patient_problem: patientProblem,
                         doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
                         doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
@@ -3185,7 +3276,7 @@
                         updateRoutingStatus('Query processed successfully');
                     }
                     
-                    sendBtn.disabled = false;
+                    sendBtn.disabled = !window.selectedPatientId;
                     saveBtn.disabled = false;
                 } else {
                     console.error('Error:', data.message);
@@ -3195,7 +3286,7 @@
                 console.error('Error:', error);
                 updateRoutingStatus('Network error');
             } finally {
-                sendBtn.disabled = false;
+                sendBtn.disabled = !window.selectedPatientId;
             }
             updateButtonsState(); // after 10 max messages, force the user to save
         }
@@ -3209,7 +3300,7 @@
                 alert("System reached max 20 conversations, prompting you to save this session now. You may continue.");
                 saveChat();
             } else {
-                sendBtn.disabled = false;
+                sendBtn.disabled = !window.selectedPatientId;
                 saveBtn.disabled = false;
             }
         }
@@ -3275,7 +3366,7 @@
 
                 // Reset message count and buttons
                 messageCount = 0;
-                sendBtn.disabled = false;
+                sendBtn.disabled = !window.selectedPatientId;
                 saveBtn.disabled = true;
 
                 hideToast();
@@ -3360,7 +3451,7 @@
                     const aiMessage = data.message;
                     _initDevModeFromResponse(data.dev_mode);
                     addMessage('ai', aiMessage, data.trace || []);
-                    sendBtn.disabled = false;
+                    sendBtn.disabled = !window.selectedPatientId;
                     saveBtn.disabled = false;
                 } else {
                     console.error('Error:', data.message);
@@ -3368,7 +3459,7 @@
             } catch (error) {
                 console.error('Error:', error);
             } finally {
-                sendBtn.disabled = false;
+                sendBtn.disabled = !window.selectedPatientId;
             }
             updateButtonsState();
         }
@@ -3403,7 +3494,7 @@
                     const aiMessage = data.message;
                     _initDevModeFromResponse(data.dev_mode);
                     addMessage('ai', aiMessage, data.trace || []);
-                    sendBtn.disabled = false;
+                    sendBtn.disabled = !window.selectedPatientId;
                     saveBtn.disabled = false;
                 } else {
                     console.error('Error:', data.message);
@@ -3411,7 +3502,7 @@
             } catch (error) {
                 console.error('Error:', error);
             } finally {
-                sendBtn.disabled = false;
+                sendBtn.disabled = !window.selectedPatientId;
             }
             updateButtonsState();
         }
@@ -4698,5 +4789,57 @@ ${data.conclusion}
         if (_pcesAuthed) { showLoggedInDoctor(); }
 
     </script>
+
+    <!-- ══ Patient Search Modal ══════════════════════════════════════ -->
+    <div id="patient-search-modal-overlay" class="patient-search-modal-overlay">
+      <div class="patient-search-modal">
+        <div class="psm-header">
+          <h2>🔍 Search Patient</h2>
+          <button class="psm-close" onclick="closePatientSearchModal()">✕</button>
+        </div>
+        <div class="psm-form">
+          <div class="psm-field">
+            <label>First Name</label>
+            <input type="text" id="psm-first" placeholder="e.g. John">
+          </div>
+          <div class="psm-field">
+            <label>Last Name</label>
+            <input type="text" id="psm-last" placeholder="e.g. Doe">
+          </div>
+          <div class="psm-field">
+            <label>Middle Name</label>
+            <input type="text" id="psm-middle" placeholder="optional">
+          </div>
+          <div class="psm-field">
+            <label>Date of Birth</label>
+            <input type="date" id="psm-dob">
+          </div>
+          <button class="psm-search-btn" onclick="runPatientSearch()">Search</button>
+        </div>
+        <div class="psm-results" id="psm-results">
+          <p class="psm-no-results" style="display:none;" id="psm-no-results-msg">No patients found.</p>
+          <table class="psm-results-table" id="psm-results-table" style="display:none;">
+            <thead>
+              <tr>
+                <th>Name</th><th>DOB</th><th>Address</th><th>City</th><th>State</th><th>ZIP</th>
+              </tr>
+            </thead>
+            <tbody id="psm-results-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Empty-Problem Warning Modal ═══════════════════════════════ -->
+    <div id="ep-modal-overlay" class="ep-modal-overlay">
+      <div class="ep-modal">
+        <p>⚠️ No patient problem is defined.<br>Do you want to proceed without a patient problem?</p>
+        <div class="ep-btns">
+          <button class="ep-yes" onclick="epProceed()">Yes, Proceed</button>
+          <button class="ep-no" onclick="epCancel()">No, Cancel</button>
+        </div>
+      </div>
+    </div>
+
 </body>
 </html>
