@@ -1587,13 +1587,84 @@
         /* Problem row and pill styles */
         .problem-row {
             display: flex;
-            align-items: center;
-            gap: 8px;                    /* Reduced gap */
-            margin: 5px 0;               /* Reduced margin */
-            padding: 8px;                /* Reduced padding */
+            align-items: stretch;
+            gap: 8px;
+            margin: 5px 0;
+            padding: 8px;
             background-color: #f8f9fa;
             border-radius: 8px;
-            flex-shrink: 0;              /* Don't shrink */
+            flex-shrink: 0;
+        }
+
+        /* ── Patient Info Section (30%) ─────────────────────────── */
+        .patient-info-section {
+            flex: 0 0 30%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1.5px dashed #b0bec5;
+            background: #f0f4f8;
+            color: #90a4ae;
+            font-size: 12px;
+            transition: border-color 0.2s, background 0.2s;
+            min-height: 48px;
+        }
+
+        .patient-info-section.has-patient {
+            border: 1.5px solid #00897b;
+            background: #e0f2f1;
+            color: #004d40;
+        }
+
+        .patient-info-section .pi-placeholder {
+            font-size: 12px;
+            color: #90a4ae;
+            text-align: center;
+            font-style: italic;
+        }
+
+        .patient-info-section.has-patient .pi-placeholder {
+            display: none;
+        }
+
+        .patient-info-chips {
+            display: none;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .patient-info-section.has-patient .patient-info-chips {
+            display: flex;
+        }
+
+        .pi-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            background: #b2dfdb;
+            color: #004d40;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .pi-chip .pi-label {
+            color: #00695c;
+            font-weight: 600;
+        }
+
+        /* ── Patient Problem Section (70%) ──────────────────────── */
+        .patient-problem-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
         }
 
         .pill {
@@ -2215,8 +2286,21 @@
             
             <!-- Problem Row Section -->
             <div class="problem-row">
-              <div class="pill">Patient's Problem</div>
-              <div class="pill large" id="problem-text" title="Double-click to edit">35 Years Male patient with Type 2 Diabetes and High BP</div>
+              <!-- Patient Info — 30% left -->
+              <div class="patient-info-section" id="patient-info-section">
+                <span class="pi-placeholder">No patient selected</span>
+                <div class="patient-info-chips" id="patient-info-chips">
+                  <span class="pi-chip"><span class="pi-label">👤</span> <span id="pi-name">—</span></span>
+                  <span class="pi-chip"><span class="pi-label">🪪</span> <span id="pi-id">—</span></span>
+                  <span class="pi-chip"><span class="pi-label">🎂</span> <span id="pi-age">—</span></span>
+                  <span class="pi-chip"><span class="pi-label">⚧</span> <span id="pi-gender">—</span></span>
+                </div>
+              </div>
+              <!-- Patient Problem — 70% right -->
+              <div class="patient-problem-section">
+                <div class="pill">Patient's Problem</div>
+                <div class="pill large" id="problem-text" title="Double-click to edit">No patient problem defined</div>
+              </div>
             </div>
             
             <div class="chat-input">
@@ -2463,6 +2547,26 @@
             }
         }
 
+        function setPatientInfoBar(data) {
+            const section = document.getElementById('patient-info-section');
+            if (!section) return;
+            document.getElementById('pi-name').textContent   = data.full_name  || '—';
+            document.getElementById('pi-id').textContent     = data.patient_id || '—';
+            document.getElementById('pi-age').textContent    = data.age != null ? data.age + 'y' : '—';
+            document.getElementById('pi-gender').textContent = data.gender     || '—';
+            section.classList.add('has-patient');
+        }
+
+        function clearPatientInfoBar() {
+            const section = document.getElementById('patient-info-section');
+            if (!section) return;
+            ['pi-name','pi-id','pi-age','pi-gender'].forEach(id => {
+                document.getElementById(id).textContent = '—';
+            });
+            section.classList.remove('has-patient');
+            window.selectedPatientId = null;
+        }
+
         function selectSuggestion(fullName, type, patientId = null) {
             const inputId = type === 'doctor' ? 'doctor-name-input' : 'patient-name-input';
             const suggestionId = type === 'doctor' ? 'doctor-suggestions' : 'patient-suggestions';
@@ -2470,10 +2574,17 @@
             document.getElementById(inputId).value = fullName;
             document.getElementById(suggestionId).style.display = 'none';
             
-            // Store patient_id when a patient is selected
+            // Store patient_id when a patient is selected and populate the info bar
             if (type === 'patient' && patientId) {
                 window.selectedPatientId = patientId;
                 console.log('Selected patient ID:', patientId);
+                // Populate patient info bar immediately with name from autocomplete
+                setPatientInfoBar({ full_name: fullName, patient_id: patientId, age: null, gender: null });
+                // Then fetch full demographics
+                fetch(`/api/patient/${encodeURIComponent(patientId)}`)
+                    .then(r => r.json())
+                    .then(data => { if (!data.error) setPatientInfoBar(data); })
+                    .catch(() => {});
             }
             
             if (type === 'doctor') {
@@ -2547,7 +2658,8 @@
 
         function cancelNameInput() {
             document.getElementById('name-input-modal').style.display = 'none';
-            currentOperation = null; // Reset operation type
+            currentOperation = null;
+            clearPatientInfoBar();
         }
 
         function confirmNameInput() {
