@@ -770,13 +770,13 @@ def search_patients():
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Search patients by first, last, middle name and/or DOB."""
+    """Search patients by first, last, middle name. DOB not stored in this table."""
     first  = (request.args.get("first",  "") or "").strip()
     last   = (request.args.get("last",   "") or "").strip()
     middle = (request.args.get("middle", "") or "").strip()
-    dob    = (request.args.get("dob",    "") or "").strip()
+    # dob param accepted but ignored — no dob column in patient table
 
-    if not any([first, last, middle, dob]):
+    if not any([first, last, middle]):
         return jsonify([])
 
     try:
@@ -792,14 +792,11 @@ def search_patients_advanced():
         if middle:
             conditions.append("LOWER(middle_name) LIKE %s")
             params.append(f"%{middle.lower()}%")
-        if dob:
-            conditions.append("CAST(date_of_birth AS TEXT) LIKE %s")
-            params.append(f"%{dob}%")
 
         where = " AND ".join(conditions) if conditions else "1=1"
         sql_q = f"""
             SELECT patient_id, first_name, middle_name, last_name,
-                   date_of_birth, address1, city, state, zip
+                   addr1, city, state, zipcode
             FROM patient
             WHERE {where}
             ORDER BY last_name, first_name
@@ -813,7 +810,7 @@ def search_patients_advanced():
 
         results = []
         for row in rows:
-            pid, fn, mn, ln, dob_val, addr1, city, state, zipcode = row
+            pid, fn, mn, ln, addr1, city, state, zipcode = row
             parts = [p for p in [fn, mn, ln] if p]
             results.append({
                 "patient_id":   str(pid) if pid else "",
@@ -821,7 +818,7 @@ def search_patients_advanced():
                 "middle_name":  mn or "",
                 "last_name":    ln or "",
                 "full_name":    " ".join(parts),
-                "dob":          str(dob_val)[:10] if dob_val else "",
+                "dob":          "",
                 "address1":     addr1 or "",
                 "city":         city or "",
                 "state":        state or "",
@@ -843,8 +840,8 @@ def get_patient_info(patient_id: str):
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT patient_id, first_name, last_name,
-                           date_of_birth, gender
+                    SELECT patient_id, first_name, middle_name, last_name,
+                           phone, email, addr1, city, state, zipcode
                     FROM patient
                     WHERE patient_id = %s
                     LIMIT 1
@@ -856,36 +853,27 @@ def get_patient_info(patient_id: str):
         if not row:
             return jsonify({"db_available": True, "error": "Patient not found"}), 404
 
-        pid, first, last, dob, gender = row
-        full_name = f"{first or ''} {last or ''}".strip()
-
-        age = None
-        if dob:
-            from datetime import date as _date
-            today = _date.today()
-            try:
-                birth = dob if hasattr(dob, "year") else _date.fromisoformat(str(dob)[:10])
-                age = today.year - birth.year - (
-                    (today.month, today.day) < (birth.month, birth.day)
-                )
-            except Exception:
-                age = None
+        pid, first, middle, last, phone, email, addr1, city, state, zipcode = row
+        parts = [p for p in [first, middle, last] if p]
+        full_name = " ".join(parts)
 
         return jsonify({
             "patient_id": str(pid),
-            "full_name": full_name,
-            "age": age,
-            "gender": gender or "—",
+            "full_name":  full_name,
+            "age":        None,
+            "gender":     "—",
+            "phone":      phone or "",
+            "email":      email or "",
+            "address":    f"{addr1 or ''}, {city or ''}, {state or ''} {zipcode or ''}".strip(", "),
         })
 
     except Exception as exc:
         logger.warning("get_patient_info: DB unavailable for %s (%s) — returning partial", patient_id, exc)
-        # Return partial data so the UI can still show patient_id from autocomplete
         return jsonify({
-            "patient_id": patient_id,
-            "full_name": None,
-            "age": None,
-            "gender": "—",
+            "patient_id":   patient_id,
+            "full_name":    None,
+            "age":          None,
+            "gender":       "—",
             "db_available": False,
         })
 
