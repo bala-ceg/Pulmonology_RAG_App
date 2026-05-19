@@ -5,3 +5,4 @@ KB/
 myenv/
 sft_models/
 .env.local
+logs/*.log
