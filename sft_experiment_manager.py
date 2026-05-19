@@ -404,18 +404,49 @@ def ensure_tables():
     try:
         with _connect(autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(create_ranked_data)
-                cur.execute(create_experiments)
-                cur.execute(create_doctors)
-                cur.execute(create_index)
+                # For PostgreSQL: check which tables already exist to avoid
+                # CREATE TABLE (requires schema CREATE privilege, even with IF NOT EXISTS).
+                if not _use_sqlite:
+                    cur.execute(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = 'public' AND table_name IN "
+                        "('sft_ranked_data', 'sft_experiments', 'sme_doctors')"
+                    )
+                    existing = {row[0] for row in cur.fetchall()}
+                else:
+                    existing = set()
+
+                # Only CREATE tables that don't exist yet
+                if "sft_ranked_data" not in existing:
+                    cur.execute(create_ranked_data)
+                if "sft_experiments" not in existing:
+                    cur.execute(create_experiments)
+                if "sme_doctors" not in existing:
+                    cur.execute(create_doctors)
+
+                # Indexes — safe to skip on permission error
+                if "sft_ranked_data" not in existing:
+                    try:
+                        cur.execute(create_index)
+                    except Exception:
+                        pass
                 for idx_sql in create_doctors_indexes:
                     try:
                         cur.execute(idx_sql)
                     except Exception:
-                        pass  # Index already exists
-                cur.execute(add_department_col)
-                cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS domain TEXT;")
-                cur.execute("ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS doctor_name TEXT;")
+                        pass
+
+                # ALTER TABLE column additions — catch permission errors gracefully
+                for alter_sql in [
+                    add_department_col,
+                    "ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS domain TEXT;",
+                    "ALTER TABLE sft_ranked_data ADD COLUMN IF NOT EXISTS doctor_name TEXT;",
+                ]:
+                    try:
+                        cur.execute(alter_sql)
+                    except Exception:
+                        pass  # Column already exists or permission denied — ignore
+
         print("✅ SFT experiment tables ensured")
         global _ranked_data_cols
         _ranked_data_cols = None  # Invalidate cache so next call re-reads the columns
