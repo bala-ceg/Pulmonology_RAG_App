@@ -53,6 +53,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 # Load env vars before importing Config so all os.getenv() calls see them
 load_dotenv()
 
+# Configure logging FIRST — before any other imports so every logger
+# (including third-party) goes through the root handler.
+from utils.observability import setup_logging  # noqa: E402
+setup_logging()
+
 from config import Config
 from utils.error_handlers import get_logger
 

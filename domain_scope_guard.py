@@ -157,7 +157,9 @@ class DomainScopeGuard:
 
         try:
             logger.info(f"DomainScopeGuard: loading SBERT model '{EMB_MODEL}'…")
-            self._embedder = SentenceTransformer(EMB_MODEL)
+            from utils.observability import suppress_stdout
+            with suppress_stdout():
+                self._embedder = SentenceTransformer(EMB_MODEL)
             # Pre-embed the general medical reference corpus (done once at startup)
             self._medical_matrix = self._embedder.encode(
                 _GENERAL_MEDICAL_PHRASES, convert_to_numpy=True, show_progress_bar=False
