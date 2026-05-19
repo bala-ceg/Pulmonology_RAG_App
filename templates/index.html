@@ -2684,6 +2684,7 @@
         // Session-scoped state — reset on every page load
         window.selectedPatientId = null;
         window.adhocRagReady     = false;
+        console.log('[PCES Session] New session — selectedPatientId=null, adhocRagReady=false');
 
         /** Enable Generate only when BOTH doctor is logged in AND a patient is selected. */
         function _updateSendBtn() {
@@ -3257,6 +3258,7 @@
             
             // Update routing status
             updateRoutingStatus('Analyzing query and routing to relevant medical disciplines...');
+            console.log(`[PCES Query] patient=${window.selectedPatientId || 'none'} | adhocRagReady=${window.adhocRagReady}`);
 
             try {
                 const response = await fetch('/data', {
@@ -4095,8 +4097,10 @@ Generated on: ${new Date().toLocaleString()}
             let data = await response.json();
             if (response.ok) {
                 window.adhocRagReady = true;
+                console.log('[PCES Session] Ad Hoc RAG built successfully — adhocRagReady=true');
                 showToast("✅ Knowledge Bank updated. Ad Hoc RAG active.");
             } else {
+                console.warn('[PCES Session] Ad Hoc RAG build failed — adhocRagReady remains false');
                 showToast("Knowledge Bank update failed.");
             }
             setTimeout(() => hideToast(), 2000);
