@@ -2807,8 +2807,9 @@
             _epPendingCallback = null;
         }
         function epProceed() {
+            const cb = _epPendingCallback;   // grab before closeEpModal nulls it
             closeEpModal();
-            if (_epPendingCallback) _epPendingCallback();
+            if (cb) cb();
         }
         function epCancel() {
             closeEpModal();
