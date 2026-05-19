@@ -1,9 +1,0 @@
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: 'pces-rag-app'
-    static_configs:
-      - targets: ['host.docker.internal:5000']   # Flask app on host machine
-    metrics_path: '/metrics'
