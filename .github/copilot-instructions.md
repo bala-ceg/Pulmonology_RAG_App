@@ -164,10 +164,24 @@ Both psycopg v3 (`psycopg`) and v2 (`psycopg2-binary`) are required — `main.py
 
 ### Observability (`utils/observability.py`)
 
-Call `init_observability(app)` once at startup (already done in `main.py`). It provides:
+Two-step initialisation (both already done in `main.py`):
 
-- **ECS JSON logging** — all log records emitted as Elastic Common Schema JSON; shipped to Kibana via the bundled `docker-compose.elk.yml` + `filebeat.yml`. Open http://localhost:5601 → Discover → `pces-rag-logs-*` to view logs.
-- **`/health` endpoint** — returns `{"status": "ok"|"degraded", "components": {"database": ...}}`
+1. **`setup_logging()`** — call immediately after `load_dotenv()`, before any other imports. Configures:
+   - **Terminal**: clean human-readable `StreamHandler` on root logger (`sys.stdout`), INFO level
+   - **File**: ECS JSON `FileHandler` on root logger → `LOG_FILE` path → Filebeat → Kibana
+   - Silences noisy third-party loggers (werkzeug, arxiv, sentence_transformers, etc.)
+   - Sets `TQDM_DISABLE=1` and `MODELSCOPE_VERBOSITY=error` to suppress tqdm bars and BertModel LOAD REPORTs
+   - `suppress_stdout()` context manager: redirects fd 1+2 to `/dev/null` — use around `SentenceTransformer()` calls to hide C-level stderr output
+
+2. **`init_observability(app)`** — call after Flask app is created. Adds:
+   - Flask `before_request`/`after_request` middleware for HTTP request logging (skips favicon/devtools paths)
+   - **`/health` endpoint** — returns `{"status": "ok"|"degraded", "components": {"database": ...}}`
+
+To ship logs to Kibana:
+```bash
+docker compose -f docker-compose.elk.yml up -d
+# Open http://localhost:5601 → Discover → 'pces-rag-logs-*'
+```
 
 Controlled via env vars: `LOG_LEVEL`, `LOG_FILE`, `SERVICE_NAME`, `SERVICE_VERSION`, `FLASK_ENV`.
 
@@ -198,7 +212,11 @@ from services.db_service import get_connection
 Blueprints access shared state via `current_app.config` keys: `LLM_INSTANCE`, `EMBEDDINGS`, `RAG_MANAGER`, `INTEGRATED_RAG`, `SCOPE_GUARD`, `TEXT_SPLITTER`, `WHISPER_MODEL`, `APIFY_CLIENT`, `DEPT_LORA_SERVICE`, `ACTIVE_DEPARTMENT`.
 
 ### Logging
-Use `get_logger(__name__)` from `utils/error_handlers.py` in every module. Never call `logging.getLogger()` directly. Decorate Flask route handlers with `@handle_route_errors` to catch and JSON-serialize unhandled exceptions automatically.
+Use `get_logger(__name__)` from `utils/error_handlers.py` in every module. It wraps `logging.getLogger(name)` with `propagate=True` (default) so all records reach the root logger's handlers (terminal StreamHandler + ECS JSON FileHandler). Never create your own StreamHandler or set `propagate=False`.
+
+Decorate Flask route handlers with `@handle_route_errors` to catch and JSON-serialize unhandled exceptions automatically.
+
+**Model load noise**: Wrap `SentenceTransformer(...)` calls with `suppress_stdout()` from `utils/observability.py` to silence C-level BertModel LOAD REPORT output that writes directly to fd 1/2 and cannot be intercepted by Python logging.
 
 ### Tool naming
 Tool functions use `CamelCase_With_Underscores` (e.g. `Wikipedia_Search`, `Internal_VectorDB`). The docstring of every `@tool` function is the routing signal — keep it precise and discriminative.
