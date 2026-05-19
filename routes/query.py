@@ -636,6 +636,7 @@ def handle_query():
     patient_problem = request.json.get("patient_problem", "").strip()
     doctor_name = (request.json.get("doctor_name") or "").strip()
     doctor_department = (request.json.get("doctor_department") or "").strip()
+    adhoc_rag_ready = bool(request.json.get("adhoc_rag_ready", False))
 
     if not user_input:
         return jsonify(
@@ -825,7 +826,8 @@ def handle_query():
                 logger.info("Using current session: %s", session_id)
 
             integrated_result = integrated_rag_system.query(
-                query_input, session_id, patient_problem
+                query_input, session_id, patient_problem,
+                adhoc_rag_ready=adhoc_rag_ready
             )
 
             if integrated_result and integrated_result.get("answer"):
@@ -926,9 +928,11 @@ def handle_query():
                             "dev_mode": _dev_mode_enabled(),
                         "routing_details": {
                             "disciplines": tools_used,
+                            "planned_tools": routing_info.get("planned_tools", []),
                             "sources": citations,
                             "method": routing_info.get("confidence", "medium"),
                             "confidence": routing_info.get("confidence", "medium"),
+                            "reasoning": routing_info.get("reasoning", ""),
                         },
                     }
                 )

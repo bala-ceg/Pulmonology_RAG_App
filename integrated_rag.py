@@ -419,33 +419,25 @@ class IntegratedMedicalRAG:
     # Planner LLM call timeout (seconds)
     _PLANNER_TIMEOUT: float = 8.0
 
-    def _plan_tools(self, question: str) -> List[str]:
+    def _plan_tools(self, question: str, adhoc_rag_ready: bool = False) -> List[str]:
         """
         Select ALL available tools to run in parallel.
 
-        AdHocRAG_Search is included only when the adhoc KB is loaded (i.e.
-        the doctor has uploaded session-specific documents). All other tools
-        always run so results are merged from every knowledge source.
+        AdHocRAG_Search is included only when the frontend signals that the
+        doctor has successfully built an Ad Hoc KB (adhoc_rag_ready=True).
+        All other tools always run so results are merged from every source.
         """
         tools = [t for t in self._ALL_SELECTABLE_TOOLS]
 
-        # Skip AdHocRAG_Search when no adhoc documents have been uploaded yet
-        adhoc_kb_ready = False
-        try:
-            rag_mgr = getattr(self, 'rag_manager', None)
-            if rag_mgr and getattr(rag_mgr, 'adhoc_kb', None) is not None:
-                adhoc_kb_ready = True
-        except Exception:
-            pass
-
-        if not adhoc_kb_ready and 'AdHocRAG_Search' in tools:
+        if not adhoc_rag_ready and 'AdHocRAG_Search' in tools:
             tools.remove('AdHocRAG_Search')
-            logger.info("_plan_tools: adhoc KB not loaded — skipping AdHocRAG_Search")
+            logger.info("_plan_tools: adhoc_rag_ready=False — skipping AdHocRAG_Search")
 
         logger.info("_plan_tools: running all tools in parallel: %s", tools)
         return tools
 
-    def query(self, question: str, session_id: str = None, patient_context: str = None) -> Dict[str, Any]:
+    def query(self, question: str, session_id: str = None, patient_context: str = None,
+              adhoc_rag_ready: bool = False) -> Dict[str, Any]:
         """
         LLM-driven multi-tool parallel query.
 
@@ -459,7 +451,7 @@ class IntegratedMedicalRAG:
             raw_content: str = ""
 
             # ── Phase 0: LLM tool planner ────────────────────────────────────
-            planned_tools = self._plan_tools(question)
+            planned_tools = self._plan_tools(question, adhoc_rag_ready=adhoc_rag_ready)
             logger.info("Planned tools for query: %s", planned_tools)
 
             # ── Phase 1: run planned tools in parallel ───────────────────────
