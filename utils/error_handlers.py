@@ -19,19 +19,17 @@ from flask import jsonify
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a module-level logger with a standard format."""
+    """
+    Return a module-level logger.
+
+    Relies on the root logger (configured by setup_logging()) for all
+    output — no per-logger handlers are added here.  This ensures every
+    log record reaches both the terminal (human-readable) and the ECS
+    JSON file handler (Kibana) without duplication.
+    """
     logger = logging.getLogger(name)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        logger.propagate = False  # prevent double-logging via root logger
+    logger.setLevel(logging.INFO)
+    # propagate=True (default) so records reach root's handlers
     return logger
 
 

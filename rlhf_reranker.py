@@ -38,7 +38,9 @@ REWARD_MODEL_PATH = os.getenv("REWARD_MODEL_PATH", "reward_model.joblib")
 
 # Initialize embedder
 logger.info("Initializing RLHF reranker (model=%s)", EMB_MODEL)
-embedder = SentenceTransformer(EMB_MODEL)
+from utils.observability import suppress_stdout
+with suppress_stdout():
+    embedder = SentenceTransformer(EMB_MODEL)
 
 # Load reward model if available
 reward_model = None
