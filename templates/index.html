@@ -2705,6 +2705,9 @@
             if (nameEl) nameEl.textContent = '—';
             section.classList.remove('has-patient');
             window.selectedPatientId = null;
+            window.currentPatientName = '';
+            const popupPt = document.getElementById('popup-patient-name');
+            if (popupPt) popupPt.textContent = '—';
             _updateSendBtn();
         }
 
@@ -2798,7 +2801,11 @@
 
         function selectPatientFromModal(p) {
             window.selectedPatientId = p.patient_id;
+            window.currentPatientName = p.full_name || '';  // keep popup in sync
             setPatientInfoBar({ full_name: p.full_name, patient_id: p.patient_id });
+            // Update popup patient name immediately if popup is visible
+            const popupPt = document.getElementById('popup-patient-name');
+            if (popupPt) popupPt.textContent = p.full_name || '—';
             closePatientSearchModal();
         }
 
