@@ -2711,7 +2711,7 @@
             if (overlay) {
                 overlay.classList.add('open');
                 // Reset form & results
-                ['psm-first','psm-last','psm-middle'].forEach(id => {
+                ['psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });
@@ -2735,7 +2735,7 @@
         });
 
         // Allow Enter key in search fields to trigger search
-        ['psm-first','psm-last','psm-middle'].forEach(id => {
+        ['psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') runPatientSearch(); });
         });
@@ -2744,9 +2744,10 @@
             const first  = (document.getElementById('psm-first').value  || '').trim();
             const last   = (document.getElementById('psm-last').value   || '').trim();
             const middle = (document.getElementById('psm-middle').value || '').trim();
+            const dob    = (document.getElementById('psm-dob').value    || '').trim();
 
-            if (!first && !last && !middle) {
-                alert('Please enter at least one name field.');
+            if (!first && !last && !middle && !dob) {
+                alert('Please enter at least one search field.');
                 return;
             }
 
@@ -2754,6 +2755,7 @@
             if (first)  params.set('first',  first);
             if (last)   params.set('last',   last);
             if (middle) params.set('middle', middle);
+            if (dob)    params.set('dob',    dob);
 
             const tbody = document.getElementById('psm-results-body');
             const table = document.getElementById('psm-results-table');
@@ -2775,6 +2777,7 @@
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${p.full_name || '—'}</td>
+                        <td>${p.dob || '—'}</td>
                         <td>${p.address1 || '—'}</td>
                         <td>${p.address1 || '—'}</td>
                         <td>${p.city || '—'}</td>
@@ -4808,7 +4811,7 @@ ${data.conclusion}
             <label>Middle Name</label>
             <input type="text" id="psm-middle" placeholder="optional">
           </div>
-          <div class="psm-field" style="display:none;">
+          <div class="psm-field">
             <label>Date of Birth</label>
             <input type="date" id="psm-dob">
           </div>
@@ -4819,7 +4822,7 @@ ${data.conclusion}
           <table class="psm-results-table" id="psm-results-table" style="display:none;">
             <thead>
               <tr>
-                <th>Name</th><th>Address</th><th>City</th><th>State</th><th>ZIP</th>
+                <th>Name</th><th>DOB</th><th>Address</th><th>City</th><th>State</th><th>ZIP</th>
               </tr>
             </thead>
             <tbody id="psm-results-body"></tbody>

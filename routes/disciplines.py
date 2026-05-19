@@ -729,7 +729,7 @@ def search_doctors():
 @disciplines_bp.route("/search_patients", methods=["GET"])
 @handle_route_errors
 def search_patients():
-    """Search for patients by first_name and last_name from patient table."""
+    """Search for patients by first_name and last_name from p_party table."""
     query = request.args.get("q", "").strip().lower()
     if not query:
         return jsonify([])
@@ -738,11 +738,14 @@ def search_patients():
         with _db_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
-                SELECT DISTINCT patient_id, first_name, last_name 
-                FROM patient 
-                WHERE LOWER(first_name) LIKE %s 
-                   OR LOWER(last_name) LIKE %s 
-                   OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                SELECT DISTINCT party_id, first_name, last_name
+                FROM p_party
+                WHERE party_type = 'PATIENT' AND is_active = true
+                  AND (
+                    LOWER(first_name) LIKE %s
+                    OR LOWER(last_name) LIKE %s
+                    OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                  )
                 ORDER BY first_name, last_name
                 LIMIT 10
                 """
@@ -752,13 +755,13 @@ def search_patients():
 
         patients = [
             {
-                "patient_id": row[0],
+                "patient_id": str(row[0]),
                 "first_name": row[1],
-                "last_name": row[2],
-                "full_name": f"{row[1]} {row[2]}",
+                "last_name":  row[2],
+                "full_name":  f"{row[1] or ''} {row[2] or ''}".strip(),
             }
             for row in results
-            if row[1] and row[2]
+            if row[1] or row[2]
         ]
         return jsonify(patients)
 
@@ -770,36 +773,40 @@ def search_patients():
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Search patients by first, last, middle name. DOB not stored in this table."""
+    """Search patients by first, last, middle name and/or DOB from p_party + p_address."""
     first  = (request.args.get("first",  "") or "").strip()
     last   = (request.args.get("last",   "") or "").strip()
     middle = (request.args.get("middle", "") or "").strip()
-    # dob param accepted but ignored — no dob column in patient table
+    dob    = (request.args.get("dob",    "") or "").strip()
 
-    if not any([first, last, middle]):
+    if not any([first, last, middle, dob]):
         return jsonify([])
 
     try:
-        conditions = []
+        conditions = ["pp.party_type = 'PATIENT'", "pp.is_active = true"]
         params = []
 
         if first:
-            conditions.append("LOWER(first_name) LIKE %s")
+            conditions.append("LOWER(pp.first_name) LIKE %s")
             params.append(f"%{first.lower()}%")
         if last:
-            conditions.append("LOWER(last_name) LIKE %s")
+            conditions.append("LOWER(pp.last_name) LIKE %s")
             params.append(f"%{last.lower()}%")
         if middle:
-            conditions.append("LOWER(middle_name) LIKE %s")
+            conditions.append("LOWER(pp.middle_name) LIKE %s")
             params.append(f"%{middle.lower()}%")
+        if dob:
+            conditions.append("CAST(pp.date_of_birth AS TEXT) LIKE %s")
+            params.append(f"%{dob}%")
 
-        where = " AND ".join(conditions) if conditions else "1=1"
+        where = " AND ".join(conditions)
         sql_q = f"""
-            SELECT patient_id, first_name, middle_name, last_name,
-                   addr1, city, state, zipcode
-            FROM patient
+            SELECT pp.party_id, pp.first_name, pp.middle_name, pp.last_name,
+                   pp.date_of_birth, pa.line1, pa.city, pa.state, pa.postal_code
+            FROM p_party pp
+            LEFT JOIN p_address pa ON pa.party_id = pp.party_id
             WHERE {where}
-            ORDER BY last_name, first_name
+            ORDER BY pp.last_name, pp.first_name
             LIMIT 20
         """
 
@@ -810,19 +817,19 @@ def search_patients_advanced():
 
         results = []
         for row in rows:
-            pid, fn, mn, ln, addr1, city, state, zipcode = row
+            pid, fn, mn, ln, dob_val, line1, city, state, postal = row
             parts = [p for p in [fn, mn, ln] if p]
             results.append({
-                "patient_id":   str(pid) if pid else "",
-                "first_name":   fn or "",
-                "middle_name":  mn or "",
-                "last_name":    ln or "",
-                "full_name":    " ".join(parts),
-                "dob":          "",
-                "address1":     addr1 or "",
-                "city":         city or "",
-                "state":        state or "",
-                "zip":          zipcode or "",
+                "patient_id":  str(pid) if pid else "",
+                "first_name":  fn or "",
+                "middle_name": mn or "",
+                "last_name":   ln or "",
+                "full_name":   " ".join(parts),
+                "dob":         str(dob_val)[:10] if dob_val else "",
+                "address1":    line1 or "",
+                "city":        city or "",
+                "state":       state or "",
+                "zip":         postal or "",
             })
         return jsonify(results)
 
@@ -834,16 +841,18 @@ def search_patients_advanced():
 @disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])
 @handle_route_errors
 def get_patient_info(patient_id: str):
-    """Return basic demographic info for a single patient."""
+    """Return basic demographic info for a single patient from p_party + p_address."""
     try:
         with _db_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT patient_id, first_name, middle_name, last_name,
-                           phone, email, addr1, city, state, zipcode
-                    FROM patient
-                    WHERE patient_id = %s
+                    SELECT pp.party_id, pp.first_name, pp.middle_name, pp.last_name,
+                           pp.date_of_birth, pp.gender, pp.phone, pp.email,
+                           pa.line1, pa.city, pa.state, pa.postal_code
+                    FROM p_party pp
+                    LEFT JOIN p_address pa ON pa.party_id = pp.party_id
+                    WHERE pp.party_id = %s AND pp.party_type = 'PATIENT'
                     LIMIT 1
                     """,
                     (patient_id,),
@@ -853,18 +862,32 @@ def get_patient_info(patient_id: str):
         if not row:
             return jsonify({"db_available": True, "error": "Patient not found"}), 404
 
-        pid, first, middle, last, phone, email, addr1, city, state, zipcode = row
+        pid, first, middle, last, dob, gender, phone, email, line1, city, state, postal = row
         parts = [p for p in [first, middle, last] if p]
         full_name = " ".join(parts)
 
+        age = None
+        if dob:
+            from datetime import date as _date
+            today = _date.today()
+            try:
+                birth = dob if hasattr(dob, "year") else _date.fromisoformat(str(dob)[:10])
+                age = today.year - birth.year - (
+                    (today.month, today.day) < (birth.month, birth.day)
+                )
+            except Exception:
+                age = None
+
+        addr_parts = [p for p in [line1, city, state, postal] if p]
         return jsonify({
             "patient_id": str(pid),
             "full_name":  full_name,
-            "age":        None,
-            "gender":     "—",
+            "dob":        str(dob)[:10] if dob else "",
+            "age":        age,
+            "gender":     gender or "—",
             "phone":      phone or "",
             "email":      email or "",
-            "address":    f"{addr1 or ''}, {city or ''}, {state or ''} {zipcode or ''}".strip(", "),
+            "address":    ", ".join(addr_parts),
         })
 
     except Exception as exc:
