@@ -1596,65 +1596,7 @@
             flex-shrink: 0;
         }
 
-        /* ── Doctor Info Bar ─────────────────────────────────────── */
-        .doctor-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 6px 0 2px;
-            padding: 7px 12px;
-            background: #e8f4fd;
-            border-radius: 8px;
-            border-left: 4px solid #1976d2;
-            flex-shrink: 0;
-            font-size: 13px;
-            min-height: 38px;
-        }
-        .doctor-row .dr-icon { font-size: 16px; flex-shrink: 0; }
-        .doctor-row .dr-label {
-            font-weight: 600;
-            color: #1565c0;
-            flex-shrink: 0;
-            margin-right: 4px;
-        }
-        .doctor-row .dr-value {
-            color: #1a237e;
-            font-weight: 500;
-        }
-        .doctor-row .dr-dept {
-            color: #5c6bc0;
-            font-size: 12px;
-            margin-left: 8px;
-        }
-        .doctor-row .dr-not-logged {
-            color: #888;
-            font-style: italic;
-        }
-        .doctor-row .dr-login-btn {
-            margin-left: auto;
-            background: #1976d2;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            padding: 4px 14px;
-            font-size: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background 0.2s;
-        }
-        .doctor-row .dr-login-btn:hover { background: #1251a3; }
-        .doctor-row .dr-logout-btn {
-            margin-left: auto;
-            background: transparent;
-            color: #e53935;
-            border: 1px solid #e53935;
-            border-radius: 5px;
-            padding: 3px 12px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .doctor-row .dr-logout-btn:hover { background: #ffebee; }
+        /* ── Patient Search Modal ───────────────────────────────── */
         .patient-search-modal-overlay {
             display: none;
             position: fixed;
@@ -2475,18 +2417,6 @@
             </div>
             <div id="chat-messages" class="chat-messages"></div>
             
-            <!-- Doctor Info Bar -->
-            <div class="doctor-row" id="doctor-row">
-              <span class="dr-icon">🩺</span>
-              <span class="dr-label">Doctor:</span>
-              <span class="dr-value" id="dr-bar-name">
-                <span class="dr-not-logged">Not logged in</span>
-              </span>
-              <span class="dr-dept" id="dr-bar-dept" style="display:none;"></span>
-              <button class="dr-login-btn" id="dr-login-btn" onclick="requireAuth(() => {})">Login</button>
-              <button class="dr-logout-btn" id="dr-logout-btn" style="display:none;" onclick="pcesLogout()">Logout</button>
-            </div>
-
             <!-- Problem Row Section -->
             <div class="problem-row">
               <!-- Patient Info — 30% left (click opens search modal) -->
@@ -4833,22 +4763,12 @@ ${data.conclusion}
             const el = document.getElementById('logged-in-doctor');
             if (name && el) {
                 const dept = sessionStorage.getItem('pces_doctor_department') || '';
-                const deptDisplay = dept ? dept.charAt(0) + dept.slice(1).toLowerCase().replace(/_/g, ' ') : '';
+                const deptDisplay = dept ? dept.charAt(0) + dept.slice(1).toLowerCase().replace(/_/g, ' ') : '—';
                 document.getElementById('logged-in-doctor-name').textContent = name;
                 document.getElementById('popup-doctor-name').textContent = name;
-                document.getElementById('popup-doctor-dept').textContent = deptDisplay || '—';
+                document.getElementById('popup-doctor-dept').textContent = deptDisplay;
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
                 el.style.display = 'inline-block';
-
-                // Update the doctor info bar on the main page
-                const drName = document.getElementById('dr-bar-name');
-                const drDept = document.getElementById('dr-bar-dept');
-                const drLogin = document.getElementById('dr-login-btn');
-                const drLogout = document.getElementById('dr-logout-btn');
-                if (drName) drName.innerHTML = `<strong>${name}</strong>`;
-                if (drDept && deptDisplay) { drDept.textContent = deptDisplay; drDept.style.display = 'inline'; }
-                if (drLogin) drLogin.style.display = 'none';
-                if (drLogout) drLogout.style.display = 'inline-block';
             }
             const smeContainer = document.getElementById('sme-training-container');
             if (smeContainer) {
@@ -4856,33 +4776,6 @@ ${data.conclusion}
                 const isSME = role.split(',').map(r => r.trim()).includes('SME');
                 smeContainer.style.display = isSME ? '' : 'none';
             }
-        }
-
-        function pcesLogout() {
-            _pcesAuthed = false;
-            sessionStorage.removeItem('pces_auth');
-            sessionStorage.removeItem('pces_doctor_name');
-            sessionStorage.removeItem('pces_doctor_department');
-            sessionStorage.removeItem('pces_doctor_email');
-            sessionStorage.removeItem('pces_doctor_role');
-
-            // Reset header badge
-            const el = document.getElementById('logged-in-doctor');
-            if (el) el.style.display = 'none';
-
-            // Reset doctor info bar
-            const drName = document.getElementById('dr-bar-name');
-            const drDept = document.getElementById('dr-bar-dept');
-            const drLogin = document.getElementById('dr-login-btn');
-            const drLogout = document.getElementById('dr-logout-btn');
-            if (drName) drName.innerHTML = '<span class="dr-not-logged">Not logged in</span>';
-            if (drDept) { drDept.textContent = ''; drDept.style.display = 'none'; }
-            if (drLogin) drLogin.style.display = 'inline-block';
-            if (drLogout) drLogout.style.display = 'none';
-
-            // Clear patient too (session is fully reset)
-            clearPatientInfoBar();
-            _updateSendBtn();
         }
 
         function toggleDoctorPopup(e) {
