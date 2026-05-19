@@ -57,8 +57,25 @@ BASE_STORAGE_PATH = Config.KB_PATH
 
 @contextmanager
 def _db_conn() -> Generator:
-    """Yield a psycopg connection using Config credentials."""
+    """Yield a psycopg connection using Config credentials (pces_base)."""
     with psycopg.connect(**Config.db_kwargs()) as conn:
+        yield conn
+
+
+@contextmanager
+def _ehr_conn() -> Generator:
+    """Yield a psycopg connection to the EHR database (pces_ehr_ccm via PG_TOOL_* vars)."""
+    kwargs = {
+        k: v for k, v in {
+            "host":            Config.PG_TOOL_HOST,
+            "port":            Config.PG_TOOL_PORT,
+            "dbname":          Config.PG_TOOL_NAME,
+            "user":            Config.PG_TOOL_USER,
+            "password":        Config.PG_TOOL_PASSWORD,
+            "connect_timeout": 10,
+        }.items() if v is not None
+    }
+    with psycopg.connect(**kwargs) as conn:
         yield conn
 
 
@@ -735,7 +752,7 @@ def search_patients():
         return jsonify([])
 
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
                 SELECT DISTINCT party_id, first_name, last_name
@@ -810,7 +827,7 @@ def search_patients_advanced():
             LIMIT 20
         """
 
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(sql_q, params)
                 rows = cursor.fetchall()
@@ -843,7 +860,7 @@ def search_patients_advanced():
 def get_patient_info(patient_id: str):
     """Return basic demographic info for a single patient from p_party + p_address."""
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
