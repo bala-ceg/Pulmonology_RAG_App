@@ -2381,6 +2381,10 @@
                             background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:3px 9px;
                             color:#856404;user-select:none;" title="Developer mode: toggle routing traces"
                             onclick="toggleDevTraces()">🛠 Traces <span id="dev-trace-state">ON</span></span>
+                        <button id="header-login-btn" onclick="openPcesLoginModal()" title="Login to PCES"
+                            style="display:none;margin-right:10px;background:#00897b;color:#fff;border:none;
+                            border-radius:6px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;
+                            letter-spacing:0.3px;">🔐 Login</button>
                         <span id="logged-in-doctor" style="display:none;" onclick="toggleDoctorPopup(event)">🩺 <span id="logged-in-doctor-name"></span></span>
                         <div class="doctor-popup" id="doctor-popup">
                             <div class="doctor-popup-row">
@@ -2437,11 +2441,11 @@
             <div class="chat-input">
                 <input type="text" id="user-input" placeholder="Type your message...">
                 <button id="send-btn" disabled onclick="requireAuth(() => sendMessage())">Generate</button>
-                <button id="plain-english-btn" onclick="requireAuth(() => refineInput())">Plain English</button>
+                <button id="plain-english-btn" disabled onclick="requireAuth(() => refineInput())">Plain English</button>
                 <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save as PDF</button>
-                <button id="voice-btn" onclick="requireAuth(() => startRecording())">Start Recording</button>
+                <button id="voice-btn" disabled onclick="requireAuth(() => startRecording())">Start Recording</button>
                 <button id="stop-btn" disabled onclick="requireAuth(() => stopRecording())">Stop Recording</button>
-                <button id="translation-btn" onclick="requireAuth(() => openTranslationModal())">Translation</button>
+                <button id="translation-btn" disabled onclick="requireAuth(() => openTranslationModal())">Translation</button>
             </div>
 
         </div>
@@ -4781,12 +4785,24 @@ ${data.conclusion}
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
                 el.style.display = 'inline-block';
             }
+            // Hide login button, enable gated chat buttons
+            const loginBtn = document.getElementById('header-login-btn');
+            if (loginBtn) loginBtn.style.display = 'none';
+            _updateAuthButtons(true);
             const smeContainer = document.getElementById('sme-training-container');
             if (smeContainer) {
                 const role = sessionStorage.getItem('pces_doctor_role') || '';
                 const isSME = role.split(',').map(r => r.trim()).includes('SME');
                 smeContainer.style.display = isSME ? '' : 'none';
             }
+        }
+
+        /** Enable/disable the three auth-gated bottom buttons (not send/stop/save which have their own guards). */
+        function _updateAuthButtons(authed) {
+            ['plain-english-btn', 'voice-btn', 'translation-btn'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = !authed;
+            });
         }
 
         function toggleDoctorPopup(e) {
@@ -4806,7 +4822,12 @@ ${data.conclusion}
         });
 
         // Show doctor name on page load if already authenticated; sync button state
-        if (_pcesAuthed) { showLoggedInDoctor(); }
+        if (_pcesAuthed) {
+            showLoggedInDoctor();
+        } else {
+            const loginBtn = document.getElementById('header-login-btn');
+            if (loginBtn) loginBtn.style.display = 'inline-block';
+        }
         _updateSendBtn();
 
     </script>
