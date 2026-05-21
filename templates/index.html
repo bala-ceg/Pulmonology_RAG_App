@@ -2327,7 +2327,7 @@
             <li class="no-bullet">
             <ul class="red-box">
                 <li>
-                    <button class="conversation-btn" onclick="requireAuth(() => startConversationRecording())" id="start-conversation-btn">Doc / Patient Conversation</button>
+                    <button class="conversation-btn" id="start-conversation-btn">Doc / Patient Conversation</button>
                 </li>
                 <li>
                     <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>Stop Recording</button>
@@ -2383,8 +2383,8 @@
                             onclick="toggleDevTraces()">🛠 Traces <span id="dev-trace-state">ON</span></span>
                         <button id="header-login-btn" onclick="openPcesLoginModal()" title="Login to PCES"
                             style="display:none;margin-right:10px;background:#00897b;color:#fff;border:none;
-                            border-radius:6px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;
-                            letter-spacing:0.3px;">🔐 Login</button>
+                            border-radius:8px;padding:9px 22px;font-size:15px;font-weight:700;cursor:pointer;
+                            letter-spacing:0.4px;box-shadow:0 2px 6px rgba(0,0,0,0.2);">🔐 Login</button>
                         <span id="logged-in-doctor" style="display:none;" onclick="toggleDoctorPopup(event)">🩺 <span id="logged-in-doctor-name"></span></span>
                         <div class="doctor-popup" id="doctor-popup">
                             <div class="doctor-popup-row">
@@ -4646,8 +4646,10 @@ ${data.conclusion}
 
         // Initialize conversation recording when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Add event listeners for conversation recording buttons
-            document.getElementById('start-conversation-btn').addEventListener('click', startConversationRecording);
+            // Add event listeners for conversation recording buttons (auth-gated)
+            document.getElementById('start-conversation-btn').addEventListener('click', function() {
+                requireAuth(() => startConversationRecording());
+            });
             document.getElementById('stop-conversation-btn').addEventListener('click', stopConversationRecording);
             
             // Initial state
