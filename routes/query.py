@@ -691,7 +691,12 @@ def handle_query():
     if patient_problem:
         logger.info("Using patient context as system message: %r", patient_problem)
 
-    query_input = user_input
+    # Enrich the RAG search query with patient problem so retrieval is patient-context-aware
+    if patient_problem:
+        query_input = f"{user_input}. Patient problem: {patient_problem}"
+        logger.info("LLM search query enriched with patient problem")
+    else:
+        query_input = user_input
     integrated_rag_system = _get_integrated_rag()
     rag_manager = _get_rag_manager()
     embeddings = _get_embeddings()
@@ -1243,7 +1248,12 @@ def handle_query_html():
     if patient_problem:
         logger.info("Using patient context as system message: %r", patient_problem)
 
-    query_input = user_input
+    # Enrich the RAG search query with patient problem so retrieval is patient-context-aware
+    if patient_problem:
+        query_input = f"{user_input}. Patient problem: {patient_problem}"
+        logger.info("LLM search query enriched with patient problem")
+    else:
+        query_input = user_input
     integrated_rag_system = _get_integrated_rag()
 
     try:
