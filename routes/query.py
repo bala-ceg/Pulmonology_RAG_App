@@ -32,7 +32,7 @@ import re
 import threading
 import time as _time
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify, make_response, request
 from langchain_chroma import Chroma
@@ -132,6 +132,121 @@ try:
 except Exception:
     _DEPARTMENTS = {}
     _SME_QUEUE_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# Phase 2-B: Validate Response (optional — graceful degrade if unavailable)
+# ---------------------------------------------------------------------------
+try:
+    from services.validation_service import (
+        validate_response as _validate_response,
+        log_validation as _log_validation,
+    )
+    _VALIDATION_AVAILABLE = True
+    logger.info("ValidationService loaded — Phase 2-B response validation enabled")
+except Exception as _val_import_exc:
+    _VALIDATION_AVAILABLE = False
+    logger.warning("ValidationService unavailable: %s — validation skipped", _val_import_exc)
+
+    def _validate_response(*_a, **_kw):  # type: ignore[misc]
+        return {"score": 100, "decision": "PASS", "results": {}, "flags": []}
+
+    def _log_validation(*_a, **_kw):  # type: ignore[misc]
+        pass
+
+# ---------------------------------------------------------------------------
+# Phase 2-B: Safety / Guardrails (optional — graceful degrade if unavailable)
+# ---------------------------------------------------------------------------
+try:
+    from services.guardrails_service import (
+        run_guardrails as _run_guardrails,
+        log_guardrail_event as _log_guardrail,
+    )
+    _GUARDRAILS_AVAILABLE = True
+    logger.info("GuardrailsService loaded — Phase 2-B safety guardrails enabled")
+except Exception as _guard_import_exc:
+    _GUARDRAILS_AVAILABLE = False
+    logger.warning("GuardrailsService unavailable: %s — guardrails skipped", _guard_import_exc)
+
+    def _run_guardrails(*_a, **_kw):  # type: ignore[misc]
+        return {"status": "SAFE", "results": {}, "flags": [], "emergency_response": None}
+
+    def _log_guardrail(*_a, **_kw):  # type: ignore[misc]
+        pass
+
+# ---------------------------------------------------------------------------
+# Phase 2-B: Confidence Scoring (optional — graceful degrade if unavailable)
+# ---------------------------------------------------------------------------
+try:
+    from services.confidence_service import (
+        score_confidence as _score_confidence,
+        log_confidence as _log_confidence,
+    )
+    _CONFIDENCE_AVAILABLE = True
+    logger.info("ConfidenceService loaded — Phase 2-B confidence scoring enabled")
+except Exception as _conf_import_exc:
+    _CONFIDENCE_AVAILABLE = False
+    logger.warning("ConfidenceService unavailable: %s — confidence scoring skipped", _conf_import_exc)
+
+    def _score_confidence(*_a, **_kw):  # type: ignore[misc]
+        return {"score": 80, "decision": "DELIVER", "breakdown": {}}
+
+    def _log_confidence(*_a, **_kw):  # type: ignore[misc]
+        pass
+
+# ---------------------------------------------------------------------------
+# Phase 2-B: Attach Citations (optional — graceful degrade if unavailable)
+# ---------------------------------------------------------------------------
+try:
+    from services.citation_service import (
+        attach_citations as _attach_citations,
+        log_citations as _log_citations,
+    )
+    _CITATIONS_AVAILABLE = True
+    logger.info("CitationService loaded — Phase 2-B attach citations enabled")
+except Exception as _cit_import_exc:
+    _CITATIONS_AVAILABLE = False
+    logger.warning("CitationService unavailable: %s — citations passthrough", _cit_import_exc)
+
+    def _attach_citations(*_a, **_kw):  # type: ignore[misc]
+        return {
+            "structured_citations": [],
+            "citations_html": "",
+            "source_count": 0,
+            "top_source_label": "None",
+            "avg_reliability": 0,
+        }
+
+    def _log_citations(*_a, **_kw):  # type: ignore[misc]
+        pass
+
+# ---------------------------------------------------------------------------
+# Phase 2-B: Log Interaction (optional — graceful degrade if unavailable)
+# ---------------------------------------------------------------------------
+try:
+    from services.interaction_log_service import (
+        create_interaction_log as _create_interaction_log,
+        log_interaction as _log_interaction,
+    )
+    _INTERACTION_LOG_AVAILABLE = True
+    logger.info("InteractionLogService loaded — Phase 2-B interaction logging enabled")
+except Exception as _ilog_import_exc:
+    _INTERACTION_LOG_AVAILABLE = False
+    logger.warning("InteractionLogService unavailable: %s — interaction logging skipped", _ilog_import_exc)
+
+    def _create_interaction_log(*_a, **_kw) -> dict:  # type: ignore[misc]
+        return {}
+
+    def _log_interaction(*_a, **_kw) -> None:  # type: ignore[misc]
+        pass
+
+try:
+    from services.session_service import session_service as _session_svc
+    _SESSION_SVC_AVAILABLE = True
+    logger.info("SessionService loaded — session completion tracking enabled")
+except Exception as _sess_import_exc:
+    _SESSION_SVC_AVAILABLE = False
+    logger.warning("SessionService unavailable: %s — session tracking skipped", _sess_import_exc)
+    _session_svc = None  # type: ignore[assignment]
 
 # Explicit mapping for pces_role values that don't match DEPARTMENTS keys directly
 _ROLE_TO_DEPT: dict[str, str] = {
@@ -605,6 +720,23 @@ def generate_summary():
         )
 
 
+@query_bp.route("/api/session/patient_change", methods=["POST"])
+def session_patient_change():
+    """
+    Called by the frontend immediately when the user selects a different patient.
+    Triggers session completion right at patient selection — not on the next query.
+    """
+    data = request.get_json(silent=True) or {}
+    new_patient_id = data.get("patient_id", "").strip()
+    session_id = _get_session_folder() or "guest"
+
+    if _session_svc and new_patient_id:
+        completed = _session_svc.on_patient_change(session_id, new_patient_id)
+        return jsonify({"status": "ok", "session_completed": completed})
+
+    return jsonify({"status": "ok", "session_completed": False})
+
+
 @query_bp.route("/plain_english", methods=["POST"])
 @handle_route_errors
 def plain_english():
@@ -632,6 +764,8 @@ def plain_english():
 @handle_route_errors
 def handle_query():
     """Original JSON endpoint for the UI — returns JSON responses."""
+    import time as _time_module
+    _req_start: float = _time_module.time()   # Step 6: end-to-end latency start
     user_input = request.json.get("data", "")
     patient_problem = request.json.get("patient_problem", "").strip()
     doctor_name = (request.json.get("doctor_name") or "").strip()
@@ -679,6 +813,11 @@ def handle_query():
                     "message": _guard_msg,
                     "out_of_scope": True,
                     "similarity_score": round(similarity_score, 4),
+                    "validation": {
+                        "score": 0,
+                        "decision": "REJECTED",
+                        "flags": ["Query rejected by scope guard — outside medical scope"],
+                    },
                 }
             )
         elif _guard_status == "general_medical":
@@ -842,6 +981,149 @@ def handle_query():
                 citations = integrated_result.get("citations", [])
                 source_documents = integrated_result.get("source_documents", [])
 
+                # ── Phase 2-B STEP 1–10: Validate Response ────────────────────
+                _trace("🔍", "03-VALIDATE-RESPONSE",
+                       f"running validation  dept={doctor_department or active_dept or 'unknown'!r}")
+                # Bug fix: use source_document excerpts (actual retrieved text) for
+                # evidence matching — citation display strings are too short to match.
+                _v_context = [
+                    doc.get("excerpt", "")
+                    for doc in source_documents
+                    if doc.get("excerpt")
+                ]
+                if not _v_context:   # fall back to citations when no excerpts
+                    _v_context = [c for c in citations if isinstance(c, str)]
+                _v_patient_data = request.json.get("patient_data") or {}
+                _v_result = _validate_response(
+                    prompt=user_input,
+                    response=answer,
+                    context=_v_context,
+                    department=doctor_department or active_dept or "",
+                    patient_data=_v_patient_data,
+                )
+                _trace(
+                    "📊", "03-VALIDATE-RESPONSE",
+                    f"score={_v_result['score']}  decision={_v_result['decision']}  "
+                    f"flags={_v_result['flags']}",
+                )
+
+                # Phase 2-B STEP 12 — log async (non-blocking)
+                _log_validation(
+                    session_id=session_id,
+                    score=_v_result["score"],
+                    results=_v_result["results"],
+                    decision=_v_result["decision"],
+                    flags=_v_result["flags"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+
+                # Phase 2-B STEP 11 — REGENERATE: retry LLM once if score < 60
+                if _v_result["decision"] == "REGENERATE":
+                    _trace("🔄", "03-VALIDATE-RESPONSE-RETRY",
+                           f"score={_v_result['score']} < 60 — retrying LLM once")
+                    logger.warning(
+                        "[VALIDATION] REGENERATE triggered  score=%d  flags=%s  dept=%r",
+                        _v_result["score"], _v_result["flags"],
+                        doctor_department or active_dept,
+                    )
+                    try:
+                        _retry = integrated_rag_system.query(
+                            query_input, session_id, patient_problem,
+                            adhoc_rag_ready=adhoc_rag_ready,
+                        )
+                        if _retry and _retry.get("answer"):
+                            answer = _retry["answer"]
+                            routing_info = _retry.get("routing_info", routing_info)
+                            tools_used = _retry.get("tools_used", tools_used)
+                            citations = _retry.get("citations", citations)
+                            source_documents = _retry.get("source_documents", source_documents)
+                            _trace("✅", "03-VALIDATE-RESPONSE-RETRY",
+                                   f"retry succeeded  len={len(answer)}")
+                            logger.info("[VALIDATION] Retry succeeded  len=%d", len(answer))
+                        else:
+                            _trace("⚠️", "03-VALIDATE-RESPONSE-RETRY",
+                                   "retry returned no answer — using original")
+                    except Exception as _retry_exc:
+                        _trace("❌", "03-VALIDATE-RESPONSE-RETRY",
+                               f"retry raised: {_retry_exc}")
+                        logger.error("[VALIDATION] Retry failed: %s", _retry_exc)
+
+                elif _v_result["decision"] == "REVIEW":
+                    _trace("📋", "03-VALIDATE-RESPONSE",
+                           f"score={_v_result['score']} in 60–79 — routed to HITL review queue")
+                    logger.info(
+                        "[VALIDATION] REVIEW flagged  score=%d  flags=%s",
+                        _v_result["score"], _v_result["flags"],
+                    )
+
+                # ── Phase 2-B STEP 04: Safety / Guardrails ───────────────────
+                _trace("🛡️", "04-SAFETY-GUARDRAILS",
+                       f"running guardrails  dept={doctor_department or active_dept or 'unknown'!r}")
+                _g_result = _run_guardrails(
+                    prompt=user_input,
+                    response=answer,
+                    department=doctor_department or active_dept or "",
+                    patient_data=_v_patient_data,
+                    validation_score=_v_result["score"],
+                )
+                _trace(
+                    "🛡️", "04-SAFETY-GUARDRAILS",
+                    f"status={_g_result['status']}  flags={_g_result['flags']}",
+                )
+                _log_guardrail(
+                    session_id=session_id,
+                    status=_g_result["status"],
+                    results=_g_result["results"],
+                    flags=_g_result["flags"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+
+                # EMERGENCY → override LLM answer entirely
+                if _g_result["status"] == "EMERGENCY":
+                    _trace("🚨", "04-SAFETY-GUARDRAILS",
+                           "EMERGENCY detected — overriding answer with emergency response")
+                    logger.warning(
+                        "[GUARDRAILS] EMERGENCY override  dept=%r  flags=%s",
+                        doctor_department or active_dept, _g_result["flags"],
+                    )
+                    answer = _g_result["emergency_response"]
+
+                elif _g_result["status"] == "BLOCKED":
+                    _trace("🚫", "04-SAFETY-GUARDRAILS",
+                           f"BLOCKED  flags={_g_result['flags']} — delivering with guardrail flag")
+                    logger.warning(
+                        "[GUARDRAILS] BLOCKED  dept=%r  flags=%s",
+                        doctor_department or active_dept, _g_result["flags"],
+                    )
+
+                # ── Phase 2-B STEP 05: Confidence Scoring ────────────────────
+                _trace("📈", "05-CONFIDENCE-SCORING",
+                       f"computing confidence  validation_score={_v_result['score']}  "
+                       f"guardrail_status={_g_result['status']}")
+                _c_result = _score_confidence(
+                    prompt=user_input,
+                    response=answer,
+                    context=_v_context,
+                    source_documents=source_documents,
+                    validation_score=_v_result["score"],
+                    guardrail_status=_g_result["status"],
+                )
+                _trace(
+                    "📈", "05-CONFIDENCE-SCORING",
+                    f"score={_c_result['score']}  decision={_c_result['decision']}  "
+                    f"breakdown={_c_result['breakdown']}",
+                )
+                _log_confidence(
+                    session_id=session_id,
+                    score=_c_result["score"],
+                    breakdown=_c_result["breakdown"],
+                    decision=_c_result["decision"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+
                 # Last-resort secret sanitizer — strip any API keys that may have
                 # leaked through from tool outputs before sending to the user
                 import re as _re_secrets
@@ -861,63 +1143,98 @@ def handle_query():
                 answer = _scrub(answer)
                 citations = [_scrub(c) for c in citations]
 
-                # ── Build the citations + source-documents section as HTML ──────────
-                # The frontend checks for '<div' to decide whether to render as HTML
-                # vs markdown. We use HTML so the source document cards render cleanly.
-                cit_html_parts = ['<strong>Citations:</strong><ul style="margin:6px 0 0 16px;padding:0;">']
-                for c in citations:
-                    cit_html_parts.append(f'<li style="margin-bottom:4px;">{c}</li>')
-                cit_html_parts.append('</ul>')
+                # ── Phase 2-B STEP 06: Attach Citations ──────────────────────
+                # Determine LoRA info for attribution (Step 9)
+                _lora_info = None
+                if hybrid_route and hybrid_route.get("use_dept_lora"):
+                    _lora_info = {
+                        "used": True,
+                        "department": hybrid_route.get("primary_dept", ""),
+                        "model_version": hybrid_route.get("model_path", ""),
+                    }
 
-                if source_documents:
-                    cit_html_parts.append(
-                        '<hr style="margin:12px 0;border:none;border-top:1px solid #dee2e6;">'
-                        '<strong style="color:#495057;">&#128196; Source Documents</strong>'
+                _cit_result = _attach_citations(
+                    response=answer,
+                    source_documents=source_documents,
+                    citations_raw=citations,
+                    confidence_score=_c_result["score"],
+                    department=doctor_department or active_dept or "",
+                    session_id=session_id,
+                    lora_info=_lora_info,
+                )
+                _trace(
+                    "📎", "06-ATTACH-CITATIONS",
+                    f"sources={_cit_result['source_count']}  "
+                    f"top={_cit_result['top_source_label']!r}  "
+                    f"avg_reliability={_cit_result['avg_reliability']}",
+                )
+                _log_citations(
+                    session_id=session_id,
+                    structured_citations=_cit_result["structured_citations"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                    confidence_score=_c_result["score"],
+                )
+
+                # ── Phase 2-B STEP 07: Log Interaction ───────────────────────
+                import time as _t_mod
+                _latency_ms = int((_t_mod.time() - _req_start) * 1000)
+                _ilog = _create_interaction_log(
+                    session_id=session_id,
+                    tenant_id="",
+                    doctor_id=_doctor_id,
+                    patient_id=_patient_id,
+                    department=doctor_department or active_dept or "",
+                    prompt=user_input,
+                    original_response=answer,
+                    final_response=answer,
+                    validation_result=_v_result,
+                    guardrail_result=_g_result,
+                    confidence_result=_c_result,
+                    citation_result=_cit_result,
+                    lora_info=_lora_info,
+                    latency_ms=_latency_ms,
+                )
+                _log_interaction(_ilog)
+                _trace(
+                    "📝", "07-LOG-INTERACTION",
+                    f"latency={_latency_ms}ms  tokens={_ilog.get('tokens_total', 0)}  "
+                    f"session={session_id!r}",
+                )
+
+                # ── Phase 2-B: Session Completion Tracking ────────────────────
+                if _SESSION_SVC_AVAILABLE and _session_svc is not None:
+                    _sme_review_needed = (
+                        "YES"
+                        if _c_result.get("decision") == "REVIEW" or _v_result.get("decision") == "REVIEW"
+                        else "NO"
                     )
-                    for i, doc in enumerate(source_documents, start=1):
-                        fields = doc.get('fields', {})
-                        dept    = fields.get('Dept', '')
-                        src     = fields.get('Source', fields.get('Document', ''))
-                        rel     = fields.get('Relevance', '')
-                        page    = fields.get('Page', '')
-                        url     = fields.get('URL', '')
-                        excerpt = doc.get('excerpt', '')
+                    _sess_summary = {
+                        "timestamp": _ilog.get("timestamp", ""),
+                        "prompt_snippet": (user_input or "")[:120],
+                        "response": (answer or "")[:500],
+                        "sme_review_needed": _sme_review_needed,
+                        "confidence": _c_result.get("score", 0),
+                        "sources": [
+                            c.get("source", "") for c in _cit_result.get("structured_citations", [])
+                        ],
+                        # Full text used only for RLHF/HITL push — not stored in session JSON
+                        "full_prompt": user_input or "",
+                        "full_response": answer or "",
+                    }
+                    _sess_reason = _session_svc.on_query(
+                        session_id=session_id,
+                        patient_id=_patient_id or "",
+                        doctor_id=_doctor_id or "",
+                        department=doctor_department or active_dept or "",
+                        interaction_summary=_sess_summary,
+                        query_started_at=datetime.fromtimestamp(_req_start, tz=timezone.utc),
+                    )
+                    if _sess_reason:
+                        _trace("🔔", "SESSION-COMPLETE", f"reason={_sess_reason}  session={session_id!r}")
 
-                        # Badge colour by relevance
-                        try:
-                            rel_val = int(rel.rstrip('%'))
-                            badge_color = '#28a745' if rel_val >= 70 else '#fd7e14' if rel_val >= 50 else '#6c757d'
-                        except Exception:
-                            badge_color = '#6c757d'
-
-                        meta_items = []
-                        if dept:
-                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">🏥 {dept}</span>')
-                        if src:
-                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">📄 {src}</span>')
-                        if page:
-                            meta_items.append(f'<span style="background:#e9ecef;border-radius:4px;padding:1px 6px;font-size:11px;">p.{page}</span>')
-                        if rel:
-                            meta_items.append(f'<span style="background:{badge_color};color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">{rel} match</span>')
-                        if url:
-                            meta_items.append(f'<a href="{url}" target="_blank" style="font-size:11px;">🔗 Link</a>')
-
-                        meta_html = ' &nbsp;'.join(meta_items)
-                        excerpt_html = excerpt.replace('<', '&lt;').replace('>', '&gt;')
-
-                        cit_html_parts.append(
-                            f'<div style="margin-top:10px;border:1px solid #dee2e6;border-radius:6px;'
-                            f'padding:10px 12px;background:#f8f9fa;">'
-                            f'<div style="font-size:12px;font-weight:600;color:#343a40;margin-bottom:6px;">'
-                            f'Document {i} &nbsp; {meta_html}</div>'
-                            f'<div style="font-size:13px;color:#495057;line-height:1.6;'
-                            f'border-left:3px solid #007bff;padding-left:10px;'
-                            f'background:#fff;border-radius:0 4px 4px 0;padding:8px 10px;">'
-                            f'&ldquo;{excerpt_html}&rdquo;</div>'
-                            f'</div>'
-                        )
-
-                citations_html = ''.join(cit_html_parts)
+                # Build the citations HTML block using the citation service output
+                citations_html = _cit_result["citations_html"]
 
                 # Main message body: disclaimer + clean answer (plain text/markdown only)
                 message_body = guard_disclaimer + answer
@@ -931,6 +1248,26 @@ def handle_query():
                         "message": message_body,
                         "trace": _flush_trace(),
                             "dev_mode": _dev_mode_enabled(),
+                        "validation": {
+                            "score": _v_result["score"],
+                            "decision": _v_result["decision"],
+                            "flags": _v_result["flags"],
+                        },
+                        "guardrails": {
+                            "status": _g_result["status"],
+                            "flags": _g_result["flags"],
+                        },
+                        "confidence": {
+                            "score": _c_result["score"],
+                            "decision": _c_result["decision"],
+                            "breakdown": _c_result["breakdown"],
+                        },
+                        "citations": {
+                            "source_count": _cit_result["source_count"],
+                            "top_source": _cit_result["top_source_label"],
+                            "avg_reliability": _cit_result["avg_reliability"],
+                            "structured": _cit_result["structured_citations"],
+                        },
                         "routing_details": {
                             "disciplines": tools_used,
                             "planned_tools": routing_info.get("planned_tools", []),
@@ -975,6 +1312,150 @@ def handle_query():
                     f"{routing_info.get('similarity_score', 0):.3f}, Sources: {sources_info}"
                 )
 
+                # Phase 2-B: Validate Response (Two-Store RAG path)
+                _v_context_rag = [c for c in rag_result.get("citations", []) if isinstance(c, str)]
+                _v_result_rag = _validate_response(
+                    prompt=user_input,
+                    response=final_response,
+                    context=_v_context_rag,
+                    department=doctor_department or active_dept or "",
+                    patient_data=request.json.get("patient_data") or {},
+                )
+                _trace("📊", "03-VALIDATE-RESPONSE",
+                       f"[Two-Store RAG] score={_v_result_rag['score']}  "
+                       f"decision={_v_result_rag['decision']}")
+                logger.info(
+                    "[VALIDATION] Two-Store RAG  score=%d  decision=%s  flags=%s",
+                    _v_result_rag["score"], _v_result_rag["decision"], _v_result_rag["flags"],
+                )
+                _log_validation(
+                    session_id=session_id,
+                    score=_v_result_rag["score"],
+                    results=_v_result_rag["results"],
+                    decision=_v_result_rag["decision"],
+                    flags=_v_result_rag["flags"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+
+                # Phase 2-B: Safety / Guardrails (Two-Store RAG path)
+                _g_result_rag = _run_guardrails(
+                    prompt=user_input,
+                    response=final_response,
+                    department=doctor_department or active_dept or "",
+                    patient_data=request.json.get("patient_data") or {},
+                    validation_score=_v_result_rag["score"],
+                )
+                _trace("🛡️", "04-SAFETY-GUARDRAILS",
+                       f"[Two-Store RAG] status={_g_result_rag['status']}  "
+                       f"flags={_g_result_rag['flags']}")
+                _log_guardrail(
+                    session_id=session_id,
+                    status=_g_result_rag["status"],
+                    results=_g_result_rag["results"],
+                    flags=_g_result_rag["flags"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+                if _g_result_rag["status"] == "EMERGENCY":
+                    final_response = _g_result_rag["emergency_response"]
+
+                # Phase 2-B: Confidence Scoring (Two-Store RAG path)
+                _c_result_rag = _score_confidence(
+                    prompt=user_input,
+                    response=final_response,
+                    context=_v_context_rag,
+                    source_documents=[],
+                    validation_score=_v_result_rag["score"],
+                    guardrail_status=_g_result_rag["status"],
+                )
+                _trace("📈", "05-CONFIDENCE-SCORING",
+                       f"[Two-Store RAG] score={_c_result_rag['score']}  "
+                       f"decision={_c_result_rag['decision']}")
+                _log_confidence(
+                    session_id=session_id,
+                    score=_c_result_rag["score"],
+                    breakdown=_c_result_rag["breakdown"],
+                    decision=_c_result_rag["decision"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                )
+
+                # Phase 2-B: Attach Citations (Two-Store RAG path)
+                _cit_result_rag = _attach_citations(
+                    response=final_response,
+                    source_documents=[],
+                    citations_raw=rag_result.get("citations", []),
+                    confidence_score=_c_result_rag["score"],
+                    department=doctor_department or active_dept or "",
+                    session_id=session_id,
+                )
+                _trace("📎", "06-ATTACH-CITATIONS",
+                       f"[Two-Store RAG] sources={_cit_result_rag['source_count']}  "
+                       f"top={_cit_result_rag['top_source_label']!r}")
+                _log_citations(
+                    session_id=session_id,
+                    structured_citations=_cit_result_rag["structured_citations"],
+                    department=doctor_department or active_dept or "",
+                    prompt_snippet=user_input,
+                    confidence_score=_c_result_rag["score"],
+                )
+
+                # ── Phase 2-B STEP 07: Log Interaction (Two-Store RAG) ───────
+                import time as _t_mod_rag
+                _latency_ms_rag = int((_t_mod_rag.time() - _req_start) * 1000)
+                _ilog_rag = _create_interaction_log(
+                    session_id=session_id,
+                    tenant_id="",
+                    doctor_id=_doctor_id,
+                    patient_id=_patient_id,
+                    department=doctor_department or active_dept or "",
+                    prompt=user_input,
+                    original_response=final_response,
+                    final_response=guard_disclaimer + final_response,
+                    validation_result=_v_result_rag,
+                    guardrail_result=_g_result_rag,
+                    confidence_result=_c_result_rag,
+                    citation_result=_cit_result_rag,
+                    latency_ms=_latency_ms_rag,
+                )
+                _log_interaction(_ilog_rag)
+                _trace(
+                    "📝", "07-LOG-INTERACTION",
+                    f"[Two-Store RAG] latency={_latency_ms_rag}ms  "
+                    f"tokens={_ilog_rag.get('tokens_total', 0)}",
+                )
+
+                # ── Phase 2-B: Session Completion Tracking (Two-Store RAG) ────
+                if _SESSION_SVC_AVAILABLE and _session_svc is not None:
+                    _sme_review_needed_rag = (
+                        "YES"
+                        if _c_result_rag.get("decision") == "REVIEW" or _v_result_rag.get("decision") == "REVIEW"
+                        else "NO"
+                    )
+                    _sess_summary_rag = {
+                        "timestamp": _ilog_rag.get("timestamp", ""),
+                        "prompt_snippet": (user_input or "")[:120],
+                        "response": (final_response or "")[:500],
+                        "sme_review_needed": _sme_review_needed_rag,
+                        "confidence": _c_result_rag.get("score", 0),
+                        "sources": [
+                            c.get("source", "") for c in _cit_result_rag.get("structured_citations", [])
+                        ],
+                        "full_prompt": user_input or "",
+                        "full_response": final_response or "",
+                    }
+                    _sess_reason_rag = _session_svc.on_query(
+                        session_id=session_id,
+                        patient_id=_patient_id or "",
+                        doctor_id=_doctor_id or "",
+                        department=doctor_department or active_dept or "",
+                        interaction_summary=_sess_summary_rag,
+                        query_started_at=datetime.fromtimestamp(_req_start, tz=timezone.utc),
+                    )
+                    if _sess_reason_rag:
+                        _trace("🔔", "SESSION-COMPLETE", f"reason={_sess_reason_rag}  session={session_id!r}")
+
                 _queue_sme_entry(user_input, guard_disclaimer + final_response, doctor_name, doctor_department)
                 return jsonify(
                     {
@@ -982,6 +1463,26 @@ def handle_query():
                         "message": guard_disclaimer + final_response,
                         "trace": _flush_trace(),
                             "dev_mode": _dev_mode_enabled(),
+                        "validation": {
+                            "score": _v_result_rag["score"],
+                            "decision": _v_result_rag["decision"],
+                            "flags": _v_result_rag["flags"],
+                        },
+                        "guardrails": {
+                            "status": _g_result_rag["status"],
+                            "flags": _g_result_rag["flags"],
+                        },
+                        "confidence": {
+                            "score": _c_result_rag["score"],
+                            "decision": _c_result_rag["decision"],
+                            "breakdown": _c_result_rag["breakdown"],
+                        },
+                        "citations": {
+                            "source_count": _cit_result_rag["source_count"],
+                            "top_source": _cit_result_rag["top_source_label"],
+                            "avg_reliability": _cit_result_rag["avg_reliability"],
+                            "structured": _cit_result_rag["structured_citations"],
+                        },
                         "routing_details": {
                             "disciplines": routing_info.get("sources_queried", []),
                             "sources": rag_result["citations"],

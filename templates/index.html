@@ -2805,6 +2805,7 @@
         }
 
         function selectPatientFromModal(p) {
+            const prevPatientId = window.selectedPatientId;
             window.selectedPatientId = p.patient_id;
             window.currentPatientName = p.full_name || '';  // keep popup in sync
             setPatientInfoBar({ full_name: p.full_name, patient_id: p.patient_id });
@@ -2812,6 +2813,20 @@
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = p.full_name || '—';
             closePatientSearchModal();
+            // Notify backend immediately so session closes right at patient change
+            if (prevPatientId && prevPatientId !== p.patient_id) {
+                fetch('/api/session/patient_change', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patient_id: p.patient_id })
+                }).catch(() => {});
+            } else if (p.patient_id) {
+                fetch('/api/session/patient_change', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patient_id: p.patient_id })
+                }).catch(() => {});
+            }
         }
 
         /* ── Empty-problem warning modal ───────────────────── */
@@ -2844,10 +2859,17 @@
             
             // Store patient_id when a patient is selected and populate the info bar
             if (type === 'patient' && patientId) {
+                const prevPatientId = window.selectedPatientId;
                 window.selectedPatientId = patientId;
                 console.log('Selected patient ID:', patientId);
                 // Populate patient info bar immediately with name from autocomplete
                 setPatientInfoBar({ full_name: fullName, patient_id: patientId });
+                // Notify backend immediately so session closes right at patient change
+                fetch('/api/session/patient_change', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patient_id: patientId })
+                }).catch(() => {});
                 // Then fetch full demographics (for recording modal display)
                 fetch(`/api/patient/${encodeURIComponent(patientId)}`)
                     .then(r => r.json())
@@ -3271,6 +3293,8 @@
                     body: JSON.stringify({ 
                         data: message,
                         patient_problem: patientProblem,
+                        patient_id: window.selectedPatientId || '',
+                        doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
                         doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
                         doctor_department: sessionStorage.getItem('pces_doctor_department') || '',
                         adhoc_rag_ready: window.adhocRagReady === true
@@ -3458,6 +3482,8 @@
                     body: JSON.stringify({ 
                         data: transcription,
                         patient_problem: patientProblem,  // Include patient problem as context
+                        patient_id: window.selectedPatientId || '',
+                        doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
                         doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
                         doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
@@ -3501,6 +3527,8 @@
                     body: JSON.stringify({ 
                         data: transcription,
                         patient_problem: patientProblem,  // Include patient problem as context
+                        patient_id: window.selectedPatientId || '',
+                        doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
                         doctor_name: sessionStorage.getItem('pces_doctor_name') || '',
                         doctor_department: sessionStorage.getItem('pces_doctor_department') || ''
                     })
@@ -4742,6 +4770,7 @@ ${data.conclusion}
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
+                sessionStorage.setItem('pces_doctor_id', data.username || '');
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
