@@ -77,15 +77,18 @@ def _extract_citations_from_response(response: str, primary_tool: str) -> List[s
             flags=_re.IGNORECASE | _re.DOTALL,
         )
 
-        # Now find the final Sources: block
-        sources_match = _re.search(
+        # Collect citations from EVERY "Sources:" block in the merged output.
+        # Each tool (Pinecone, Tavily, ArXiv, etc.) appends its own Sources: footer;
+        # using finditer rather than search ensures all of them are captured.
+        seen_entries: set = set()
+        for sources_match in _re.finditer(
             r'Sources?:\s*(.+?)(?:\n\n|\Z)', clean, _re.IGNORECASE | _re.DOTALL
-        )
-        if sources_match:
+        ):
             raw = sources_match.group(1).strip()
             for entry in _re.split(r'\n', raw):
                 entry = _re.sub(r'^[\-\*\•]\s*', '', entry).strip()
-                if entry:
+                if entry and entry not in seen_entries:
+                    seen_entries.add(entry)
                     citations.append(entry)
 
     # Always include a fallback label so citations are never empty
@@ -392,17 +395,37 @@ class IntegratedMedicalRAG:
                 executor.submit(self._call_tool, name, question, session_id): name
                 for name in tool_names
             }
-            for future in _cf.as_completed(futures, timeout=timeout):
-                name = futures[future]
-                try:
-                    result = future.result()
-                    if not self._is_empty_result(result, name):
-                        results[name] = result
-                        logger.info("Parallel tool '%s' returned %d chars", name, len(result))
-                    else:
-                        logger.info("Parallel tool '%s' returned nothing", name)
-                except Exception as exc:
-                    logger.warning("Parallel tool '%s' raised %s", name, exc)
+            try:
+                for future in _cf.as_completed(futures, timeout=timeout):
+                    name = futures[future]
+                    try:
+                        result = future.result()
+                        if not self._is_empty_result(result, name):
+                            results[name] = result
+                            logger.info("Parallel tool '%s' returned %d chars", name, len(result))
+                        else:
+                            logger.info("Parallel tool '%s' returned nothing", name)
+                    except Exception as exc:
+                        logger.warning("Parallel tool '%s' raised %s", name, exc)
+            except _cf.TimeoutError:
+                # Collect results from any tools that finished before the deadline
+                timed_out = [futures[f] for f in futures if not f.done()]
+                logger.warning(
+                    "_run_parallel_tools: timeout after %.1fs — tools still running: %s",
+                    timeout, timed_out,
+                )
+                for future, name in futures.items():
+                    if future.done() and name not in results:
+                        try:
+                            result = future.result()
+                            if not self._is_empty_result(result, name):
+                                results[name] = result
+                                logger.info(
+                                    "Parallel tool '%s' rescued after timeout (%d chars)",
+                                    name, len(result),
+                                )
+                        except Exception as exc:
+                            logger.warning("Parallel tool '%s' raised %s", name, exc)
         return results
 
     # Compact one-line descriptions shown to the planner LLM

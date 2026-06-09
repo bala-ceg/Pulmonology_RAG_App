@@ -448,3 +448,193 @@ def create_vector_db():
     except Exception as exc:
         logger.error("Error in /create_vector_db: %s", exc)
         return jsonify({"error": "Internal server error"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Ad Hoc RAG — upload
+# ---------------------------------------------------------------------------
+
+@documents_bp.route("/upload_adhoc_pdf", methods=["POST"])
+@handle_route_errors
+def upload_adhoc_pdf():
+    """Upload a patient/doctor-specific PDF into the Ad Hoc RAG store.
+
+    Form fields:
+        file        — PDF file (required)
+        doctor_id   — Uploading doctor's ID (required)
+        patient_id  — Patient ID (optional; omit for Mode A / doctor-scoped)
+        scope       — "doctor" (default) or "patient"
+        department  — Medical department (optional, used in metadata)
+
+    Constraints (from design doc 03):
+        - Max ADHOC_MAX_PAGES pages
+        - Max ADHOC_MAX_MB MB file size
+        - Chunks: ADHOC_CHUNK_SIZE / ADHOC_CHUNK_OVERLAP tokens
+    """
+    from datetime import datetime as _dt
+    from langchain_text_splitters import RecursiveCharacterTextSplitter as _RCT
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported for Ad Hoc upload"}), 400
+
+    doctor_id: str = request.form.get("doctor_id", "").strip()
+    if not doctor_id:
+        return jsonify({"error": "doctor_id is required"}), 400
+
+    patient_id: str | None = request.form.get("patient_id", "").strip() or None
+    scope: str = request.form.get("scope", "doctor").strip()
+    if scope not in ("doctor", "patient"):
+        return jsonify({"error": "scope must be 'doctor' or 'patient'"}), 400
+
+    department: str = request.form.get("department", "").strip()
+    session_folder = _get_session_folder() or "default"
+    tenant_id: str = Config.TENANT_ID
+
+    import tempfile, os as _os
+
+    # ── Save to temp file for validation ──────────────────────────────
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        file.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        # ── Validate page count ────────────────────────────────────────
+        with fitz.open(tmp_path) as pdf_doc:
+            page_count = len(pdf_doc)
+
+        if page_count > Config.ADHOC_MAX_PAGES:
+            return jsonify({
+                "error": (
+                    f"File has {page_count} pages; maximum allowed is "
+                    f"{Config.ADHOC_MAX_PAGES} pages."
+                )
+            }), 400
+
+        # ── Validate file size ─────────────────────────────────────────
+        file_size_mb = _os.path.getsize(tmp_path) / (1024 * 1024)
+        if file_size_mb > Config.ADHOC_MAX_MB:
+            return jsonify({
+                "error": (
+                    f"File is {file_size_mb:.1f} MB; maximum allowed is "
+                    f"{Config.ADHOC_MAX_MB} MB."
+                )
+            }), 400
+
+        # ── Extract text ───────────────────────────────────────────────
+        text_pages = extract_text_from_pdf(tmp_path)
+        if not text_pages:
+            return jsonify({"error": "Could not extract text from the uploaded PDF"}), 400
+
+        # ── Chunk with adhoc-specific settings ─────────────────────────
+        adhoc_splitter = _RCT(
+            chunk_size=Config.ADHOC_CHUNK_SIZE,
+            chunk_overlap=Config.ADHOC_CHUNK_OVERLAP,
+            separators=["\n\n", "\n", ".", " "],
+        )
+        chunks: list[Document] = []
+        for page_num, page_text in enumerate(text_pages, start=1):
+            for chunk in adhoc_splitter.split_text(page_text):
+                chunks.append(
+                    Document(
+                        page_content=chunk,
+                        metadata={
+                            "source": file.filename,
+                            "source_type": "adhoc",
+                            "page": page_num,
+                        },
+                    )
+                )
+
+        if not chunks:
+            return jsonify({"error": "No text content could be extracted from the PDF"}), 400
+
+        # ── Build adhoc metadata ───────────────────────────────────────
+        ts = _dt.utcnow().strftime("%Y%m%d%H%M%S")
+        adhoc_meta = {
+            "rag_type": "adhoc",
+            "scope": scope,
+            "tenant_id": tenant_id,
+            "doctor_id": doctor_id,
+            "patient_id": patient_id or "",
+            "department": department,
+            "session_id": session_folder,
+            "document_name": file.filename,
+            "upload_time": _dt.utcnow().isoformat(),
+        }
+
+        # ── Store in adhoc_kb ──────────────────────────────────────────
+        rag_manager = _get_rag_manager()
+        stored_count = 0
+        if rag_manager is not None:
+            stored_count = rag_manager.ingest_adhoc_doc(chunks, adhoc_meta)
+        else:
+            logger.warning("upload_adhoc_pdf: RAG manager not available — chunks not stored in adhoc_kb")
+
+        # ── Optional Azure Blob upload ─────────────────────────────────
+        azure_path: str | None = None
+        try:
+            from azure_storage import get_storage_manager
+            storage = get_storage_manager()
+            blob_path = (
+                f"adhoc_rag/{tenant_id}/{doctor_id}/{department or 'general'}"
+                f"/{ts}/{file.filename}"
+            )
+            with open(tmp_path, "rb") as fh:
+                storage.upload_blob(blob_path, fh.read())
+            azure_path = blob_path
+            logger.info("upload_adhoc_pdf: uploaded to Azure Blob at %s", azure_path)
+        except Exception as az_exc:
+            logger.info("upload_adhoc_pdf: Azure upload skipped (%s)", az_exc)
+
+        return jsonify({
+            "message": "Ad Hoc PDF uploaded and indexed successfully",
+            "filename": file.filename,
+            "pages": page_count,
+            "chunks_stored": stored_count,
+            "scope": scope,
+            "doctor_id": doctor_id,
+            "patient_id": patient_id,
+            "azure_blob_path": azure_path,
+        })
+
+    finally:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Ad Hoc RAG — manual cleanup
+# ---------------------------------------------------------------------------
+
+@documents_bp.route("/api/adhoc/cleanup", methods=["DELETE"])
+@handle_route_errors
+def adhoc_cleanup():
+    """Manually trigger cleanup of expired patient-scoped Ad Hoc RAG documents.
+
+    Query params:
+        retention_days  — override default (Config.ADHOC_RETENTION_DAYS)
+
+    Returns: count of deleted chunks.
+    """
+    rag_manager = _get_rag_manager()
+    if rag_manager is None:
+        return jsonify({"error": "RAG manager not available"}), 503
+
+    retention_days = request.args.get("retention_days", type=int)
+
+    try:
+        deleted = rag_manager.cleanup_expired_adhoc_docs(retention_days=retention_days)
+        return jsonify({
+            "message": "Adhoc cleanup complete",
+            "deleted_chunks": deleted,
+            "retention_days": retention_days or Config.ADHOC_RETENTION_DAYS,
+        })
+    except Exception as exc:
+        logger.error("adhoc_cleanup error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
