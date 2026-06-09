@@ -4770,7 +4770,7 @@ ${data.conclusion}
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
-                sessionStorage.setItem('pces_doctor_id', data.username || '');
+                sessionStorage.setItem('pces_doctor_id', data.party_id || data.username || '');
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');

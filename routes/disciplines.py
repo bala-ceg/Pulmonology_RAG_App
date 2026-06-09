@@ -562,10 +562,27 @@ def login():
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
+        # Look up party_id from p_party by email match (best-effort)
+        doctor_party_id: str | None = None
+        if email:
+            try:
+                with _ehr_conn() as ehr_conn:
+                    with ehr_conn.cursor() as ehr_cur:
+                        ehr_cur.execute(
+                            "SELECT party_id FROM public.p_party WHERE party_type = 'DOCTOR' AND LOWER(email) = LOWER(%s) LIMIT 1",
+                            (email,),
+                        )
+                        party_row = ehr_cur.fetchone()
+                        if party_row:
+                            doctor_party_id = str(party_row[0])
+            except Exception:
+                pass  # non-critical — falls back to username
+
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
         return jsonify({
             "success": True,
             "username": db_username,
+            "party_id": doctor_party_id,   # UUID from p_party; None if no email match
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
