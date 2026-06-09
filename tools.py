@@ -108,10 +108,15 @@ def _join_docs(docs: List[Document], max_chars: int = 1200) -> str:
             if metadata.get('source_type') == 'wikipedia':
                 sources.append(f"Wikipedia: {metadata.get('title', 'Unknown')}")
             elif metadata.get('source_type') == 'arxiv':
-                sources.append(f"arXiv: {metadata.get('Title', 'Unknown')}")
+                # Include URL so citation_service can render a hyperlink
+                url = metadata.get('url') or metadata.get('link') or ""
+                title = metadata.get('Title') or metadata.get('title') or 'Unknown'
+                sources.append(f"arXiv: {title}" + (f" {url}" if url else ""))
             elif metadata.get('source_type') == 'tavily':
-                # Format Tavily sources consistently with other tools
-                sources.append(f"Web: {metadata.get('title', 'Unknown')}")
+                # Include URL so citation_service can render a hyperlink
+                url = metadata.get('url') or metadata.get('link') or ""
+                title = metadata.get('title', 'Unknown')
+                sources.append(f"Web: {title}" + (f" {url}" if url else ""))
             else:
                 sources.append(os.path.basename(source) if source else "Unknown")
     
@@ -683,6 +688,9 @@ def Pinecone_KB_Search(query: str) -> str:
             title     = meta.get("title", "")
             page      = meta.get("page") or meta.get("page_number")
             url       = meta.get("url") or meta.get("link") or ""
+            # If the source field itself is a URL (web-indexed docs), use it as the link
+            if not url and src.startswith("http"):
+                url = src
             dept      = (meta.get("department") or ns or "").replace("_", " ").title()
             doc_id    = meta.get("id") or meta.get("doc_id") or ""
 

@@ -3,11 +3,11 @@ Pinecone Medical Knowledge Base
 ================================
 Manages the PCES organisation's Pinecone vector index.
 
-- One index  : pces-medical-kb  (Azure serverless, dim=1024, cosine)
-- One namespace per department (neurology, general_medicine, cardiology,
-  dentist, pulmonology)
-- Embedding  : text-embedding-3-small with dimensions=1024 (OpenAI matryoshka
-  truncation — matches the pre-created index dimension exactly)
+- One index  : pces-medical-kb  (AWS serverless, cosine)
+- One namespace per department (neurology, cardiology, dentist,
+  pulmonology, orthopedics, gynecology, pediatrics)
+- Embedding  : text-embedding-3-large with dimensions=3072 (matches the
+  pre-created index dimension exactly)
 
 Usage
 -----
@@ -53,22 +53,27 @@ PINECONE_KB_AVAILABLE: bool = _PINECONE_IMPORTABLE and _OPENAI_IMPORTABLE
 # Constants (read from env)
 # ---------------------------------------------------------------------------
 _API_KEY     = os.getenv("PINECONE_API_KEY", "")
-_REGION      = os.getenv("PINECONE_REGION", "eastus2")
-_CLOUD       = os.getenv("PINECONE_ENVIRONMENT", "azure")
-_INDEX_NAME  = os.getenv("PINECONE_INDEX_NAME", "pces-medical-kb")
-_DIMENSION   = int(os.getenv("PINECONE_INDEX_DIMENSION", "1024"))
+_CLOUD       = os.getenv("PINECONE_CLOUD", "aws")
+_REGION      = os.getenv("PINECONE_REGION", "us-east-1")
+_DIMENSION   = int(os.getenv("PINECONE_INDEX_DIMENSION", "3072"))
 _METRIC      = os.getenv("PINECONE_METRIC", "cosine")
 _ORG         = os.getenv("ORGANIZATION_NAME", "PCES")
-_DEPARTMENTS = [
-    d.strip()
-    for d in os.getenv("PINECONE_DEPARTMENTS",
-                        "neurology,general_medicine,cardiology,dentist,pulmonology").split(",")
-    if d.strip()
-]
 
-# Embedding model that natively supports 1024-dim output via truncation
-_EMBED_MODEL = "text-embedding-3-small"
-_EMBED_DIM   = _DIMENSION  # 1024
+# Index names: prefer INDEXES env var (comma-separated), fall back to single name
+_INDEXES_RAW = os.getenv("INDEXES", "")
+_INDEX_NAME  = _INDEXES_RAW.split(",")[0].strip() if _INDEXES_RAW else os.getenv("PINECONE_INDEX_NAME", "pces-medical-kb")
+
+# Namespaces: prefer NAMESPACES_PCES_MEDICAL_KB env var, fall back to PINECONE_DEPARTMENTS
+_NS_KEY = "NAMESPACES_" + _INDEX_NAME.upper().replace("-", "_")
+_NS_RAW = os.getenv(_NS_KEY, "")
+if not _NS_RAW:
+    _NS_RAW = os.getenv("PINECONE_DEPARTMENTS",
+                         "neurology,cardiology,dentist,pulmonology,orthopedics,gynecology,pediatrics")
+_DEPARTMENTS = [d.strip() for d in _NS_RAW.split(",") if d.strip()]
+
+# Embedding model — use text-embedding-3-large to match 3072 dim index
+_EMBED_MODEL = os.getenv("PINECONE_EMBED_MODEL", "text-embedding-3-large")
+_EMBED_DIM   = _DIMENSION
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +146,7 @@ class PineconeMedicalKB:
     # ------------------------------------------------------------------
 
     def embed(self, texts: List[str]) -> List[List[float]]:
-        """Embed a list of texts using text-embedding-3-small at 1024 dims."""
+        """Embed a list of texts using the configured model and dimension."""
         if not texts:
             return []
         response = self._oai.embeddings.create(

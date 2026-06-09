@@ -175,14 +175,20 @@ class TwoStoreRAGManager:
         self.kb_local_path = os.path.join(base_vector_path, "kb_local")
         self.kb_external_path = os.path.join(base_vector_path, "kb_external")
         self.lexical_gate_path = os.path.join(base_vector_path, "lexical_gate.pkl")
+
+        # Ad Hoc RAG store — patient/doctor-specific documents
+        from config import Config as _Config
+        self.adhoc_kb_path = _Config.ADHOC_VECTOR_DB_PATH
         
         # Create directories
         os.makedirs(self.kb_local_path, exist_ok=True)
         os.makedirs(self.kb_external_path, exist_ok=True)
+        os.makedirs(self.adhoc_kb_path, exist_ok=True)
         
         # Initialize components
         self.kb_local = None
         self.kb_external = None
+        self.adhoc_kb = None
         self.lexical_gate = TFIDFLexicalGate()
         
         # Session-specific vector database cache
@@ -191,6 +197,7 @@ class TwoStoreRAGManager:
         
         # Load existing components (only external KB and lexical gate)
         self._initialize_external_vector_store()
+        self._initialize_adhoc_vector_store()
         self.lexical_gate.load_from_disk(self.lexical_gate_path)
     
     def _initialize_external_vector_store(self):
@@ -206,6 +213,197 @@ class TwoStoreRAGManager:
         except Exception as e:
             logger.error(f"Error initializing external vector store: {e}")
     
+    def _initialize_adhoc_vector_store(self) -> None:
+        """Initialize or load the existing Ad Hoc RAG ChromaDB store."""
+        try:
+            chroma_file = os.path.join(self.adhoc_kb_path, "chroma.sqlite3")
+            if os.path.exists(chroma_file) and os.path.getsize(chroma_file) > 8192:
+                self.adhoc_kb = Chroma(
+                    persist_directory=self.adhoc_kb_path,
+                    embedding_function=self.embeddings,
+                )
+                logger.info("Loaded existing adhoc_kb from %s", self.adhoc_kb_path)
+            else:
+                logger.info("adhoc_kb not found — will be created on first adhoc upload")
+        except Exception as exc:
+            logger.error("Error initialising adhoc_kb: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Ad Hoc RAG — ingestion
+    # ------------------------------------------------------------------
+
+    def ingest_adhoc_doc(self, documents: List[Document], extra_metadata: Dict) -> int:
+        """Ingest doctor/patient-specific documents into the Ad Hoc RAG store.
+
+        Merges *extra_metadata* (tenant_id, doctor_id, patient_id, scope, …)
+        into every document's metadata before storing.
+
+        Args:
+            documents: Pre-chunked LangChain Documents.
+            extra_metadata: Adhoc-specific fields to stamp onto each chunk.
+
+        Returns:
+            Number of chunks stored.
+        """
+        if not documents:
+            logger.warning("ingest_adhoc_doc: no documents provided")
+            return 0
+
+        from datetime import datetime as _dt
+        extra_metadata.setdefault("rag_type", "adhoc")
+        extra_metadata.setdefault("upload_time", _dt.utcnow().isoformat())
+
+        for doc in documents:
+            doc.metadata.update(extra_metadata)
+
+        try:
+            if self.adhoc_kb is None:
+                self.adhoc_kb = Chroma.from_documents(
+                    documents,
+                    embedding=self.embeddings,
+                    persist_directory=self.adhoc_kb_path,
+                )
+                logger.info("Created adhoc_kb with %d chunks", len(documents))
+            else:
+                self.adhoc_kb.add_documents(documents)
+                logger.info("Added %d chunks to adhoc_kb", len(documents))
+            return len(documents)
+        except Exception as exc:
+            logger.error("Error ingesting adhoc docs: %s", exc)
+            return 0
+
+    # ------------------------------------------------------------------
+    # Ad Hoc RAG — retrieval
+    # ------------------------------------------------------------------
+
+    def retrieve_adhoc(
+        self,
+        prompt: str,
+        tenant_id: str,
+        doctor_id: str,
+        patient_id: str | None = None,
+        top_k: int = 3,
+    ) -> List[Document]:
+        """Retrieve Ad Hoc RAG documents for a given doctor/patient.
+
+        Performs two separate ChromaDB queries (doctor-scoped + patient-scoped)
+        and merges results to avoid dependency on ChromaDB ``$or`` filter support.
+
+        Args:
+            prompt:     The user query.
+            tenant_id:  Tenant identifier (multi-tenant safety guard).
+            doctor_id:  The uploading doctor's ID.
+            patient_id: Optional patient ID. When ``None`` only doctor-scoped docs are returned.
+            top_k:      Maximum chunks to return *per scope*.
+
+        Returns:
+            Merged, deduplicated list of Documents (≤ 2 × top_k).
+        """
+        if self.adhoc_kb is None:
+            logger.info("retrieve_adhoc: adhoc_kb not initialised — returning []")
+            return []
+
+        results: List[Document] = []
+        seen_ids: set = set()
+
+        def _safe_search(where_filter: Dict) -> List[Document]:
+            try:
+                return self.adhoc_kb.similarity_search(
+                    prompt,
+                    k=top_k,
+                    filter=where_filter,
+                )
+            except Exception as exc:
+                logger.warning("retrieve_adhoc search error (filter=%s): %s", where_filter, exc)
+                return []
+
+        # Query 1 — doctor-scoped (Mode A)
+        doctor_docs = _safe_search({
+            "tenant_id": tenant_id,
+            "doctor_id": doctor_id,
+            "scope": "doctor",
+            "rag_type": "adhoc",
+        })
+        for doc in doctor_docs:
+            uid = doc.page_content[:80]
+            if uid not in seen_ids:
+                seen_ids.add(uid)
+                results.append(doc)
+
+        # Query 2 — patient-scoped (Mode B)
+        if patient_id:
+            patient_docs = _safe_search({
+                "tenant_id": tenant_id,
+                "patient_id": patient_id,
+                "scope": "patient",
+                "rag_type": "adhoc",
+            })
+            for doc in patient_docs:
+                uid = doc.page_content[:80]
+                if uid not in seen_ids:
+                    seen_ids.add(uid)
+                    results.append(doc)
+
+        logger.info(
+            "retrieve_adhoc: doctor=%s patient=%s → %d chunks",
+            doctor_id, patient_id, len(results),
+        )
+        return results
+
+    # ------------------------------------------------------------------
+    # Ad Hoc RAG — cleanup
+    # ------------------------------------------------------------------
+
+    def cleanup_expired_adhoc_docs(self, retention_days: int | None = None) -> int:
+        """Delete patient-scoped adhoc documents older than *retention_days*.
+
+        Doctor-scoped documents (scope == "doctor") are never deleted by this
+        function (see design doc 03, Retention Policy).
+
+        Args:
+            retention_days: Override for ``Config.ADHOC_RETENTION_DAYS``. Uses
+                            config default when ``None``.
+
+        Returns:
+            Number of chunks deleted.
+        """
+        from config import Config as _Config
+        from datetime import datetime as _dt, timedelta as _td
+
+        if retention_days is None:
+            retention_days = _Config.ADHOC_RETENTION_DAYS
+
+        if self.adhoc_kb is None:
+            logger.info("cleanup_expired_adhoc_docs: adhoc_kb is empty — nothing to clean")
+            return 0
+
+        cutoff = (_dt.utcnow() - _td(days=retention_days)).isoformat()
+
+        try:
+            collection = self.adhoc_kb._collection
+            # Fetch all patient-scoped docs
+            result = collection.get(
+                where={"scope": "patient"},
+                include=["metadatas"],
+            )
+            ids_to_delete = [
+                doc_id
+                for doc_id, meta in zip(result["ids"], result["metadatas"])
+                if meta.get("upload_time", "") < cutoff
+            ]
+            if ids_to_delete:
+                collection.delete(ids=ids_to_delete)
+                logger.info(
+                    "cleanup_expired_adhoc_docs: deleted %d expired patient-scoped chunks",
+                    len(ids_to_delete),
+                )
+            else:
+                logger.info("cleanup_expired_adhoc_docs: no expired chunks found")
+            return len(ids_to_delete)
+        except Exception as exc:
+            logger.error("cleanup_expired_adhoc_docs error: %s", exc)
+            return 0
+
     def load_session_vector_db(self, session_id: str) -> bool:
         """Load session-specific vector database dynamically.
         
