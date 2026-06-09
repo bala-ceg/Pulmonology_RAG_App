@@ -6,3 +6,4 @@ myenv/
 sft_models/
 .env.local
 logs/*.log
+session_logs/
