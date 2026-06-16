@@ -340,10 +340,21 @@ def upload_organization_kb():
 @documents_bp.route("/create_vector_db", methods=["POST"])
 @handle_route_errors
 def create_vector_db():
-    """Parse PDFs and URLs, then create a Chroma Vector Database."""
+    """Parse PDFs and URLs, then create a Chroma Vector Database.
+
+    Accepts an optional JSON body:
+      { "doctor_id": "<uuid>", "patient_id": "<uuid>" }
+    When doctor_id is provided, documents are also ingested into the Ad Hoc KB
+    so that AdHocRAG_Search can find them.
+    """
     session_folder = _get_session_folder()
     if not session_folder:
         return jsonify({"error": "No active session. Refresh the page first."}), 400
+
+    # Optional adhoc context from request body
+    req_body = request.get_json(silent=True) or {}
+    doctor_id: str = req_body.get("doctor_id", "").strip()
+    patient_id: str = req_body.get("patient_id", "").strip()
 
     try:
         from langchain_chroma import Chroma
@@ -440,6 +451,29 @@ def create_vector_db():
                 )
             except Exception as exc:
                 logger.warning("Error adding documents to RAG manager: %s", exc)
+
+            # Also ingest into adhoc_kb so AdHocRAG_Search can find them
+            if doctor_id:
+                try:
+                    import copy
+                    from datetime import datetime as _dt
+                    adhoc_meta = {
+                        "rag_type": "adhoc",
+                        "scope": "doctor",
+                        "tenant_id": Config.TENANT_ID,
+                        "doctor_id": doctor_id,
+                        "patient_id": patient_id or "",
+                        "session_id": session_folder,
+                        "upload_time": _dt.utcnow().isoformat(),
+                    }
+                    adhoc_docs = copy.deepcopy(documents)
+                    stored = rag_manager.ingest_adhoc_doc(adhoc_docs, adhoc_meta)
+                    logger.info(
+                        "Ad Hoc KB: ingested %d chunks for doctor=%s session=%s",
+                        stored, doctor_id, session_folder,
+                    )
+                except Exception as exc:
+                    logger.warning("Error ingesting into adhoc_kb: %s", exc)
 
         return jsonify(
             {"message": "New Vector DB created", "db": session_folder}
