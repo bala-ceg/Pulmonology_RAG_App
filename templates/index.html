@@ -4125,7 +4125,14 @@ Generated on: ${new Date().toLocaleString()}
         
         async function createVectorDB() {
             showToast("Knowledge Bank is updating... please wait.");
-            let response = await fetch('/create_vector_db', { method: 'POST' });
+            let response = await fetch('/create_vector_db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
+                    patient_id: window.selectedPatientId || ''
+                })
+            });
             let data = await response.json();
             if (response.ok) {
                 window.adhocRagReady = true;
