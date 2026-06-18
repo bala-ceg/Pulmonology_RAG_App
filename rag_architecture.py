@@ -318,11 +318,15 @@ class TwoStoreRAGManager:
                 return []
 
         # Query 1 — doctor-scoped (Mode A)
+        # ChromaDB 0.4+ requires $and for multi-key filters; flat dicts raise
+        # "Expected where to have exactly one operator".
         doctor_docs = _safe_search({
-            "tenant_id": tenant_id,
-            "doctor_id": doctor_id,
-            "scope": "doctor",
-            "rag_type": "adhoc",
+            "$and": [
+                {"tenant_id": {"$eq": tenant_id}},
+                {"doctor_id": {"$eq": doctor_id}},
+                {"scope": {"$eq": "doctor"}},
+                {"rag_type": {"$eq": "adhoc"}},
+            ]
         })
         for doc in doctor_docs:
             uid = doc.page_content[:80]
@@ -333,10 +337,12 @@ class TwoStoreRAGManager:
         # Query 2 — patient-scoped (Mode B)
         if patient_id:
             patient_docs = _safe_search({
-                "tenant_id": tenant_id,
-                "patient_id": patient_id,
-                "scope": "patient",
-                "rag_type": "adhoc",
+                "$and": [
+                    {"tenant_id": {"$eq": tenant_id}},
+                    {"patient_id": {"$eq": patient_id}},
+                    {"scope": {"$eq": "patient"}},
+                    {"rag_type": {"$eq": "adhoc"}},
+                ]
             })
             for doc in patient_docs:
                 uid = doc.page_content[:80]
