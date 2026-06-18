@@ -23,6 +23,7 @@ def register_blueprints(app: Flask) -> None:
     from routes.sft import sft_bp
     from routes.doctors import doctors_bp
     from routes.pinecone_routes import pinecone_bp
+    from routes.voice import voice_bp
 
     for bp in (
         audio_bp,
@@ -36,5 +37,6 @@ def register_blueprints(app: Flask) -> None:
         sft_bp,
         doctors_bp,
         pinecone_bp,
+        voice_bp,
     ):
         app.register_blueprint(bp)

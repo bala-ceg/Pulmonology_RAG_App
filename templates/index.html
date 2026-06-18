@@ -3572,7 +3572,7 @@
                         .then(r => r.json())
                         .then(data => {
                         console.log('Transcription:', data.text);
-                        document.getElementById('user-input').value = data.text;
+                        _handleVoiceTranscript(data.text);
                         })
                         .catch(err => console.error('Error:', err))
                         .finally(() => {
@@ -3598,6 +3598,86 @@
             document.getElementById('voice-btn').disabled = false;
             document.getElementById('stop-btn').disabled = true;
         }
+
+        // ── Yodha Voice Command Engine ─────────────────────────────────────────
+        // Maps backend action names → the JS function to call.
+        // Must match voice_commands.py COMMANDS[*]["action"] values.
+        const YODHA_ACTION_MAP = {
+            sendMessage:                        () => requireAuth(() => sendMessage()),
+            saveChat:                           () => requireAuth(() => saveChat()),
+            refineInput:                        () => requireAuth(() => refineInput()),
+            startRecording:                     () => requireAuth(() => startRecording()),
+            stopRecording:                      () => stopRecording(),
+            createVectorDB:                     () => requireAuth(() => createVectorDB()),
+            generateSummaryFromTranscription:   () => generateSummaryFromTranscription(),
+            openTranslationModal:               () => requireAuth(() => openTranslationModal()),
+            startPatientRecording:              () => requireAuth(() => startPatientRecording()),
+        };
+
+        // button_states: maps action → whether the DOM button is disabled.
+        // The backend uses this to decide if the command is allowed.
+        function _getButtonStates() {
+            return {
+                sendMessage:                      (document.getElementById('send-btn')              || {}).disabled || false,
+                saveChat:                         (document.getElementById('save-btn')              || {}).disabled || false,
+                refineInput:                      (document.getElementById('plain-english-btn')     || {}).disabled || false,
+                startRecording:                   (document.getElementById('voice-btn')             || {}).disabled || false,
+                stopRecording:                    (document.getElementById('stop-btn')              || {}).disabled || false,
+                createVectorDB:                   false,
+                generateSummaryFromTranscription: (document.getElementById('generate-summary-btn') || {}).disabled || false,
+                openTranslationModal:             (document.getElementById('translation-btn')       || {}).disabled || false,
+                startPatientRecording:            (document.getElementById('record-patient-btn')    || {}).disabled || false,
+            };
+        }
+
+        // TTS feedback using the browser's speechSynthesis API.
+        function _speak(message) {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            const utt = new SpeechSynthesisUtterance(message);
+            utt.rate = 1.0;
+            utt.pitch = 1.0;
+            window.speechSynthesis.speak(utt);
+        }
+
+        // Call the backend to parse + dispatch a voice command.
+        async function _voiceDispatch(text) {
+            try {
+                const resp = await fetch('/api/voice/dispatch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, button_states: _getButtonStates() }),
+                });
+                const data = await resp.json();
+                console.log('[Yodha] dispatch result:', data);
+
+                _speak(data.message);
+
+                if (data.success && data.action && YODHA_ACTION_MAP[data.action]) {
+                    // Small delay so TTS starts before the action fires
+                    setTimeout(() => YODHA_ACTION_MAP[data.action](), 600);
+                }
+            } catch (err) {
+                console.error('[Yodha] dispatch error:', err);
+                _speak("Sorry, I could not process that command.");
+            }
+        }
+
+        // Intercept every audio transcription result.
+        // If it starts with "yodha" → route to voice dispatch.
+        // Otherwise → fill the input field as before.
+        function _handleVoiceTranscript(text) {
+            if (!text) return;
+            if (text.toLowerCase().trim().startsWith('yodha')) {
+                console.log('[Yodha] Command detected:', text);
+                showToast('🎤 Yodha command: ' + text);
+                setTimeout(() => hideToast(), 2500);
+                _voiceDispatch(text);
+            } else {
+                document.getElementById('user-input').value = text;
+            }
+        }
+        // ── End Yodha Voice Command Engine ─────────────────────────────────────
 
         // Translation Modal Functions
         let translationMediaRecorder = null;
