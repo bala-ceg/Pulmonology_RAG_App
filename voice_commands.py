@@ -95,6 +95,58 @@ COMMANDS: dict[str, dict] = {
 
 
 # ---------------------------------------------------------------------------
+# _fuzzy_match  — token-overlap scoring
+# ---------------------------------------------------------------------------
+
+def _fuzzy_match(command: str) -> tuple[str, dict] | tuple[None, None]:
+    """Find the best COMMANDS entry for *command* using word-token overlap.
+
+    Scoring:
+        overlap = number of words shared between *command* and candidate key
+        score   = overlap / max(len(spoken_words), len(key_words))
+
+    A match requires score ≥ 0.4 (at least 40% word overlap).  The candidate
+    with the highest score wins.  Ties are broken by the longer key (more
+    specific wins).
+
+    Examples:
+        "save pdf"        → "save to pdf"          (2/3 ≈ 0.67 ✓)
+        "start"           → "start recording"      (1/2 = 0.50 ✓)
+        "update bank"     → "update knowledge bank" (2/3 ≈ 0.67 ✓)
+        "generate"        → "generate"             (1/1 = 1.00 ✓)
+        "plain"           → "plain english"        (1/2 = 0.50 ✓)
+        "stop"            → "stop recording"       (1/2 = 0.50 ✓)
+        "record"          → "record patient notes" (1/3 = 0.33 ✗ — below threshold)
+        "record notes"    → "record patient notes" (2/3 ≈ 0.67 ✓)
+    """
+    spoken_words = set(command.lower().split())
+    if not spoken_words:
+        return None, None
+
+    best_key: str | None = None
+    best_entry: dict | None = None
+    best_score: float = 0.0
+
+    for key, entry in COMMANDS.items():
+        key_words = set(key.split())
+        overlap = len(spoken_words & key_words)
+        if overlap == 0:
+            continue
+        score = overlap / max(len(spoken_words), len(key_words))
+        if score > best_score or (score == best_score and len(key) > len(best_key or "")):
+            best_score = score
+            best_key = key
+            best_entry = entry
+
+    if best_score >= 0.40:
+        logger.debug(
+            "_fuzzy_match: %r → %r (score=%.2f)", command, best_key, best_score
+        )
+        return best_key, best_entry
+    return None, None
+
+
+# ---------------------------------------------------------------------------
 # parse_voice
 # ---------------------------------------------------------------------------
 
@@ -123,6 +175,11 @@ def parse_voice(text: str) -> str | None:
 def dispatch(command: str, button_enabled: bool | None = None) -> dict:
     """Resolve a command phrase and determine whether to execute it.
 
+    Resolution order:
+        1. Exact match in COMMANDS
+        2. Token-overlap fuzzy match (score ≥ 0.4)
+        3. Legacy substring fallback
+
     Args:
         command:        Normalised command text (output of parse_voice).
         button_enabled: Live enabled state supplied by the frontend DOM.
@@ -135,13 +192,19 @@ def dispatch(command: str, button_enabled: bool | None = None) -> dict:
           "message":  str,          # TTS-ready response string
         }
     """
+    # 1. Exact match
     cmd = COMMANDS.get(command)
+    matched_key = command if cmd else None
+
+    # 2. Token-overlap fuzzy match
     if cmd is None:
-        # Fuzzy fall-back: substring match
+        matched_key, cmd = _fuzzy_match(command)
+
+    # 3. Legacy substring fallback (safety net)
+    if cmd is None:
         for key, entry in COMMANDS.items():
             if command in key or key in command:
-                cmd = entry
-                command = key
+                matched_key, cmd = key, entry
                 break
 
     if cmd is None:
@@ -152,9 +215,9 @@ def dispatch(command: str, button_enabled: bool | None = None) -> dict:
     enabled = button_enabled if button_enabled is not None else cmd["enabled"]
     if not enabled:
         msg = f"That '{cmd['label']}' button is not enabled."
-        logger.info("dispatch: command %r disabled (button_enabled=%s)", command, button_enabled)
+        logger.info("dispatch: command %r disabled (button_enabled=%s)", matched_key, button_enabled)
         return {"success": False, "action": cmd["action"], "message": msg}
 
     msg = f"Running {cmd['label']}."
-    logger.info("dispatch: executing command %r → %s", command, cmd["action"])
+    logger.info("dispatch: executing %r → %s (spoken=%r)", matched_key, cmd["action"], command)
     return {"success": True, "action": cmd["action"], "message": msg}
