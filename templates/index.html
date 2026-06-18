@@ -1153,6 +1153,47 @@
             cursor: not-allowed;
         }
 
+        /* ── Continuous Voice (Yodha Listen) ─────────────────────────── */
+        #yodha-listen-btn {
+            background-color: #6c757d;
+            position: relative;
+            transition: background-color 0.2s;
+        }
+        #yodha-listen-btn.listening {
+            background-color: #dc3545;
+        }
+        #yodha-listen-btn.listening::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 6px;
+            border: 2px solid #dc3545;
+            animation: yodha-pulse 1.2s ease-out infinite;
+        }
+        @keyframes yodha-pulse {
+            0%   { opacity: 1;   transform: scale(1);   }
+            70%  { opacity: 0;   transform: scale(1.5); }
+            100% { opacity: 0;   transform: scale(1.5); }
+        }
+        #voice-preview {
+            display: none;
+            font-style: italic;
+            color: #888;
+            font-size: 0.82em;
+            padding: 4px 10px;
+            background: #f8f8f8;
+            border-top: 1px solid #eee;
+            min-height: 22px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
+        }
+        #voice-preview.active {
+            display: block;
+        }
+        /* ── End Continuous Voice ─────────────────────────────────────── */
+
         .translation-content {
             display: flex;
             gap: 20px;
@@ -2445,8 +2486,11 @@
                 <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save as PDF</button>
                 <button id="voice-btn" disabled onclick="requireAuth(() => startRecording())">Start Recording</button>
                 <button id="stop-btn" disabled onclick="requireAuth(() => stopRecording())">Stop Recording</button>
+                <button id="yodha-listen-btn" disabled onclick="requireAuth(() => toggleContinuousListen())" title="Continuous voice: speak, pause, auto-sends">🎤 Listen</button>
                 <button id="translation-btn" disabled onclick="requireAuth(() => openTranslationModal())">Translation</button>
             </div>
+            <!-- Live interim transcript preview (shown while Yodha Listen is active) -->
+            <div id="voice-preview"></div>
 
         </div>
     </div>
@@ -3678,6 +3722,173 @@
             }
         }
         // ── End Yodha Voice Command Engine ─────────────────────────────────────
+
+        // ── Continuous Voice Listener (ChatGPT-style) ──────────────────────────
+        /**
+         * ContinuousVoiceListener
+         * ========================
+         * Uses the browser's native Web Speech API (SpeechRecognition) to provide
+         * ChatGPT-like always-on voice input:
+         *   1. Start once → keep listening indefinitely
+         *   2. Speak → interim words appear live in #voice-preview
+         *   3. Pause → browser fires isFinal=true → routed to _handleVoiceTranscript()
+         *   4. Auto-restart after each utterance (Chrome stops recognition ~60 s of silence)
+         *
+         * If the browser doesn't support SpeechRecognition, the button stays disabled
+         * and a toast explains the limitation.
+         */
+        class ContinuousVoiceListener {
+            constructor() {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    this.supported = false;
+                    return;
+                }
+                this.supported = true;
+                this._active = false;           // user intent: is listening mode on?
+                this._restarting = false;       // prevent double-restart on onend+onerror
+                this._recognition = null;
+                this._SpeechRecognition = SpeechRecognition;
+                this._btn = null;
+                this._preview = null;
+            }
+
+            _build() {
+                const r = new this._SpeechRecognition();
+                r.continuous = true;            // keep going after each utterance
+                r.interimResults = true;        // stream words as you speak
+                r.lang = 'en-US';
+                r.maxAlternatives = 1;
+
+                r.onstart = () => {
+                    this._restarting = false;
+                    console.log('[ContinuousVoice] started');
+                };
+
+                r.onresult = (event) => {
+                    let interim = '';
+                    let finalText = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const t = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalText += t;
+                        } else {
+                            interim += t;
+                        }
+                    }
+                    // Show live interim text
+                    if (this._preview) {
+                        this._preview.textContent = interim || finalText || '…';
+                    }
+                    // Final segment → dispatch through existing handler
+                    if (finalText.trim()) {
+                        console.log('[ContinuousVoice] final:', finalText.trim());
+                        if (this._preview) this._preview.textContent = '';
+                        _handleVoiceTranscript(finalText.trim());
+                    }
+                };
+
+                r.onerror = (event) => {
+                    console.warn('[ContinuousVoice] error:', event.error);
+                    if (event.error === 'no-speech') {
+                        // Normal: user was quiet — keep going
+                        this._scheduleRestart();
+                    } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                        this._stop(true /* error */);
+                        showToast('🎤 Microphone permission denied. Please allow mic access.');
+                        setTimeout(hideToast, 3000);
+                    } else {
+                        this._scheduleRestart();
+                    }
+                };
+
+                r.onend = () => {
+                    // Chrome stops recognition automatically; restart if user still wants listening
+                    if (this._active) {
+                        this._scheduleRestart();
+                    }
+                };
+
+                return r;
+            }
+
+            _scheduleRestart() {
+                if (!this._active || this._restarting) return;
+                this._restarting = true;
+                setTimeout(() => {
+                    if (this._active) {
+                        try {
+                            this._recognition = this._build();
+                            this._recognition.start();
+                        } catch (e) {
+                            console.warn('[ContinuousVoice] restart error:', e);
+                            this._restarting = false;
+                        }
+                    }
+                }, 200);
+            }
+
+            start() {
+                if (!this.supported) {
+                    showToast('⚠️ Continuous voice not supported in this browser. Use Chrome/Edge.');
+                    setTimeout(hideToast, 3000);
+                    return;
+                }
+                this._active = true;
+                this._btn = document.getElementById('yodha-listen-btn');
+                this._preview = document.getElementById('voice-preview');
+
+                if (this._btn) {
+                    this._btn.textContent = '🔴 Listening…';
+                    this._btn.classList.add('listening');
+                }
+                if (this._preview) {
+                    this._preview.textContent = 'Listening — speak now…';
+                    this._preview.classList.add('active');
+                }
+
+                this._recognition = this._build();
+                try {
+                    this._recognition.start();
+                } catch (e) {
+                    console.error('[ContinuousVoice] start error:', e);
+                }
+            }
+
+            _stop(isError = false) {
+                this._active = false;
+                this._restarting = false;
+                if (this._recognition) {
+                    try { this._recognition.stop(); } catch (_) {}
+                    this._recognition = null;
+                }
+                if (this._btn) {
+                    this._btn.textContent = '🎤 Listen';
+                    this._btn.classList.remove('listening');
+                }
+                if (this._preview) {
+                    this._preview.textContent = '';
+                    this._preview.classList.remove('active');
+                }
+            }
+
+            toggle() {
+                if (this._active) {
+                    this._stop();
+                } else {
+                    this.start();
+                }
+            }
+
+            get isActive() { return this._active; }
+        }
+
+        const _continuousVoice = new ContinuousVoiceListener();
+
+        function toggleContinuousListen() {
+            _continuousVoice.toggle();
+        }
+        // ── End Continuous Voice Listener ────────────────────────────────────────
 
         // Translation Modal Functions
         let translationMediaRecorder = null;
@@ -4917,7 +5128,7 @@ ${data.conclusion}
 
         /** Enable/disable the three auth-gated bottom buttons (not send/stop/save which have their own guards). */
         function _updateAuthButtons(authed) {
-            ['plain-english-btn', 'voice-btn', 'translation-btn'].forEach(id => {
+            ['plain-english-btn', 'voice-btn', 'translation-btn', 'yodha-listen-btn'].forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) btn.disabled = !authed;
             });
