@@ -15,6 +15,9 @@ No audio I/O here — the browser handles microphone access.
 
 from __future__ import annotations
 
+from collections import Counter
+from difflib import SequenceMatcher
+
 from utils.error_handlers import get_logger
 
 logger = get_logger(__name__)
@@ -95,31 +98,52 @@ COMMANDS: dict[str, dict] = {
 
 
 # ---------------------------------------------------------------------------
-# _fuzzy_match  — token-overlap scoring
+# _fuzzy_match  — token-similarity scoring
 # ---------------------------------------------------------------------------
 
+def _token_sim(a: str, b: str) -> float:
+    """Character-multiset (bag) overlap similarity for short tokens (0.0–1.0).
+
+    Counts matching characters regardless of order, then normalises by the
+    length of the longer token.  This correctly handles:
+      - ASR transpositions : "seva" vs "save"  → 1.00  (same character bag)
+      - Inflections        : "saved" vs "save" → 0.80  (one extra char)
+      - Unrelated words    : "start" vs "summary" → 0.43  (low overlap)
+
+    Falls back to SequenceMatcher when the bag score is above 0.5 to give
+    order-sensitive precision for borderline pairs.
+    """
+    ca, cb = Counter(a), Counter(b)
+    bag_overlap = sum((ca & cb).values())
+    bag_score = bag_overlap / max(len(a), len(b))
+
+    # Only use SequenceMatcher as a secondary check when bag score is promising
+    if bag_score >= 0.50:
+        seq_score = SequenceMatcher(None, a, b).ratio()
+        return max(bag_score, seq_score)
+    return bag_score
+
+
 def _fuzzy_match(command: str) -> tuple[str, dict] | tuple[None, None]:
-    """Find the best COMMANDS entry for *command* using word-token overlap.
+    """Find the best COMMANDS entry for *command* using token-similarity scoring.
 
-    Scoring:
-        overlap = number of words shared between *command* and candidate key
-        score   = overlap / max(len(spoken_words), len(key_words))
+    For each spoken token, we check whether ANY key token is at least 70%
+    similar (handles ASR mishears like "seva"→"save", "saved"→"save").
+    The final score is still overlap / max_token_count.
 
-    A match requires score ≥ 0.4 (at least 40% word overlap).  The candidate
-    with the highest score wins.  Ties are broken by the longer key (more
-    specific wins).
+    Threshold: score ≥ 0.40 (at least 40% of the larger token set matches).
+    Ties broken by longer key (more specific wins).
 
     Examples:
-        "save pdf"        → "save to pdf"          (2/3 ≈ 0.67 ✓)
-        "start"           → "start recording"      (1/2 = 0.50 ✓)
-        "update bank"     → "update knowledge bank" (2/3 ≈ 0.67 ✓)
-        "generate"        → "generate"             (1/1 = 1.00 ✓)
-        "plain"           → "plain english"        (1/2 = 0.50 ✓)
-        "stop"            → "stop recording"       (1/2 = 0.50 ✓)
-        "record"          → "record patient notes" (1/3 = 0.33 ✗ — below threshold)
-        "record notes"    → "record patient notes" (2/3 ≈ 0.67 ✓)
+        "seva pdf"        → "save to pdf"           (2/3 ≈ 0.67 ✓)
+        "saved to pdf"    → "save to pdf"            (2/3 ≈ 0.67 ✓)
+        "save pdf"        → "save to pdf"            (2/3 ≈ 0.67 ✓)
+        "start"           → "start recording"        (1/2 = 0.50 ✓)
+        "update bank"     → "update knowledge bank"  (2/3 ≈ 0.67 ✓)
+        "plain"           → "plain english"          (1/2 = 0.50 ✓)
+        "record notes"    → "record patient notes"   (2/3 ≈ 0.67 ✓)
     """
-    spoken_words = set(command.lower().split())
+    spoken_words = command.lower().split()
     if not spoken_words:
         return None, None
 
@@ -128,8 +152,12 @@ def _fuzzy_match(command: str) -> tuple[str, dict] | tuple[None, None]:
     best_score: float = 0.0
 
     for key, entry in COMMANDS.items():
-        key_words = set(key.split())
-        overlap = len(spoken_words & key_words)
+        key_words = key.split()
+        # Count spoken tokens that have a similar-enough counterpart in the key
+        overlap = sum(
+            1 for sw in spoken_words
+            if any(_token_sim(sw, kw) >= 0.70 for kw in key_words)
+        )
         if overlap == 0:
             continue
         score = overlap / max(len(spoken_words), len(key_words))

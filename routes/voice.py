@@ -11,7 +11,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from utils.error_handlers import get_logger, handle_route_errors
-from voice_commands import COMMANDS, dispatch, parse_voice
+from voice_commands import COMMANDS, _fuzzy_match, dispatch, parse_voice
 
 logger = get_logger(__name__)
 
@@ -63,17 +63,20 @@ def voice_dispatch():
             "command": None,
         })
 
-    # Resolve enabled state from DOM button_states if provided.
-    # button_states[action] == true means the button IS disabled (DOM .disabled = true).
+    # Resolve the matching COMMANDS entry (exact → fuzzy → substring inside dispatch).
+    # We need the action name HERE so we can look up the live button state before
+    # calling dispatch() — otherwise fuzzy matches always get button_enabled=None.
     cmd_entry = COMMANDS.get(command)
     if cmd_entry is None:
-        # Fuzzy match handled inside dispatch() — look up action after dispatch
-        result = dispatch(command)
-    else:
-        action = cmd_entry["action"]
-        dom_disabled = button_states.get(action)
-        button_enabled: bool | None = None if dom_disabled is None else not dom_disabled
-        result = dispatch(command, button_enabled=button_enabled)
+        _, cmd_entry = _fuzzy_match(command)   # may still be None for unknown commands
+
+    action = cmd_entry["action"] if cmd_entry else None
+    # button_states[action] == True  → button IS disabled in the DOM → not allowed
+    # button_states[action] == False → button is enabled                → allowed
+    dom_disabled = button_states.get(action) if action else None
+    button_enabled: bool | None = None if dom_disabled is None else not dom_disabled
+
+    result = dispatch(command, button_enabled=button_enabled)
 
     logger.info(
         "voice_dispatch: text=%r command=%r success=%s action=%s",
