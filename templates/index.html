@@ -26,15 +26,16 @@
 
         .edit-btn {
             background: none;
+            color: #5a87c5;
+            text-decoration: underline;
             border: none;
             cursor: pointer;
             font-size: 14px;
             margin-left: 10px;
-            color: #007bff;
         }
 
         .edit-btn:hover {
-            text-decoration: underline;
+            text-decoration: none;
         }
 
         .citations {
@@ -47,12 +48,12 @@
             margin-top: 15px;
             padding: 10px;
             background-color: #f8f9fa;
-            border-left: 3px solid #007bff;
+            border-left: 3px solid #a3c2f2;
             border-radius: 4px;
         }
 
         .citations-section strong {
-            color: #007bff;
+            color: #5a87c5;
             font-weight: bold;
         }
 
@@ -95,8 +96,8 @@
         }
 
         .sidebar .light-btn {
-            background-color: #a3c2f2;  /* Light blue */
-            color: black;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -107,8 +108,8 @@
         }
 
         .sidebar .dark-btn {
-            background-color: #1f4e79;  /* Dark blue */
-            color: white;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -123,13 +124,13 @@
         }
 
         .sidebar .dark-btn:hover {
-            background-color: #163d5d;
+            background-color: #8ab1eb;
         }
 
         /* Custom button styles for specific functions */
         .sidebar .conversation-btn {
-            background-color: #9c88c4;  /* Light purple */
-            color: white;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -140,12 +141,12 @@
         }
 
         .sidebar .conversation-btn:hover {
-            background-color: #8a76b8;
+            background-color: #8ab1eb;
         }
 
         .sidebar .doc-patient-v2-btn {
-            background-color: #2a9d8f;  /* Teal — distinct from v1 purple */
-            color: white;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -157,12 +158,12 @@
         }
 
         .sidebar .doc-patient-v2-btn:hover {
-            background-color: #21867a;
+            background-color: #8ab1eb;
         }
 
         .sidebar .patient-notes-btn {
-            background-color: #6fc276;  /* Light green */
-            color: white;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -173,12 +174,12 @@
         }
 
         .sidebar .patient-notes-btn:hover {
-            background-color: #5da865;
+            background-color: #8ab1eb;
         }
 
         .sidebar .rlhf-admin-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background-color: #a3c2f2;  /* Choose Files blue */
+            color: #1a1a2e;
             font-weight: bold;
             width: 100%;
             margin-bottom: 10px;
@@ -186,12 +187,12 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: background-color 0.2s, box-shadow 0.2s;
         }
 
         .sidebar .rlhf-admin-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background-color: #8ab1eb;
+            box-shadow: 0 4px 12px rgba(163, 194, 242, 0.5);
         }
 
         .sidebar .yodha-chat-btn {
@@ -505,8 +506,8 @@
         }
 
         .sidebar .toggle-btn {
-            background: #007bff;
-            color: white;
+            background: #a3c2f2;
+            color: #1a1a2e;
             border: none;
             padding: 6px;                /* Further reduced padding */
             cursor: pointer;
@@ -515,6 +516,7 @@
             width: 100%;
             border-radius: 4px;
             font-size: 14px;             /* Smaller font size */
+            font-weight: bold;
         }
 
         .sidebar.collapsed .toggle-btn {
@@ -529,8 +531,8 @@
             overflow: hidden;            /* Prevent overflow */
         }
         .chat-header {
-            background-color: #007bff;
-            color: white;
+            background-color: #a3c2f2;
+            color: #1a1a2e;
             padding: 15px;               /* Reduced padding */
             text-align: center;
             flex-shrink: 0;              /* Don't shrink */
@@ -556,17 +558,17 @@
         #logged-in-doctor {
             font-size: 13px;
             font-weight: 600;
-            background: rgba(255,255,255,0.2);
+            background: rgba(26, 26, 46, 0.12);
             padding: 5px 14px;
             border-radius: 20px;
             white-space: nowrap;
-            color: white;
+            color: #1a1a2e;
             cursor: pointer;
             user-select: none;
             transition: background 0.2s;
         }
         #logged-in-doctor:hover {
-            background: rgba(255,255,255,0.35);
+            background: rgba(26, 26, 46, 0.22);
         }
         .doctor-popup {
             display: none;
@@ -640,8 +642,8 @@
             flex-direction: column;
         }
         .user-message {
-            background-color: #007bff;
-            color: rgb(0, 0, 0);
+            background-color: #a3c2f2;
+            color: #1a1a2e;
             align-self: flex-end;
         }
         .ai-message {
@@ -671,12 +673,13 @@
         }
         button {
             padding: 5px 10px;
-            background-color: #007bff;
-            color: white;
+            background-color: #a3c2f2;
+            color: #1a1a2e;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             margin-left: 10px;
+            font-weight: 600;
         }
         button:disabled {
             background-color: #cccccc;
@@ -775,7 +778,7 @@
             margin-bottom: 15px;
             padding: 12px;
             border-radius: 8px;
-            border-left: 4px solid #007bff;
+            border-left: 4px solid #a3c2f2;
             background-color: white;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
@@ -834,11 +837,11 @@
             text-align: center;
             margin-bottom: 25px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #007bff;
+            border-bottom: 2px solid #a3c2f2;
         }
 
         .modal-header h2 {
-            color: #007bff;
+            color: #1a1a2e;
             margin: 0;
             font-size: 24px;
         }
@@ -892,9 +895,9 @@
 
         .modal-section input:focus,
         .modal-section textarea:focus {
-            border-color: #007bff;
+            border-color: #a3c2f2;
             outline: none;
-            box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+            box-shadow: 0 0 5px rgba(163, 194, 242, 0.5);
         }
 
         .modal-buttons {
@@ -952,7 +955,7 @@
 
         .modal-info h3 {
             margin: 0 0 10px 0;
-            color: #007bff;
+            color: #1a1a2e;
         }
 
         .modal-info p {
@@ -965,17 +968,17 @@
             text-align: center;
             margin-bottom: 20px;
             padding: 20px;
-            background: linear-gradient(135deg, #007bff, #0056b3);
-            color: white;
+            background: #a3c2f2;
+            color: #1a1a2e;
             border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+            box-shadow: 0 4px 15px rgba(163, 194, 242, 0.5);
         }
 
         .main-header h1 {
             margin: 0 0 10px 0;
             font-size: 22px;
             font-weight: bold;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            text-shadow: none;
         }
 
         .main-header h2 {
@@ -992,9 +995,9 @@
             margin-bottom: 20px;
             padding: 15px;
             background-color: #f8f9fa;
-            border: 2px solid #007bff;
+            border: 2px solid #a3c2f2;
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+            box-shadow: 0 2px 8px rgba(163, 194, 242, 0.2);
         }
 
         .name-display {
@@ -1063,11 +1066,11 @@
             text-align: center;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 3px solid #007bff;
+            border-bottom: 3px solid #a3c2f2;
         }
 
         .translation-modal-header h2 {
-            color: #007bff;
+            color: #1a1a2e;
             margin: 0 0 10px 0;
             font-size: 26px;
         }
@@ -1086,7 +1089,7 @@
 
         .language-selector select {
             padding: 8px 15px;
-            border: 2px solid #007bff;
+            border: 2px solid #a3c2f2;
             border-radius: 5px;
             font-size: 15px;
             min-width: 200px;
@@ -1237,7 +1240,7 @@
 
         .translation-text.translated {
             background-color: #f0f8ff;
-            border-color: #007bff;
+            border-color: #a3c2f2;
         }
 
         /* Speaker Segment Styles for Translation */
@@ -1245,7 +1248,7 @@
             margin-bottom: 4px;
             padding: 5px 8px;
             border-radius: 3px;
-            border-left: 3px solid #007bff;
+            border-left: 3px solid #a3c2f2;
             background-color: white;
             box-shadow: none;
         }
@@ -1316,12 +1319,12 @@
             text-align: center;
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 2px dashed #6fc276;
+            border-top: 2px dashed #a3c2f2;
         }
 
         .generate-summary-btn {
-            background: linear-gradient(135deg, #6fc276, #5da865);
-            color: white;
+            background: #a3c2f2;
+            color: #1a1a2e;
             border: none;
             padding: 12px 25px;
             border-radius: 8px;
@@ -1329,20 +1332,20 @@
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(111, 194, 118, 0.3);
+            box-shadow: 0 4px 12px rgba(163, 194, 242, 0.3);
             position: relative;
             overflow: hidden;
         }
 
         .generate-summary-btn:hover {
-            background: linear-gradient(135deg, #5da865, #4a8c53);
+            background: #8ab1eb;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(111, 194, 118, 0.4);
+            box-shadow: 0 6px 20px rgba(163, 194, 242, 0.4);
         }
 
         .generate-summary-btn:active {
             transform: translateY(0);
-            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+            box-shadow: 0 2px 8px rgba(163, 194, 242, 0.3);
         }
 
         .generate-summary-btn:disabled {
@@ -1399,9 +1402,9 @@
         .transcription-section textarea:focus,
         .summary-section textarea:focus,
         .conclusion-section textarea:focus {
-            border-color: #007bff;
+            border-color: #a3c2f2;
             outline: none;
-            box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+            box-shadow: 0 0 8px rgba(163, 194, 242, 0.5);
             transform: scale(1.01);
             transition: all 0.3s ease;
         }
@@ -1456,8 +1459,8 @@
         }
 
         .autocomplete-input:focus {
-            border-color: #007bff !important;
-            box-shadow: 0 0 8px rgba(0, 123, 255, 0.4) !important;
+            border-color: #a3c2f2 !important;
+            box-shadow: 0 0 8px rgba(163, 194, 242, 0.5) !important;
             background-color: #ffffff !important;
             color: #333333 !important;
             cursor: text !important;
@@ -1488,7 +1491,7 @@
             background-color: #ffffff !important;
             color: #333333 !important;
             cursor: text !important;
-            border-color: #007bff !important;
+            border-color: #a3c2f2 !important;
         }
 
         .autocomplete-suggestions {
@@ -1608,12 +1611,12 @@
         }
 
         .btn-primary {
-            background-color: #007bff;
-            color: white;
+            background-color: #a3c2f2;
+            color: #1a1a2e;
         }
 
         .btn-primary:hover {
-            background-color: #0056b3;
+            background-color: #8ab1eb;
         }
 
         .btn-secondary {
@@ -1842,8 +1845,8 @@
         }
 
         .pill {
-            background-color: #007bff;
-            color: white;
+            background-color: #a3c2f2;
+            color: #1a1a2e;
             padding: 8px 16px;
             border-radius: 20px;
             font-size: 14px;
@@ -1870,17 +1873,17 @@
         }
 
        .red-box {
-        border: 2px solid red !important;
+        border: 2px solid white !important;
         border-radius: 6px;
-        padding: 10px;
+        padding: 14px 16px;
         margin: 8px auto;
         background-color: transparent;
-        max-width: 180px;
+        max-width: 100%;
         max-height: 250px;           /* Increased from 200px to accommodate all buttons */
         overflow-y: auto;
         }
 
-        /* Special styling for the first red box to ensure full visibility */
+        /* Special styling for the first box to ensure full visibility */
         .red-box:first-of-type {
             max-height: 280px;          /* Even more height for the first box with 5 buttons */
         }
@@ -2351,13 +2354,6 @@
                     <button class="dark-btn" onclick="requireAuth(() => uploadFiles('pdf'))">Add PDF</button>
                     </li>
                     <li>
-                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('url-upload').click())">Choose URL</button>
-                    <input type="file" id="url-upload" multiple style="display: none;">
-                    </li>
-                    <li>
-                    <button class="dark-btn" onclick="requireAuth(() => uploadFiles('url'))">Add URL</button>
-                    </li>
-                    <li>
                     <button class="dark-btn" onclick="requireAuth(() => createVectorDB())">Update KB</button>
                     </li>
                 </ul>
@@ -2414,7 +2410,7 @@
                     <div class="header-spacer"></div>
                     <div class="header-center">
                         <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/PCES_LOGO.jpg-bzxqGCUzF83KKZavbHqIbwpxnCTvnD.jpeg" alt="PCES Logo" class="logo">
-                        <h1>PATIENT CARE ENHANCED SERVICES - PCES</h1>
+                        <h1>PATIENT CARE ENHANCED SERVICES - PCES Global</h1>
                     </div>
                     <div class="header-right" style="position:relative;">
                         <!-- DEV_MODE trace toggle — injected by JS when server confirms dev_mode=true -->
@@ -2423,9 +2419,9 @@
                             color:#856404;user-select:none;" title="Developer mode: toggle routing traces"
                             onclick="toggleDevTraces()">🛠 Traces <span id="dev-trace-state">ON</span></span>
                         <button id="header-login-btn" onclick="openPcesLoginModal()" title="Login to PCES"
-                            style="display:none;margin-right:10px;background:#00897b;color:#fff;border:none;
+                            style="display:none;margin-right:10px;background:#a3c2f2;color:#1a1a2e;border:none;
                             border-radius:8px;padding:9px 22px;font-size:15px;font-weight:700;cursor:pointer;
-                            letter-spacing:0.4px;box-shadow:0 2px 6px rgba(0,0,0,0.2);">🔐 Login</button>
+                            letter-spacing:0.4px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">🔐 Login</button>
                         <span id="logged-in-doctor" style="display:none;" onclick="toggleDoctorPopup(event)">🩺 <span id="logged-in-doctor-name"></span></span>
                         <div class="doctor-popup" id="doctor-popup">
                             <div class="doctor-popup-row">
@@ -4530,7 +4526,7 @@ Generated on: ${new Date().toLocaleString()}
                     input.value = currentText;
                     input.style.width = '100%';
                     input.style.padding = '10px 20px';
-                    input.style.border = '2px solid #007bff';
+                    input.style.border = '2px solid #a3c2f2';
                     input.style.borderRadius = '20px';
                     input.style.fontSize = '16px';
                     input.style.outline = 'none';
