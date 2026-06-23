@@ -753,13 +753,14 @@ _adhoc_rag_manager_holder: List = [None]
 _adhoc_context_holder: dict = {}
 
 
-def _set_adhoc_context(rag_manager, tenant_id: str, doctor_id: str, patient_id: str | None) -> None:
+def _set_adhoc_context(rag_manager, tenant_id: str, doctor_id: str, patient_id: str | None, doctor_name: str = "") -> None:
     """Inject adhoc context used by AdHocRAG_Search at query time."""
     _adhoc_rag_manager_holder[0] = rag_manager
     _adhoc_context_holder.update({
         "tenant_id": tenant_id,
         "doctor_id": doctor_id,
         "patient_id": patient_id,
+        "doctor_name": doctor_name,
     })
 
 
@@ -789,6 +790,7 @@ def AdHocRAG_Search(query: str) -> str:
     tenant_id: str = _adhoc_context_holder.get("tenant_id") or _Config.TENANT_ID
     doctor_id: str = _adhoc_context_holder.get("doctor_id") or "unknown_doctor"
     patient_id: str | None = _adhoc_context_holder.get("patient_id")
+    doctor_name: str = (_adhoc_context_holder.get("doctor_name") or "").strip()
 
     logger.info(
         "AdHocRAG_Search: query=%r tenant=%s doctor=%s patient=%s",
@@ -813,7 +815,15 @@ def AdHocRAG_Search(query: str) -> str:
     if not docs:
         return "No adhoc documents found for this doctor/patient session."
 
+    # Build doctor KB label: "Dr. First Last KB"
+    if doctor_name:
+        parts = doctor_name.strip().split()
+        _kb_label = "Dr. " + " ".join(p.capitalize() for p in parts) + " KB"
+    else:
+        _kb_label = "Doctor's KB"
+
     for doc in docs:
+        doc.metadata["source"] = _kb_label
         doc.metadata.setdefault("source_type", "adhoc")
 
     result = _join_docs(docs, max_chars=1200)

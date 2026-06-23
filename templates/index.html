@@ -2452,6 +2452,12 @@
                                     <div class="doctor-popup-value" id="popup-patient-name">—</div>
                                 </div>
                             </div>
+                            <div class="doctor-popup-row" onclick="logout()" style="cursor:pointer;border-top:1px solid #eee;margin-top:6px;padding-top:6px;">
+                                <span class="doctor-popup-icon">🚪</span>
+                                <div>
+                                    <div class="doctor-popup-label" style="color:#e74c3c;font-weight:600;">Logout</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2725,10 +2731,11 @@
         const _PROBLEM_PLACEHOLDER = 'Patient problem not mentioned';
         let _epPendingCallback = null; // callback to run if user confirms "proceed anyway"
 
-        // Session-scoped state — reset on every page load
-        window.selectedPatientId = null;
-        window.adhocRagReady     = false;
-        console.log('[PCES Session] New session — selectedPatientId=null, adhocRagReady=false');
+        // Session-scoped state — restored from sessionStorage if available
+        window.selectedPatientId   = sessionStorage.getItem('pces_patient_id') || null;
+        window.currentPatientName  = sessionStorage.getItem('pces_patient_name') || '';
+        window.adhocRagReady       = false;
+        console.log('[PCES Session] init — patient=%s name=%s', window.selectedPatientId, window.currentPatientName);
 
         /** Enable Generate only when BOTH doctor is logged in AND a patient is selected. */
         function _updateSendBtn() {
@@ -2740,6 +2747,15 @@
             if (!section) return;
             document.getElementById('pi-name').textContent = data.full_name || '—';
             section.classList.add('has-patient');
+            // Persist for full browser session
+            if (data.patient_id) {
+                window.selectedPatientId = data.patient_id;
+                sessionStorage.setItem('pces_patient_id', data.patient_id);
+            }
+            if (data.full_name) {
+                window.currentPatientName = data.full_name;
+                sessionStorage.setItem('pces_patient_name', data.full_name);
+            }
             _updateSendBtn();
         }
 
@@ -2751,6 +2767,8 @@
             section.classList.remove('has-patient');
             window.selectedPatientId = null;
             window.currentPatientName = '';
+            sessionStorage.removeItem('pces_patient_id');
+            sessionStorage.removeItem('pces_patient_name');
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = '—';
             _updateSendBtn();
@@ -5130,6 +5148,30 @@ ${data.conclusion}
             });
         }
 
+        function logout() {
+            // Clear auth state
+            _pcesAuthed = false;
+            ['pces_auth','pces_doctor_name','pces_doctor_id','pces_doctor_department',
+             'pces_doctor_email','pces_doctor_role'].forEach(k => sessionStorage.removeItem(k));
+            // Clear patient
+            clearPatientInfoBar();
+            // Reset doctor badge
+            const badge = document.getElementById('logged-in-doctor');
+            if (badge) badge.style.display = 'none';
+            document.getElementById('doctor-popup').style.display = 'none';
+            const loginBtn = document.getElementById('header-login-btn');
+            if (loginBtn) loginBtn.style.display = 'inline-block';
+            // Disable auth-gated buttons
+            _updateAuthButtons(false);
+            _updateSendBtn();
+            // Reset popup fields
+            ['popup-doctor-name','popup-doctor-dept','popup-doctor-email','popup-patient-name']
+                .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
+            const smeContainer = document.getElementById('sme-training-container');
+            if (smeContainer) smeContainer.style.display = 'none';
+        }
+        }
+
         function toggleDoctorPopup(e) {
             e.stopPropagation();
             const popup = document.getElementById('doctor-popup');
@@ -5152,6 +5194,15 @@ ${data.conclusion}
         } else {
             const loginBtn = document.getElementById('header-login-btn');
             if (loginBtn) loginBtn.style.display = 'inline-block';
+        }
+
+        // Restore patient selection from sessionStorage on page load
+        if (window.selectedPatientId && window.currentPatientName) {
+            const section = document.getElementById('patient-info-section');
+            if (section) {
+                document.getElementById('pi-name').textContent = window.currentPatientName;
+                section.classList.add('has-patient');
+            }
         }
         _updateSendBtn();
 
