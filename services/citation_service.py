@@ -40,7 +40,7 @@ logger = get_logger(__name__)
 SOURCE_LABELS: dict[str, str] = {
     # Tool names (from integrated_rag.py _TOOL_SOURCE_LABELS)
     "Pinecone_KB_Search":          "Organisation Knowledge Base",
-    "Internal_VectorDB":           "Hospital Knowledge Base",
+    "Internal_VectorDB":           "Doctor's Knowledge Base",
     "AdHocRAG_Search":             "Uploaded Patient Document",
     "PostgreSQL_Diagnosis_Search": "Patient Medical Record (EHR)",
     "ArXiv_Search":                "Clinical Research (arXiv)",
@@ -50,9 +50,9 @@ SOURCE_LABELS: dict[str, str] = {
     "wikipedia":  "Medical Reference (Wikipedia)",
     "arxiv":      "Clinical Research (arXiv)",
     "tavily":     "Web Research",
-    "internal":   "Hospital Knowledge Base",
+    "internal":   "Doctor's Knowledge Base",
     "pinecone":   "Organisation Knowledge Base",
-    "main_rag":   "Hospital Knowledge Base",
+    "main_rag":   "Doctor's Knowledge Base",
     "adhoc_rag":  "Uploaded Patient Document",
     "postgres":   "Patient Medical Record (EHR)",
     "lora_model": "Department AI Model",
@@ -70,6 +70,7 @@ SOURCE_RELIABILITY: dict[str, int] = {
     "Clinical Research (arXiv)":       95,
     "Patient Medical Record (EHR)":    90,
     "Organisation Knowledge Base":     90,
+    "Doctor's Knowledge Base":         90,
     "Hospital Knowledge Base":         90,
     "Uploaded Patient Document":       85,
     "Department AI Model":             80,
@@ -286,6 +287,9 @@ def _build_structured_citations(
 def _label_from_raw_citation(raw: str) -> str:
     """Map a raw citation string to a standardised source label."""
     low = raw.lower()
+    # Doctor KB labels are already formatted — pass through as-is
+    if low.startswith("dr.") and low.endswith(" kb"):
+        return raw
     if "arxiv" in low:
         return "Clinical Research (arXiv)"
     if "wikipedia" in low or "wiki" in low:
@@ -298,7 +302,7 @@ def _label_from_raw_citation(raw: str) -> str:
         return "Patient Medical Record (EHR)"
     if "uploaded" in low or "adhoc" in low or "patient document" in low:
         return "Uploaded Patient Document"
-    return "Hospital Knowledge Base"
+    return "Doctor's Knowledge Base"
 
 
 def _type_from_raw_citation(raw: str) -> str:

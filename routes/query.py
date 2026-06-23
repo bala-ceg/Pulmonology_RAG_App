@@ -793,6 +793,7 @@ def handle_query():
             tenant_id=_Cfg.TENANT_ID,
             doctor_id=_doctor_id,
             patient_id=_patient_id,
+            doctor_name=doctor_name,
         )
     except Exception as _adhoc_init_exc:
         logger.debug("AdHoc context injection skipped: %s", _adhoc_init_exc)
