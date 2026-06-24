@@ -2961,8 +2961,10 @@
             document.getElementById('doctor-suggestions').style.display = 'none';
             document.getElementById('patient-suggestions').style.display = 'none';
             
-            // Reset selected patient ID
-            window.selectedPatientId = null;
+            // Pre-fill patient name from current session selection (do NOT reset selectedPatientId)
+            const currentPatient = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || '';
+            document.getElementById('patient-name-input').value = currentPatient;
+            // Keep window.selectedPatientId from the main selection — don't null it out here
             
             // Update modal title and button text based on operation
             const modalTitle = document.querySelector('#name-input-modal h3');
@@ -3007,7 +3009,7 @@
         function cancelNameInput() {
             document.getElementById('name-input-modal').style.display = 'none';
             currentOperation = null;
-            clearPatientInfoBar();
+            // Do NOT clear patient — user just cancelled the modal, patient selection should stay
         }
 
         function confirmNameInput() {
@@ -5155,6 +5157,10 @@ ${data.conclusion}
              'pces_doctor_email','pces_doctor_role'].forEach(k => sessionStorage.removeItem(k));
             // Clear patient
             clearPatientInfoBar();
+            // Clear chat messages (end session)
+            const chatMessages = document.getElementById('chat-messages');
+            if (chatMessages) chatMessages.innerHTML = '';
+            window.adhocRagReady = false;
             // Reset doctor badge
             const badge = document.getElementById('logged-in-doctor');
             if (badge) badge.style.display = 'none';
@@ -5169,6 +5175,9 @@ ${data.conclusion}
                 .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
             const smeContainer = document.getElementById('sme-training-container');
             if (smeContainer) smeContainer.style.display = 'none';
+            // Reset patient problem text
+            const problemText = document.getElementById('problem-text');
+            if (problemText) problemText.textContent = 'Patient problem not mentioned';
         }
 
         function toggleDoctorPopup(e) {
@@ -5201,6 +5210,9 @@ ${data.conclusion}
             if (section) {
                 document.getElementById('pi-name').textContent = window.currentPatientName;
                 section.classList.add('has-patient');
+                // Also update popup
+                const popupPt = document.getElementById('popup-patient-name');
+                if (popupPt) popupPt.textContent = window.currentPatientName;
             }
         }
         _updateSendBtn();
