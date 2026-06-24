@@ -2163,6 +2163,9 @@
             </div>
             
             <div class="name-input-buttons">
+                <div id="patient-warning-msg" style="display:none;color:#e74c3c;font-size:13px;margin-bottom:8px;">
+                    ⚠️ Please select a patient from the patient bar first.
+                </div>
                 <button type="button" class="btn-secondary" onclick="cancelNameInput()">Cancel</button>
                 <button type="button" class="btn-primary" onclick="confirmNameInput()">Start Recording</button>
             </div>
@@ -2233,7 +2236,7 @@
             </div>
 
             <div class="modal-buttons">
-                <button class="modal-btn save" onclick="savePatientNotesPDF()">Save as PDF</button>
+                <button class="modal-btn save" onclick="savePatientNotesPDF()">Save to PDF</button>
                 <button class="modal-btn cancel" onclick="cancelPatientNotes()">Cancel</button>
             </div>
         </div>
@@ -2312,7 +2315,7 @@
 
             <!-- Modal Buttons -->
             <div class="modal-buttons">
-                <button class="modal-btn save" onclick="saveConversationPDF()">Save as PDF</button>
+                <button class="modal-btn save" onclick="saveConversationPDF()">Save to PDF</button>
                 <button class="modal-btn cancel" onclick="closeConversationModal()">Close</button>
             </div>
         </div>
@@ -2485,7 +2488,7 @@
                 <input type="text" id="user-input" placeholder="Type your message...">
                 <button id="send-btn" disabled onclick="requireAuth(() => sendMessage())">Generate</button>
                 <button id="plain-english-btn" disabled onclick="requireAuth(() => refineInput())">Plain English</button>
-                <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save as PDF</button>
+                <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save to PDF</button>
                 <button id="voice-btn" disabled onclick="requireAuth(() => startRecording())">Start Recording</button>
                 <button id="stop-btn" disabled onclick="requireAuth(() => stopRecording())">Stop Recording</button>
                 <button id="yodha-listen-btn" disabled onclick="requireAuth(() => toggleContinuousListen())" title="Continuous voice: speak, pause, auto-sends">🎤 Listen</button>
@@ -2946,64 +2949,52 @@
             currentOperation = operation;
             
             document.getElementById('name-input-modal').style.display = 'flex';
-            // Auto-fill doctor name from logged-in session and lock if authenticated
+
+            // ── Doctor field — always locked from session ──
             const loggedInDoctor = sessionStorage.getItem('pces_doctor_name') || '';
             const doctorInput = document.getElementById('doctor-name-input');
             doctorInput.value = loggedInDoctor;
-            if (loggedInDoctor) {
-                doctorInput.readOnly = true;
-                doctorInput.classList.add('locked');
-            } else {
-                doctorInput.readOnly = false;
-                doctorInput.classList.remove('locked');
-            }
-            document.getElementById('patient-name-input').value = '';
+            doctorInput.readOnly = true;
+            doctorInput.classList.add('locked');
             document.getElementById('doctor-suggestions').style.display = 'none';
-            document.getElementById('patient-suggestions').style.display = 'none';
-            
-            // Pre-fill patient name from current session selection (do NOT reset selectedPatientId)
+
+            // ── Patient field — always locked, pre-filled from session ──
             const currentPatient = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || '';
-            document.getElementById('patient-name-input').value = currentPatient;
-            // Keep window.selectedPatientId from the main selection — don't null it out here
-            
-            // Update modal title and button text based on operation
-            const modalTitle = document.querySelector('#name-input-modal h3');
+            const patientInput = document.getElementById('patient-name-input');
+            patientInput.value = currentPatient;
+            patientInput.readOnly = true;
+            patientInput.classList.add('locked');
+            document.getElementById('patient-suggestions').style.display = 'none';
+
+            // ── Confirm button: disable + warn if patient not selected ──
             const confirmButton = document.querySelector('#name-input-modal .btn-primary');
+            const patientWarning = document.getElementById('patient-warning-msg');
+            if (!window.selectedPatientId && operation !== 'chat_save') {
+                if (patientWarning) patientWarning.style.display = 'block';
+                confirmButton.disabled = true;
+            } else {
+                if (patientWarning) patientWarning.style.display = 'none';
+                confirmButton.disabled = false;
+            }
+
+            // ── Modal title + button text by operation ──
+            const modalTitle = document.querySelector('#name-input-modal h3');
             const languageField = document.getElementById('conversation-language-field');
-            
+
             if (operation === 'chat_save') {
-                modalTitle.textContent = 'Enter Names for PDF Save';
-                confirmButton.textContent = 'Save PDF';
-                // Make patient name optional for chat save
-                document.getElementById('patient-name-input').placeholder = 'Patient name (optional)';
+                modalTitle.textContent = 'Save to PDF';
+                confirmButton.textContent = 'Save to PDF';
                 languageField.style.display = 'none';
             } else if (operation === 'conversation_recording') {
-                modalTitle.textContent = 'Enter Names for Conversation Recording';
+                modalTitle.textContent = 'Start Conversation Recording';
                 confirmButton.textContent = 'Start Recording';
-                // Make patient name required for conversation recording
-                document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
-                // Show language dropdown for conversation recording
                 languageField.style.display = 'block';
-                // Reset language to default
                 document.getElementById('conversation-language').value = 'en';
             } else {
-                modalTitle.textContent = 'Enter Names for Recording';
+                modalTitle.textContent = 'Record Patient Notes';
                 confirmButton.textContent = 'Start Recording';
-                // Make patient name required for recording
-                document.getElementById('patient-name-input').placeholder = 'Start typing patient\'s name...';
                 languageField.style.display = 'none';
             }
-            
-            setupAutocomplete();
-            
-            // Focus: skip locked doctor field, go straight to patient
-            setTimeout(() => {
-                if (loggedInDoctor) {
-                    document.getElementById('patient-name-input').focus();
-                } else {
-                    document.getElementById('doctor-name-input').focus();
-                }
-            }, 100);
         }
 
         function cancelNameInput() {
@@ -3013,40 +3004,30 @@
         }
 
         function confirmNameInput() {
-            const doctorName = document.getElementById('doctor-name-input').value.trim();
-            const patientName = document.getElementById('patient-name-input').value.trim();
+            // Always read from session — fields are locked/read-only
+            const doctorName = sessionStorage.getItem('pces_doctor_name') || document.getElementById('doctor-name-input').value.trim();
+            const patientName = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || document.getElementById('patient-name-input').value.trim();
 
             if (!doctorName) {
-                alert("Doctor name is required!");
+                alert("No doctor logged in. Please login first.");
                 return;
             }
 
             if (currentOperation === 'patient_recording') {
-                // For patient recording, both names and patient ID are required
-                if (!patientName) {
-                    alert("Patient name is required for recording!");
-                    return;
-                }
-
-                // Check if patient was selected from autocomplete (has patient_id)
                 if (!window.selectedPatientId) {
-                    alert("Please select a patient from the dropdown suggestions!");
+                    alert("Please select a patient from the patient bar first.");
                     return;
                 }
-
                 document.getElementById('name-input-modal').style.display = 'none';
                 startPatientRecordingWithNames(doctorName, patientName, window.selectedPatientId);
             } else if (currentOperation === 'conversation_recording') {
-                // For conversation recording, both names are required
                 if (!patientName) {
-                    alert("Patient name is required for conversation recording!");
+                    alert("Please select a patient from the patient bar first.");
                     return;
                 }
-
                 document.getElementById('name-input-modal').style.display = 'none';
                 startConversationRecordingWithNames(doctorName, patientName);
             } else if (currentOperation === 'chat_save') {
-                // For chat save, patient name is optional
                 document.getElementById('name-input-modal').style.display = 'none';
                 saveChatWithNames(doctorName, patientName);
             }
@@ -3412,8 +3393,14 @@
 
 
         function saveChat() {
-            // Show the name input modal for chat saving
-            showNameInputModal('chat_save');
+            const doctorName = sessionStorage.getItem('pces_doctor_name') || '';
+            const patientName = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || '';
+            // If doctor is in session, skip the modal and save directly
+            if (doctorName) {
+                saveChatWithNames(doctorName, patientName);
+            } else {
+                showNameInputModal('chat_save');
+            }
         }
 
         function saveChatWithNames(doctorName, patientName) {
@@ -4036,8 +4023,15 @@
         }
 
         async function startPatientRecording() {
-            // Show the name input modal instead of using prompts
-            showNameInputModal();
+            const doctorName = sessionStorage.getItem('pces_doctor_name') || '';
+            const patientName = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || '';
+            const patientId   = window.selectedPatientId  || sessionStorage.getItem('pces_patient_id') || '';
+            // If doctor + patient are in session, skip the modal and start directly
+            if (doctorName && patientId) {
+                startPatientRecordingWithNames(doctorName, patientName, patientId);
+            } else {
+                showNameInputModal();
+            }
         }
 
         async function startPatientRecordingWithNames(doctorName, patientName, patientId) {
@@ -4582,8 +4576,14 @@ Generated on: ${new Date().toLocaleString()}
         let conversationIsRecording = false;
 
         async function startConversationRecording() {
-            // Show the name input modal just like patient recording
-            showNameInputModal('conversation_recording');
+            const doctorName = sessionStorage.getItem('pces_doctor_name') || '';
+            const patientName = window.currentPatientName || sessionStorage.getItem('pces_patient_name') || '';
+            // If doctor + patient are in session, skip the modal and start directly
+            if (doctorName && patientName) {
+                startConversationRecordingWithNames(doctorName, patientName);
+            } else {
+                showNameInputModal('conversation_recording');
+            }
         }
 
         async function startConversationRecordingWithNames(doctorName, patientName) {

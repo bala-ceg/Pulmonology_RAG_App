@@ -44,11 +44,6 @@ COMMANDS: dict[str, dict] = {
         "enabled": False,
         "label": "Save to PDF",
     },
-    "save as pdf": {
-        "action": "saveChat",
-        "enabled": False,
-        "label": "Save as PDF",
-    },
     "plain english": {
         "action": "refineInput",
         "enabled": True,
