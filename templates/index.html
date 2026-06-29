@@ -3632,15 +3632,25 @@
                     });
 
                     mediaRecorder.start();
+                    showToast("🎙️ Recording started… say 'Yodha Stop Recording' to stop.");
                     document.getElementById('voice-btn').disabled = true;
                     document.getElementById('stop-btn').disabled = false;
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                    console.error('startRecording error:', error);
+                    showToast('⚠️ Could not access microphone. Please check permissions.');
+                    setTimeout(hideToast, 3000);
+                });
         }
 
 
         function stopRecording() {
-            showToast("🎙️ Generating text... please wait.");
+            if (!mediaRecorder || mediaRecorder.state !== 'recording') {
+                showToast('⚠️ No recording is currently active.');
+                setTimeout(hideToast, 2000);
+                return;
+            }
+            showToast("🎙️ Generating text… please wait.");
             mediaRecorder.stop();
             document.getElementById('voice-btn').disabled = false;
             document.getElementById('stop-btn').disabled = true;
@@ -3659,6 +3669,7 @@
             generateSummaryFromTranscription:   () => generateSummaryFromTranscription(),
             openTranslationModal:               () => requireAuth(() => openTranslationModal()),
             startPatientRecording:              () => requireAuth(() => startPatientRecording()),
+            logout:                             () => logout(),
         };
 
         // button_states: maps action → whether the DOM button is disabled.
@@ -3674,6 +3685,7 @@
                 generateSummaryFromTranscription: (document.getElementById('generate-summary-btn') || {}).disabled || false,
                 openTranslationModal:             (document.getElementById('translation-btn')       || {}).disabled || false,
                 startPatientRecording:            (document.getElementById('record-patient-btn')    || {}).disabled || false,
+                logout:                           false,
             };
         }
 

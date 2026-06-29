@@ -89,6 +89,11 @@ COMMANDS: dict[str, dict] = {
         "enabled": True,
         "label": "Record Patient Notes",
     },
+    "logout": {
+        "action": "logout",
+        "enabled": True,
+        "label": "Logout",
+    },
 }
 
 
