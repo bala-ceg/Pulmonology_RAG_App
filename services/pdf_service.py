@@ -304,18 +304,134 @@ class PDFService:
         """Convert the enhanced-tools HTML/markdown response format to
         ReportLab-compatible markup.
 
-        Handles both HTML (``<div>``/``<h4>`` structure produced by
-        ``enhanced_tools.py``) and plain-text section-header format.
+        Handles three formats:
+          1. Current format: ``{answer}**Citations:** {HTML_badge_block}``
+          2. Legacy HTML format: ``<div>/<h4>`` structure from enhanced_tools
+          3. Plain-text section-header format
 
         Args:
             text: Raw message content string.
 
         Returns:
             String containing ReportLab XML markup (``<b>``, ``<br/>``, etc.).
+            All unsupported HTML tags are stripped; only ``<b>``, ``<i>``,
+            ``<br/>``, ``<a>`` survive.
         """
+        import html
         import re
 
-        # ---- HTML path ------------------------------------------------
+        def _esc(s: str) -> str:
+            """XML/HTML-escape plain text for ReportLab."""
+            return html.escape(s, quote=True)
+
+        def _md_to_rl(s: str) -> str:
+            """Escape then convert basic markdown (**bold**, *italic*) to ReportLab tags."""
+            result = _esc(s)
+            result = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', result)
+            result = re.sub(r'\*([^*\n]+?)\*', r'<i>\1</i>', result)
+            return result
+
+        def _html_to_plain(html_str: str) -> str:
+            """Strip HTML tags returning plain text; preserve link text and href."""
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(html_str, "html.parser")
+                for a in soup.find_all('a', href=True):
+                    link_text = a.get_text(strip=True)
+                    href = a['href']
+                    a.replace_with(f"{link_text} [{href}]" if href not in link_text else link_text)
+                return soup.get_text(separator=' ', strip=True)
+            except Exception:
+                return re.sub(r'<[^>]+>', ' ', html_str)
+
+        def _strip_unsupported_html(s: str) -> str:
+            """Final safety pass: remove any HTML tags ReportLab cannot handle.
+
+            ReportLab's Paragraph only supports a very limited tag set:
+            <b>, <i>, <u>, <br/>, <super>, <sub>, <a href="...">, <font ...>.
+            Everything else (div, span, ul, li, strong, etc.) must be removed.
+            """
+            # Tags that ReportLab Paragraph understands
+            _RL_SAFE = re.compile(
+                r'<(/?)(?:b|i|u|strike|br|super|sub|a|font)(\s[^>]*)?>',
+                re.IGNORECASE,
+            )
+            parts: list[str] = []
+            last = 0
+            for m in re.finditer(r'<[^>]+>', s):
+                # Text before this tag — keep as-is (already escaped)
+                parts.append(s[last:m.start()])
+                # Keep the tag only if it's in the safe set
+                if _RL_SAFE.fullmatch(m.group()):
+                    parts.append(m.group())
+                # else: discard the tag
+                last = m.end()
+            parts.append(s[last:])
+            return ''.join(parts)
+
+        # ── Path 1: Current citation format ─────────────────────────────────
+        # Produced by citation_service: "{answer}\n\n**Citations:** {html_block}"
+        # Also handles inline variant without newline separator.
+        for _marker in ("**Citations:**", "Citations:"):
+            if _marker in text:
+                answer_raw, _, citation_html = text.partition(_marker)
+                answer_raw = answer_raw.strip()
+                citation_html = citation_html.strip()
+
+                result_parts: list[str] = []
+
+                if answer_raw:
+                    result_parts.append(_md_to_rl(answer_raw))
+
+                if citation_html:
+                    # Extract confidence score from badge text
+                    conf_m = re.search(
+                        r'Confidence:\s*([^<\n]{1,40})', citation_html
+                    )
+                    confidence = conf_m.group(1).strip() if conf_m else ""
+
+                    # Extract one plain-text entry per <li>
+                    sources: list[str] = []
+                    try:
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(citation_html, "html.parser")
+                        for li in soup.find_all('li'):
+                            # Replace <a> with "text [url]"
+                            for a in li.find_all('a', href=True):
+                                href = a['href']
+                                lt = a.get_text(strip=True)
+                                a.replace_with(
+                                    f"{lt} [{href}]" if href not in lt else lt
+                                )
+                            li_text = _esc(li.get_text(separator=' ', strip=True))
+                            if li_text:
+                                sources.append(li_text)
+                        if not sources:
+                            plain = _esc(soup.get_text(separator=' ', strip=True))
+                            if plain:
+                                sources.append(plain)
+                    except Exception:
+                        plain = _esc(
+                            re.sub(r'\s+', ' ',
+                                   re.sub(r'<[^>]+>', ' ', citation_html)).strip()
+                        )
+                        if plain:
+                            sources.append(plain)
+
+                    if confidence:
+                        result_parts.append(
+                            f"<br/><br/><b>Confidence:</b> {_esc(confidence)}"
+                        )
+                    if sources:
+                        result_parts.append(
+                            "<br/><b>Citations:</b><br/>• "
+                            + "<br/>• ".join(sources)
+                        )
+
+                out = re.sub(r' +', ' ', "".join(result_parts))
+                return _strip_unsupported_html(out).strip()
+
+        # ── Path 2: Legacy HTML format (<div> + <h4> structure) ─────────────
         if "<div" in text and "<h4" in text:
             try:
                 from bs4 import BeautifulSoup
@@ -344,24 +460,24 @@ class PDFService:
 
                         if "answer" in header_text:
                             if content_div:
-                                sections["answer"] = content_div.get_text().strip()
+                                sections["answer"] = _esc(
+                                    content_div.get_text().strip()
+                                )
                         elif "source" in header_text:
                             if content_div:
-                                sources = []
+                                srcs: list[str] = []
                                 links = content_div.find_all("a")
                                 if links:
                                     for link in links:
-                                        link_text = link.get_text().strip()
-                                        next_text = link.next_sibling
-                                        if next_text and isinstance(next_text, str):
-                                            sources.append(
-                                                f"{link_text} {next_text.strip()}"
-                                            )
+                                        lt = _esc(link.get_text().strip())
+                                        nxt = link.next_sibling
+                                        if nxt and isinstance(nxt, str):
+                                            srcs.append(f"{lt} {_esc(nxt.strip())}")
                                         else:
-                                            sources.append(link_text)
+                                            srcs.append(lt)
                                 else:
-                                    sources = [content_div.get_text().strip()]
-                                sections["source"] = "\n".join(sources)
+                                    srcs = [_esc(content_div.get_text().strip())]
+                                sections["source"] = "\n".join(srcs)
                         elif (
                             "tool selection" in header_text
                             or "routing" in header_text
@@ -375,128 +491,107 @@ class PDFService:
                     formatted_parts.append(sections["answer"])
 
                 if sections["source"]:
-                    srcs = [s.strip() for s in sections["source"].split("\n") if s.strip()]
-                    if srcs:
+                    s_list = [
+                        s.strip()
+                        for s in sections["source"].split("\n")
+                        if s.strip()
+                    ]
+                    if s_list:
                         formatted_parts.append(
-                            "<br/><br/><b>Sources:</b><br/>• " + "<br/>• ".join(srcs)
+                            "<br/><br/><b>Sources:</b><br/>• "
+                            + "<br/>• ".join(s_list)
                         )
 
                 if sections["tool_routing"]:
-                    routing_html = sections["tool_routing"]
-                    routing_soup = BeautifulSoup(routing_html, "html.parser")
-                    routing_text = routing_soup.get_text()
-
-                    confidence = ""
-                    tools_used = ""
-                    reasoning = ""
-
-                    lines_split = routing_text.replace("\n", " ").split("Tools Used:")
-                    if len(lines_split) >= 2:
-                        confidence_part = lines_split[0]
-                        confidence_match = re.search(
-                            r"Confidence:\s*(.+?)$",
-                            confidence_part.strip(),
-                            re.IGNORECASE,
-                        )
-                        if confidence_match:
-                            confidence = confidence_match.group(1).strip()
-
-                        rest = lines_split[1]
-                        reasoning_split = rest.split("Reasoning:")
-                        if len(reasoning_split) >= 2:
-                            tools_used = reasoning_split[0].strip()
-                            reasoning = reasoning_split[1].strip()
-                        else:
-                            tools_used = rest.strip()
-
-                    routing_parts: list[str] = []
-                    if confidence:
-                        routing_parts.append(f"<b>Confidence:</b> {confidence}")
-                    if tools_used:
-                        routing_parts.append(f"<b>Tools Used:</b> {tools_used}")
-                    if reasoning:
-                        routing_parts.append(f"<b>Reasoning:</b> {reasoning}")
-
-                    if routing_parts:
+                    rt_soup = BeautifulSoup(sections["tool_routing"], "html.parser")
+                    rt_text = rt_soup.get_text()
+                    rt_parts: list[str] = []
+                    m = re.search(r"Confidence:\s*(.+?)(?:\n|Tools Used:)", rt_text)
+                    if m:
+                        rt_parts.append(f"<b>Confidence:</b> {_esc(m.group(1).strip())}")
+                    tu_m = re.search(r"Tools Used:\s*(.+?)(?:\n|Reasoning:)", rt_text)
+                    if tu_m:
+                        rt_parts.append(f"<b>Tools Used:</b> {_esc(tu_m.group(1).strip())}")
+                    if rt_parts:
                         formatted_parts.append(
-                            "<br/><br/><b>Tool Selection & Query Routing:</b><br/>"
-                            + "<br/>".join(routing_parts)
+                            "<br/><br/><b>Tool Selection &amp; Query Routing:</b><br/>"
+                            + "<br/>".join(rt_parts)
                         )
 
-                full_text = "".join(formatted_parts)
-                full_text = re.sub(r"\s+", " ", full_text)
-                return full_text.strip()
+                full_text = re.sub(r"\s+", " ", "".join(formatted_parts))
+                return _strip_unsupported_html(full_text).strip()
 
             except Exception as exc:
                 logger.warning("Error parsing HTML content: %s", exc)
                 try:
                     from bs4 import BeautifulSoup
-
                     soup = BeautifulSoup(text, "html.parser")
-                    return soup.get_text().strip()
+                    return _md_to_rl(soup.get_text().strip())
                 except Exception:
-                    return text
+                    return _md_to_rl(text)
 
-        # ---- Plain-text path ------------------------------------------
+        # ── Path 3: Any stray HTML (safety net) ─────────────────────────────
+        if re.search(r'<[a-zA-Z][^>]*>', text):
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(text, "html.parser")
+                return _md_to_rl(soup.get_text(separator=' ', strip=True))
+            except Exception:
+                clean = re.sub(r'<[^>]+>', ' ', text)
+                return _md_to_rl(re.sub(r'\s+', ' ', clean).strip())
+
+        # ── Path 4: Plain-text / structured-section format ───────────────────
         sections_pt: dict[str, str] = {
             "answer": "",
             "source": "",
             "tool_routing": "",
         }
-
         current_section: str | None = None
 
         for raw_line in text.split("\n"):
             line = raw_line.strip()
             if not line:
                 continue
-
-            if line.lower().startswith("answer"):
+            ll = line.lower()
+            if ll.startswith("answer"):
                 current_section = "answer"
                 continue
-            elif line.lower().startswith("source"):
+            elif ll.startswith("source"):
                 current_section = "source"
                 continue
-            elif line.lower().startswith("tool selection") or line.lower().startswith(
-                "confidence:"
-            ):
+            elif ll.startswith("tool selection") or ll.startswith("confidence:"):
                 current_section = "tool_routing"
-                if line.lower().startswith("tool selection"):
+                if ll.startswith("tool selection"):
                     continue
 
             if current_section:
+                chunk = _esc(line)
                 if sections_pt[current_section]:
-                    sections_pt[current_section] += " " + line
+                    sections_pt[current_section] += " " + chunk
                 else:
-                    sections_pt[current_section] = line
+                    sections_pt[current_section] = chunk
 
         formatted_parts_pt: list[str] = []
 
         if sections_pt["answer"]:
             formatted_parts_pt.append(sections_pt["answer"])
-
         if sections_pt["source"]:
-            srcs = [s.strip() for s in sections_pt["source"].split("\n") if s.strip()]
-            if srcs:
+            s_list = [s.strip() for s in sections_pt["source"].split("\n") if s.strip()]
+            if s_list:
                 formatted_parts_pt.append(
-                    "<br/><br/><b>Sources:</b><br/>• " + "<br/>• ".join(srcs)
+                    "<br/><br/><b>Sources:</b><br/>• " + "<br/>• ".join(s_list)
                 )
-
         if sections_pt["tool_routing"]:
             formatted_parts_pt.append(
-                f"<br/><br/><b>Tool Selection & Query Routing:</b><br/>"
-                f"{sections_pt['tool_routing']}"
+                "<br/><br/><b>Tool Selection &amp; Query Routing:</b><br/>"
+                + sections_pt["tool_routing"]
             )
 
-        # If no structured sections found, treat as plain text
         if not any(sections_pt.values()):
-            formatted_parts_pt = [text]
+            formatted_parts_pt = [_md_to_rl(text)]
 
-        import re
-
-        full_text_pt = "".join(formatted_parts_pt)
-        full_text_pt = re.sub(r"\s+", " ", full_text_pt)
-        return full_text_pt.strip()
+        full_text_pt = re.sub(r"\s+", " ", "".join(formatted_parts_pt))
+        return _strip_unsupported_html(full_text_pt).strip()
 
     # ------------------------------------------------------------------
     # Public generate methods
