@@ -2236,7 +2236,7 @@
             </div>
 
             <div class="modal-buttons">
-                <button class="modal-btn save" onclick="savePatientNotesPDF()">Save to PDF</button>
+                <button class="modal-btn save" onclick="savePatientNotesPDF()">Save File</button>
                 <button class="modal-btn cancel" onclick="cancelPatientNotes()">Cancel</button>
             </div>
         </div>
@@ -2315,7 +2315,7 @@
 
             <!-- Modal Buttons -->
             <div class="modal-buttons">
-                <button class="modal-btn save" onclick="saveConversationPDF()">Save to PDF</button>
+                <button class="modal-btn save" onclick="saveConversationPDF()">Save File</button>
                 <button class="modal-btn cancel" onclick="closeConversationModal()">Close</button>
             </div>
         </div>
@@ -2488,7 +2488,7 @@
                 <input type="text" id="user-input" placeholder="Type your message...">
                 <button id="send-btn" disabled onclick="requireAuth(() => sendMessage())">Generate</button>
                 <button id="plain-english-btn" disabled onclick="requireAuth(() => refineInput())">Plain English</button>
-                <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save to PDF</button>
+                <button id="save-btn" disabled onclick="requireAuth(() => saveChat())">Save File</button>
                 <button id="voice-btn" disabled onclick="requireAuth(() => startRecording())">Start Recording</button>
                 <button id="stop-btn" disabled onclick="requireAuth(() => stopRecording())">Stop Recording</button>
                 <button id="yodha-listen-btn" disabled onclick="requireAuth(() => toggleContinuousListen())" title="Continuous voice: speak, pause, auto-sends">🎤 Listen</button>
@@ -2982,8 +2982,8 @@
             const languageField = document.getElementById('conversation-language-field');
 
             if (operation === 'chat_save') {
-                modalTitle.textContent = 'Save to PDF';
-                confirmButton.textContent = 'Save to PDF';
+                modalTitle.textContent = 'Save File';
+                confirmButton.textContent = 'Save File';
                 languageField.style.display = 'none';
             } else if (operation === 'conversation_recording') {
                 modalTitle.textContent = 'Start Conversation Recording';
