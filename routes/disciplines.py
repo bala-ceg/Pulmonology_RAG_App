@@ -6,7 +6,9 @@ Routes:
   GET  /api/disciplines           — list available disciplines
   POST /api/validate_disciplines  — validate user's selection
   GET  /search_doctors            — autocomplete search in pces_users
-  GET  /search_patients           — autocomplete search in patient table
+  GET  /search_patients           — patient autocomplete (CCM/EHR API)
+  GET  /api/patient/search        — advanced patient search (CCM/EHR API)
+  GET  /api/hospitals/search      — hospital search (CCM/EHR API)
 
 Also owns:
   load_disciplines_config()
@@ -31,6 +33,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 
 from config import Config
 from utils.error_handlers import get_logger, handle_route_errors
+from services.ccm_ehr_client import CCMEHRAuthError, CCMEHRError, ccm_ehr_client
 
 # Optional — graceful if sft_experiment_manager or dept_lora_service are unavailable
 try:
@@ -763,113 +766,119 @@ def search_doctors():
 @disciplines_bp.route("/search_patients", methods=["GET"])
 @handle_route_errors
 def search_patients():
-    """Search for patients by first_name and last_name from p_party table."""
-    query = request.args.get("q", "").strip().lower()
+    """Patient autocomplete — calls the CCM/EHR external API.
+
+    Accepts ?q=<name> and splits it across first_name / last_name.
+    Returns max 10 results in [{patient_id, first_name, last_name, full_name}] format.
+    """
+    query = request.args.get("q", "").strip()
     if not query:
         return jsonify([])
 
-    try:
-        with _ehr_conn() as conn:
-            with conn.cursor() as cursor:
-                search_query = """
-                SELECT DISTINCT party_id, first_name, last_name
-                FROM p_party
-                WHERE party_type = 'PATIENT' AND is_active = true
-                  AND (
-                    LOWER(first_name) LIKE %s
-                    OR LOWER(last_name) LIKE %s
-                    OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
-                  )
-                ORDER BY first_name, last_name
-                LIMIT 10
-                """
-                pattern = f"%{query}%"
-                cursor.execute(search_query, (pattern, pattern, pattern))
-                results = cursor.fetchall()
+    # Split into first / last guess for the CCM/EHR API
+    parts = query.split(None, 1)
+    first = parts[0] if parts else ""
+    last  = parts[1] if len(parts) > 1 else ""
 
-        patients = [
-            {
-                "patient_id": str(row[0]),
-                "first_name": row[1],
-                "last_name":  row[2],
-                "full_name":  f"{row[1] or ''} {row[2] or ''}".strip(),
-            }
-            for row in results
-            if row[1] or row[2]
-        ]
-        return jsonify(patients)
+    try:
+        # Try last_name first (more discriminating), then full query as first_name
+        results = ccm_ehr_client.search_patients(last_name=query)
+        if not results and first:
+            results = ccm_ehr_client.search_patients(first_name=first, last_name=last)
+        return jsonify(results[:10])
+
+    except CCMEHRAuthError as exc:
+        logger.warning("search_patients: CCM/EHR auth error — %s", exc)
+        return jsonify({"error": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
+
+    except CCMEHRError as exc:
+        logger.warning("search_patients: CCM/EHR unavailable — %s", exc)
+        return jsonify([])
 
     except Exception as exc:
-        logger.warning("search_patients: DB unavailable (%s) — returning empty list", exc)
+        logger.error("search_patients: unexpected error — %s", exc)
         return jsonify([])
 
 
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Search patients by first, last, middle name and/or DOB from p_party + p_address."""
-    first  = (request.args.get("first",  "") or "").strip()
-    last   = (request.args.get("last",   "") or "").strip()
-    middle = (request.args.get("middle", "") or "").strip()
-    dob    = (request.args.get("dob",    "") or "").strip()
+    """Advanced patient search — calls the CCM/EHR external API.
 
-    if not any([first, last, middle, dob]):
+    Query params (at least one required):
+      first, last, dob (YYYY-MM-DD), phone, email
+    """
+    first = (request.args.get("first",  "") or "").strip()
+    last  = (request.args.get("last",   "") or "").strip()
+    dob   = (request.args.get("dob",    "") or "").strip()
+    phone = (request.args.get("phone",  "") or "").strip()
+    email = (request.args.get("email",  "") or "").strip()
+
+    if not any([first, last, dob, phone, email]):
         return jsonify([])
 
     try:
-        conditions = ["pp.party_type = 'PATIENT'", "pp.is_active = true"]
-        params = []
-
-        if first:
-            conditions.append("LOWER(pp.first_name) LIKE %s")
-            params.append(f"%{first.lower()}%")
-        if last:
-            conditions.append("LOWER(pp.last_name) LIKE %s")
-            params.append(f"%{last.lower()}%")
-        if middle:
-            conditions.append("LOWER(pp.middle_name) LIKE %s")
-            params.append(f"%{middle.lower()}%")
-        if dob:
-            conditions.append("CAST(pp.date_of_birth AS TEXT) LIKE %s")
-            params.append(f"%{dob}%")
-
-        where = " AND ".join(conditions)
-        sql_q = f"""
-            SELECT pp.party_id, pp.first_name, pp.middle_name, pp.last_name,
-                   pp.date_of_birth, pa.line1, pa.city, pa.state, pa.postal_code
-            FROM p_party pp
-            LEFT JOIN p_address pa ON pa.party_id = pp.party_id
-            WHERE {where}
-            ORDER BY pp.last_name, pp.first_name
-            LIMIT 20
-        """
-
-        with _ehr_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(sql_q, params)
-                rows = cursor.fetchall()
-
-        results = []
-        for row in rows:
-            pid, fn, mn, ln, dob_val, line1, city, state, postal = row
-            parts = [p for p in [fn, mn, ln] if p]
-            results.append({
-                "patient_id":  str(pid) if pid else "",
-                "first_name":  fn or "",
-                "middle_name": mn or "",
-                "last_name":   ln or "",
-                "full_name":   " ".join(parts),
-                "dob":         str(dob_val)[:10] if dob_val else "",
-                "address1":    line1 or "",
-                "city":        city or "",
-                "state":       state or "",
-                "zip":         postal or "",
-            })
+        results = ccm_ehr_client.search_patients(
+            first_name=first,
+            last_name=last,
+            date_of_birth=dob,
+            phone=phone,
+            email=email,
+        )
         return jsonify(results)
 
-    except Exception as exc:
-        logger.warning("search_patients_advanced: DB unavailable (%s) — returning []", exc)
+    except CCMEHRAuthError as exc:
+        logger.warning("search_patients_advanced: CCM/EHR auth error — %s", exc)
+        return jsonify({"error": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
+
+    except CCMEHRError as exc:
+        logger.warning("search_patients_advanced: CCM/EHR unavailable — %s", exc)
         return jsonify([])
+
+    except Exception as exc:
+        logger.error("search_patients_advanced: unexpected error — %s", exc)
+        return jsonify([])
+
+
+@disciplines_bp.route("/api/hospitals/search", methods=["GET"])
+@handle_route_errors
+def search_hospitals():
+    """Hospital search — calls the CCM/EHR external API.
+
+    Query params (at least one required):
+      firm_name, location, hospital_code, phone, email
+    Returns [{hospital_id, firm_name, location, hospital_code, phone, email}]
+    """
+    firm_name     = (request.args.get("firm_name",     "") or "").strip()
+    location      = (request.args.get("location",      "") or "").strip()
+    hospital_code = (request.args.get("hospital_code", "") or "").strip()
+    phone         = (request.args.get("phone",         "") or "").strip()
+    email         = (request.args.get("email",         "") or "").strip()
+
+    if not any([firm_name, location, hospital_code, phone, email]):
+        return jsonify({"success": False, "message": "At least one search parameter is required."}), 400
+
+    try:
+        results = ccm_ehr_client.search_hospitals(
+            firm_name=firm_name,
+            location=location,
+            hospital_code=hospital_code,
+            phone=phone,
+            email=email,
+        )
+        return jsonify({"success": True, "count": len(results), "data": results})
+
+    except CCMEHRAuthError as exc:
+        logger.warning("search_hospitals: CCM/EHR auth error — %s", exc)
+        return jsonify({"success": False, "message": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
+
+    except CCMEHRError as exc:
+        logger.warning("search_hospitals: CCM/EHR unavailable — %s", exc)
+        return jsonify({"success": False, "message": "CCM/EHR service unavailable.", "data": []}), 503
+
+    except Exception as exc:
+        logger.error("search_hospitals: unexpected error — %s", exc)
+        return jsonify({"success": False, "message": "Internal error.", "data": []}), 500
 
 
 @disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])

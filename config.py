@@ -144,6 +144,12 @@ class Config:
     YODHA_CHAT_URL: str = os.getenv("YODHA_CHAT_URL", "http://127.0.0.1:3000")
     DOC_PATIENT_V2_URL: str = os.getenv("DOC_PATIENT_V2_URL", "http://127.0.0.1:3001")
 
+    # ------------------------------------------------------------------
+    # CCM / EHR external API  (http://4.155.102.23:8888/api/v1)
+    # ------------------------------------------------------------------
+    CCM_EHR_BASE_URL: str = os.getenv("CCM_EHR_BASE_URL", "http://4.155.102.23:8888/api/v1")
+    CCM_EHR_TOKEN: str | None = os.getenv("CCM_EHR_TOKEN")          # Bearer JWT
+
     @classmethod
     def db_kwargs(cls) -> dict:
         """Return a dict of non-None DB connection kwargs for psycopg."""
