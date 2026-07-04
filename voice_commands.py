@@ -39,10 +39,10 @@ COMMANDS: dict[str, dict] = {
         "enabled": True,
         "label": "Generate",
     },
-    "save to pdf": {
+    "save file": {
         "action": "saveChat",
         "enabled": False,
-        "label": "Save to PDF",
+        "label": "Save File",
     },
     "plain english": {
         "action": "refineInput",
@@ -135,9 +135,9 @@ def _fuzzy_match(command: str) -> tuple[str, dict] | tuple[None, None]:
     Ties broken by longer key (more specific wins).
 
     Examples:
-        "seva pdf"        → "save to pdf"           (2/3 ≈ 0.67 ✓)
-        "saved to pdf"    → "save to pdf"            (2/3 ≈ 0.67 ✓)
-        "save pdf"        → "save to pdf"            (2/3 ≈ 0.67 ✓)
+        "seva file"       → "save file"              (1/2 = 0.50 ✓)
+        "saved file"      → "save file"              (1/2 = 0.50 ✓)
+        "save file"       → "save file"              (2/2 = 1.00 ✓)
         "start"           → "start recording"        (1/2 = 0.50 ✓)
         "update bank"     → "update knowledge bank"  (2/3 ≈ 0.67 ✓)
         "plain"           → "plain english"          (1/2 = 0.50 ✓)
@@ -183,7 +183,7 @@ def parse_voice(text: str) -> str | None:
 
     Examples:
         "Yodha Generate"       → "generate"
-        "Yodha Save to PDF"    → "save to pdf"
+        "Yodha Save File"      → "save file"
         "Generate"             → None   (no wake word)
         "Yodha"                → None   (wake word only, no command)
     """
