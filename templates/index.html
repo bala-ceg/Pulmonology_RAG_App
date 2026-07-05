@@ -1696,8 +1696,8 @@
         .psm-search-btn {
             grid-column: 1 / -1;
             padding: 9px;
-            background: #00897b;
-            color: white;
+            background: #a3c2f2;
+            color: #1a1a2e;
             border: none;
             border-radius: 6px;
             font-size: 14px;
@@ -1705,7 +1705,73 @@
             cursor: pointer;
             transition: background .2s;
         }
-        .psm-search-btn:hover { background: #00695c; }
+        .psm-search-btn:hover { background: #8fb8f0; }
+        /* ── Source toolbar ─────────────────────────────────────── */
+        .psm-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 24px 10px;
+            border-bottom: 1px solid #e8edf2;
+            background: #f7f9fc;
+        }
+        .psm-source-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            white-space: nowrap;
+        }
+        .psm-source-select {
+            flex: 1;
+            padding: 5px 8px;
+            border: 1.5px solid #a3c2f2;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #1a1a2e;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+            min-width: 0;
+        }
+        .psm-source-select:focus { border-color: #6da0e8; }
+        .psm-case2-btn {
+            padding: 5px 12px;
+            background: #a3c2f2;
+            color: #1a1a2e;
+            border: 1.5px solid #7baee8;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .15s;
+        }
+        .psm-case2-btn.active {
+            background: #1f4e79;
+            color: #fff;
+            border-color: #1f4e79;
+        }
+        .psm-case2-btn:hover { background: #8fb8f0; color: #1a1a2e; }
+        .psm-case2-btn.active:hover { background: #17406a; color: #fff; }
+        .psm-source-badge {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .psm-source-badge.internal { background: #e3f0ff; color: #1f4e79; }
+        .psm-source-badge.external { background: #fff3e0; color: #e65100; }
+        .psm-auth-error {
+            grid-column: 1 / -1;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #856404;
+            display: none;
+        }
         .psm-results {
             flex: 1;
             overflow-y: auto;
@@ -1720,10 +1786,10 @@
         .psm-results-table th {
             text-align: left;
             padding: 7px 8px;
-            background: #e0f2f1;
-            color: #00695c;
+            background: #dce8f8;
+            color: #1f4e79;
             font-weight: 600;
-            border-bottom: 2px solid #80cbc4;
+            border-bottom: 2px solid #a3c2f2;
             white-space: nowrap;
         }
         .psm-results-table td {
@@ -1731,7 +1797,7 @@
             border-bottom: 1px solid #f0f0f0;
             color: #333;
         }
-        .psm-results-table tr:hover td { background: #f0fdf9; cursor: pointer; }
+        .psm-results-table tr:hover td { background: #eef4fc; cursor: pointer; }
         .psm-no-results {
             text-align: center;
             color: #90a4ae;
@@ -2791,8 +2857,9 @@
                 });
                 document.getElementById('psm-results-table').style.display = 'none';
                 document.getElementById('psm-no-results-msg').style.display = 'none';
+                document.getElementById('psm-auth-error').style.display = 'none';
                 document.getElementById('psm-results-body').innerHTML = '';
-                // Focus first field
+                loadAffiliatedSources();
                 setTimeout(() => { const f = document.getElementById('psm-first'); if (f) f.focus(); }, 100);
             }
         }
@@ -2814,11 +2881,72 @@
             if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') runPatientSearch(); });
         });
 
+        // Load affiliated sources into the Select Source dropdown
+        async function loadAffiliatedSources() {
+            try {
+                const resp = await fetch('/api/affiliated-sources');
+                const sources = await resp.json();
+                const sel = document.getElementById('psm-source-select');
+                if (!sel) return;
+                // Preserve current selection if possible
+                const current = sel.value;
+                sel.innerHTML = '';
+                sources.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.firm_name + (s.location ? ` (${s.location})` : '');
+                    sel.appendChild(opt);
+                });
+                // Restore selection or default
+                if (sources.find(s => s.id === current)) sel.value = current;
+                else sel.value = 'PCES_BASE';
+                onSourceChange();
+            } catch (err) {
+                console.warn('[PSM] loadAffiliatedSources failed:', err);
+            }
+        }
+
+        // Update badge & Case 2 Mode button when source changes
+        function onSourceChange() {
+            const sel = document.getElementById('psm-source-select');
+            const badge = document.getElementById('psm-source-badge');
+            const btn   = document.getElementById('psm-case2-btn');
+            if (!sel) return;
+            const isExternal = sel.value !== 'PCES_BASE';
+            if (badge) {
+                badge.textContent = isExternal ? 'External' : 'Internal';
+                badge.className   = 'psm-source-badge ' + (isExternal ? 'external' : 'internal');
+            }
+            if (btn) {
+                btn.classList.toggle('active', isExternal);
+                btn.textContent = isExternal ? '✓ Case 2 Mode' : 'Case 2 Mode';
+            }
+            // Clear any previous auth error when source changes
+            const authErr = document.getElementById('psm-auth-error');
+            if (authErr) authErr.style.display = 'none';
+        }
+
+        // Case 2 Mode toggle: switch between PCES_BASE and first external source
+        function toggleCase2Mode() {
+            const sel = document.getElementById('psm-source-select');
+            if (!sel) return;
+            if (sel.value === 'PCES_BASE') {
+                // Switch to first external source (second option)
+                const firstExt = Array.from(sel.options).find(o => o.value !== 'PCES_BASE');
+                if (firstExt) sel.value = firstExt.value;
+                else { showToast('⚠️ No external sources configured in p_party_affiliated.'); setTimeout(hideToast,3000); return; }
+            } else {
+                sel.value = 'PCES_BASE';
+            }
+            onSourceChange();
+        }
+
         async function runPatientSearch() {
             const first  = (document.getElementById('psm-first').value  || '').trim();
             const last   = (document.getElementById('psm-last').value   || '').trim();
             const middle = (document.getElementById('psm-middle').value || '').trim();
             const dob    = (document.getElementById('psm-dob').value    || '').trim();
+            const source = (document.getElementById('psm-source-select')?.value || 'PCES_BASE');
 
             if (!first && !last && !middle && !dob) {
                 alert('Please enter at least one search field.');
@@ -2830,16 +2958,25 @@
             if (last)   params.set('last',   last);
             if (middle) params.set('middle', middle);
             if (dob)    params.set('dob',    dob);
+            params.set('source', source);
 
-            const tbody = document.getElementById('psm-results-body');
-            const table = document.getElementById('psm-results-table');
-            const noMsg = document.getElementById('psm-no-results-msg');
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#90a4ae;padding:16px;">Searching…</td></tr>';
+            const tbody  = document.getElementById('psm-results-body');
+            const table  = document.getElementById('psm-results-table');
+            const noMsg  = document.getElementById('psm-no-results-msg');
+            const authErr= document.getElementById('psm-auth-error');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#90a4ae;padding:16px;">Searching…</td></tr>';
             table.style.display = 'table';
             noMsg.style.display = 'none';
+            authErr.style.display = 'none';
 
             try {
                 const resp = await fetch(`/api/patient/search?${params}`);
+                if (resp.status === 401) {
+                    tbody.innerHTML = '';
+                    table.style.display = 'none';
+                    authErr.style.display = 'block';
+                    return;
+                }
                 const rows = await resp.json();
                 tbody.innerHTML = '';
                 if (!Array.isArray(rows) || !rows.length) {
@@ -2851,9 +2988,7 @@
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${p.full_name || '—'}</td>
-                        <td>${p.dob || '—'}</td>
-                        <td>${p.address1 || '—'}</td>
-                        <td>${p.address1 || '—'}</td>
+                        <td>${p.dob || p.date_of_birth || '—'}</td>
                         <td>${p.city || '—'}</td>
                         <td>${p.state || '—'}</td>
                         <td>${p.zip || '—'}</td>`;
@@ -2861,7 +2996,7 @@
                     tbody.appendChild(tr);
                 });
             } catch(err) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#c62828;padding:16px;">Search unavailable (DB may be down)</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#c62828;padding:16px;">Search unavailable. Please try again.</td></tr>';
             }
         }
 
@@ -5234,11 +5369,27 @@ ${data.conclusion}
     <!-- ══ Patient Search Modal ══════════════════════════════════════ -->
     <div id="patient-search-modal-overlay" class="patient-search-modal-overlay">
       <div class="patient-search-modal">
+        <!-- Header row -->
         <div class="psm-header">
           <h2>🔍 Search Patient</h2>
-          <button class="psm-close" onclick="closePatientSearchModal()">✕</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="psm-source-badge" class="psm-source-badge internal">Internal</span>
+            <button class="psm-case2-btn" id="psm-case2-btn" onclick="toggleCase2Mode()">Case 2 Mode</button>
+            <button class="psm-close" onclick="closePatientSearchModal()">✕</button>
+          </div>
         </div>
+        <!-- Source toolbar -->
+        <div class="psm-toolbar">
+          <span class="psm-source-label">Select Source:</span>
+          <select id="psm-source-select" class="psm-source-select" onchange="onSourceChange()">
+            <option value="PCES_BASE">Default – PCES_BASE</option>
+          </select>
+        </div>
+        <!-- Search form -->
         <div class="psm-form">
+          <div id="psm-auth-error" class="psm-auth-error">
+            ⚠️ CCM/EHR token missing or expired — contact admin to update <code>CCM_EHR_TOKEN</code>.
+          </div>
           <div class="psm-field">
             <label>First Name</label>
             <input type="text" id="psm-first" placeholder="e.g. John">
@@ -5262,7 +5413,7 @@ ${data.conclusion}
           <table class="psm-results-table" id="psm-results-table" style="display:none;">
             <thead>
               <tr>
-                <th>Name</th><th>DOB</th><th>Address</th><th>City</th><th>State</th><th>ZIP</th>
+                <th>Name</th><th>DOB</th><th>City</th><th>State</th><th>ZIP</th>
               </tr>
             </thead>
             <tbody id="psm-results-body"></tbody>
