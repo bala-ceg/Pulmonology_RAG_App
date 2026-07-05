@@ -803,40 +803,107 @@ def search_patients():
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Advanced patient search — calls the CCM/EHR external API.
+    """Advanced patient search — source-aware.
 
     Query params (at least one required):
       first, last, dob (YYYY-MM-DD), phone, email
-    """
-    first = (request.args.get("first",  "") or "").strip()
-    last  = (request.args.get("last",   "") or "").strip()
-    dob   = (request.args.get("dob",    "") or "").strip()
-    phone = (request.args.get("phone",  "") or "").strip()
-    email = (request.args.get("email",  "") or "").strip()
+    Optional:
+      source  — "PCES_BASE" (default) = local DB; anything else = CCM/EHR external API
 
-    if not any([first, last, dob, phone, email]):
+    Case 1 (source=PCES_BASE): queries p_party directly via _ehr_conn()
+    Case 2 (source=Ext-*):     calls CCM/EHR API at CCM_EHR_BASE_URL
+    """
+    first  = (request.args.get("first",  "") or "").strip()
+    last   = (request.args.get("last",   "") or "").strip()
+    middle = (request.args.get("middle", "") or "").strip()
+    dob    = (request.args.get("dob",    "") or "").strip()
+    phone  = (request.args.get("phone",  "") or "").strip()
+    email  = (request.args.get("email",  "") or "").strip()
+    source = (request.args.get("source", "PCES_BASE") or "PCES_BASE").strip()
+
+    if not any([first, last, middle, dob, phone, email]):
         return jsonify([])
 
+    # ── Case 2: external CCM/EHR API ─────────────────────────────────────────
+    if source != "PCES_BASE":
+        try:
+            results = ccm_ehr_client.search_patients(
+                first_name=first,
+                last_name=last,
+                date_of_birth=dob,
+                phone=phone,
+                email=email,
+            )
+            return jsonify(results)
+        except CCMEHRAuthError as exc:
+            logger.warning("search_patients_advanced[ext]: auth error — %s", exc)
+            return jsonify({"error": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
+        except CCMEHRError as exc:
+            logger.warning("search_patients_advanced[ext]: unavailable — %s", exc)
+            return jsonify([])
+        except Exception as exc:
+            logger.error("search_patients_advanced[ext]: unexpected — %s", exc)
+            return jsonify([])
+
+    # ── Case 1: local PCES_BASE (p_party direct query) ───────────────────────
     try:
-        results = ccm_ehr_client.search_patients(
-            first_name=first,
-            last_name=last,
-            date_of_birth=dob,
-            phone=phone,
-            email=email,
-        )
+        conditions = ["pp.party_type = 'PATIENT'", "pp.is_active = true"]
+        params: list = []
+
+        if first:
+            conditions.append("LOWER(pp.first_name) LIKE %s")
+            params.append(f"%{first.lower()}%")
+        if last:
+            conditions.append("LOWER(pp.last_name) LIKE %s")
+            params.append(f"%{last.lower()}%")
+        if middle:
+            conditions.append("LOWER(pp.middle_name) LIKE %s")
+            params.append(f"%{middle.lower()}%")
+        if dob:
+            conditions.append("CAST(pp.date_of_birth AS TEXT) LIKE %s")
+            params.append(f"%{dob}%")
+        if phone:
+            conditions.append("pp.phone LIKE %s")
+            params.append(f"%{phone}%")
+        if email:
+            conditions.append("LOWER(pp.email) LIKE %s")
+            params.append(f"%{email.lower()}%")
+
+        where = " AND ".join(conditions)
+        sql_q = f"""
+            SELECT pp.party_id, pp.first_name, pp.middle_name, pp.last_name,
+                   pp.date_of_birth, pa.line1, pa.city, pa.state, pa.postal_code
+            FROM p_party pp
+            LEFT JOIN p_address pa ON pa.party_id = pp.party_id
+            WHERE {where}
+            ORDER BY pp.last_name, pp.first_name
+            LIMIT 20
+        """
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(sql_q, params)
+                rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            pid, fn, mn, ln, dob_val, line1, city, state, postal = row
+            name_parts = [p for p in [fn, mn, ln] if p]
+            results.append({
+                "patient_id":  str(pid) if pid else "",
+                "first_name":  fn or "",
+                "middle_name": mn or "",
+                "last_name":   ln or "",
+                "full_name":   " ".join(name_parts),
+                "dob":         str(dob_val)[:10] if dob_val else "",
+                "address1":    line1 or "",
+                "city":        city or "",
+                "state":       state or "",
+                "zip":         postal or "",
+            })
         return jsonify(results)
 
-    except CCMEHRAuthError as exc:
-        logger.warning("search_patients_advanced: CCM/EHR auth error — %s", exc)
-        return jsonify({"error": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
-
-    except CCMEHRError as exc:
-        logger.warning("search_patients_advanced: CCM/EHR unavailable — %s", exc)
-        return jsonify([])
-
     except Exception as exc:
-        logger.error("search_patients_advanced: unexpected error — %s", exc)
+        logger.warning("search_patients_advanced[local]: DB unavailable — %s", exc)
         return jsonify([])
 
 
@@ -879,6 +946,51 @@ def search_hospitals():
     except Exception as exc:
         logger.error("search_hospitals: unexpected error — %s", exc)
         return jsonify({"success": False, "message": "Internal error.", "data": []}), 500
+
+
+@disciplines_bp.route("/api/affiliated-sources", methods=["GET"])
+@handle_route_errors
+def get_affiliated_sources():
+    """Return the list of affiliated hospital sources for the Select Source dropdown.
+
+    Queries p_party_affiliated from the EHR DB. Each row becomes a source option.
+    Also returns the built-in PCES_BASE source as the first entry (always present).
+
+    Returns:
+        [
+          {"id": "PCES_BASE",  "firm_name": "Default – PCES_BASE",  "location": "", "is_default": true},
+          {"id": "Ext-Contoso","firm_name": "Ext – Contoso",         "location": "…"},
+          …
+        ]
+    """
+    sources = [
+        {"id": "PCES_BASE", "firm_name": "Default – PCES_BASE", "location": "", "is_default": True}
+    ]
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT affi_id, firm_name, location
+                    FROM p_party_affiliated
+                    WHERE is_active = true
+                    ORDER BY firm_name
+                    LIMIT 50
+                    """,
+                )
+                rows = cursor.fetchall()
+        for row in rows:
+            affi_id, firm_name, location = row
+            sources.append({
+                "id":        f"Ext-{(firm_name or str(affi_id)).replace(' ', '')}",
+                "firm_name": f"Ext – {firm_name}" if firm_name else f"Ext-{affi_id}",
+                "location":  location or "",
+            })
+    except Exception as exc:
+        # Table may not exist yet — return just the default source silently
+        logger.debug("get_affiliated_sources: p_party_affiliated unavailable — %s", exc)
+
+    return jsonify(sources)
 
 
 @disciplines_bp.route("/api/patient/<patient_id>", methods=["GET"])
