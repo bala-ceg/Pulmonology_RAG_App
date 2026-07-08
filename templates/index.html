@@ -2897,9 +2897,12 @@
                     opt.textContent = s.firm_name + (s.location ? ` (${s.location})` : '');
                     sel.appendChild(opt);
                 });
-                // Restore selection or default
+                // Restore selection or default to PCES_BASE
                 if (sources.find(s => s.id === current)) sel.value = current;
-                else sel.value = 'PCES_BASE';
+                else {
+                    const def = sources.find(s => s.is_default);
+                    sel.value = def ? def.id : (sources[0]?.id || 'PCES_BASE');
+                }
                 onSourceChange();
             } catch (err) {
                 console.warn('[PSM] loadAffiliatedSources failed:', err);
@@ -2912,7 +2915,8 @@
             const badge = document.getElementById('psm-source-badge');
             const btn   = document.getElementById('psm-case2-btn');
             if (!sel) return;
-            const isExternal = sel.value !== 'PCES_BASE';
+            const _localSources = new Set(['PCES_BASE', 'PCES101', 'DEFAULT']);
+            const isExternal = !_localSources.has(sel.value);
             if (badge) {
                 badge.textContent = isExternal ? 'External' : 'Internal';
                 badge.className   = 'psm-source-badge ' + (isExternal ? 'external' : 'internal');
