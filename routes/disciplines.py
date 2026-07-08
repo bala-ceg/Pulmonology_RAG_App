@@ -806,12 +806,13 @@ def search_patients_advanced():
     """Advanced patient search — source-aware.
 
     Query params (at least one required):
-      first, last, dob (YYYY-MM-DD), phone, email
+      first, last, middle, dob (YYYY-MM-DD), phone, email
     Optional:
-      source  — "PCES_BASE" (default) = local DB; anything else = CCM/EHR external API
+      source  — "PCES_BASE" or "PCES101" (default) = local p_party on New VM;
+                any other org_code (e.g. "Contoso101") = CCM/EHR external API on Old VM
 
-    Case 1 (source=PCES_BASE): queries p_party directly via _ehr_conn()
-    Case 2 (source=Ext-*):     calls CCM/EHR API at CCM_EHR_BASE_URL
+    Case 1 (PCES_BASE / PCES101): queries p_party directly via _ehr_conn()
+    Case 2 (Contoso101, etc.):    calls CCM/EHR API at CCM_EHR_BASE_URL
     """
     first  = (request.args.get("first",  "") or "").strip()
     last   = (request.args.get("last",   "") or "").strip()
@@ -820,12 +821,15 @@ def search_patients_advanced():
     phone  = (request.args.get("phone",  "") or "").strip()
     email  = (request.args.get("email",  "") or "").strip()
     source = (request.args.get("source", "PCES_BASE") or "PCES_BASE").strip()
+    # Treat PCES101 (the org_code for the default row) the same as PCES_BASE
+    _LOCAL_SOURCES = {"PCES_BASE", "PCES101", "DEFAULT"}
+    is_local = source.upper() in _LOCAL_SOURCES
 
     if not any([first, last, middle, dob, phone, email]):
         return jsonify([])
 
-    # ── Case 2: external CCM/EHR API ─────────────────────────────────────────
-    if source != "PCES_BASE":
+    # ── Case 2: external CCM/EHR API (e.g. Contoso101 → Old VM) ─────────────
+    if not is_local:
         try:
             results = ccm_ehr_client.search_patients(
                 first_name=first,
@@ -951,44 +955,56 @@ def search_hospitals():
 @disciplines_bp.route("/api/affiliated-sources", methods=["GET"])
 @handle_route_errors
 def get_affiliated_sources():
-    """Return the list of affiliated hospital sources for the Select Source dropdown.
+    """Return the list of affiliated organisation sources for the Select Source dropdown.
 
-    Queries p_party_affiliated from the EHR DB. Each row becomes a source option.
-    Also returns the built-in PCES_BASE source as the first entry (always present).
+    Queries pces_affiliates from pces_base. The first entry is always
+    Default PCES (local New VM search). All other active entries are
+    external sources (routed to CCM/EHR API on Old VM).
 
     Returns:
         [
-          {"id": "PCES_BASE",  "firm_name": "Default – PCES_BASE",  "location": "", "is_default": true},
-          {"id": "Ext-Contoso","firm_name": "Ext – Contoso",         "location": "…"},
+          {"id": "PCES_BASE",   "firm_name": "Default PCES",      "is_default": true},
+          {"id": "Contoso101",  "firm_name": "Contoso Hospitals",  "is_default": false},
           …
         ]
     """
-    sources = [
-        {"id": "PCES_BASE", "firm_name": "Default – PCES_BASE", "location": "", "is_default": True}
-    ]
+    sources: list[dict] = []
     try:
-        with _ehr_conn() as conn:
+        with _db_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT affi_id, firm_name, location
-                    FROM p_party_affiliated
-                    WHERE is_active = true
-                    ORDER BY firm_name
+                    SELECT affl_id, organization_name, org_code, city, state
+                    FROM pces_affiliates
+                    WHERE (enddate IS NULL OR enddate >= CURRENT_DATE)
+                    ORDER BY affl_id
                     LIMIT 50
-                    """,
+                    """
                 )
                 rows = cursor.fetchall()
-        for row in rows:
-            affi_id, firm_name, location = row
+
+        for affl_id, org_name, org_code, city, state in rows:
+            is_default = (org_code or "").upper() in ("PCES101", "PCES_BASE", "DEFAULT")
+            location_parts = [p for p in [city, state] if p]
             sources.append({
-                "id":        f"Ext-{(firm_name or str(affi_id)).replace(' ', '')}",
-                "firm_name": f"Ext – {firm_name}" if firm_name else f"Ext-{affi_id}",
-                "location":  location or "",
+                "id":         "PCES_BASE" if is_default else (org_code or str(affl_id)),
+                "firm_name":  org_name or org_code or f"Source {affl_id}",
+                "location":   ", ".join(location_parts),
+                "is_default": is_default,
             })
+
     except Exception as exc:
-        # Table may not exist yet — return just the default source silently
-        logger.debug("get_affiliated_sources: p_party_affiliated unavailable — %s", exc)
+        logger.warning("get_affiliated_sources: pces_affiliates query failed — %s", exc)
+
+    # Always guarantee at least the default source
+    if not any(s["is_default"] for s in sources):
+        sources.insert(0, {
+            "id": "PCES_BASE", "firm_name": "Default PCES",
+            "location": "", "is_default": True
+        })
+    else:
+        # Move default to front
+        sources.sort(key=lambda s: (0 if s["is_default"] else 1, s["firm_name"]))
 
     return jsonify(sources)
 
