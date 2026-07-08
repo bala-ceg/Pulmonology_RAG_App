@@ -1734,25 +1734,6 @@
             min-width: 0;
         }
         .psm-source-select:focus { border-color: #6da0e8; }
-        .psm-case2-btn {
-            padding: 5px 12px;
-            background: #a3c2f2;
-            color: #1a1a2e;
-            border: 1.5px solid #7baee8;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: background .15s;
-        }
-        .psm-case2-btn.active {
-            background: #1f4e79;
-            color: #fff;
-            border-color: #1f4e79;
-        }
-        .psm-case2-btn:hover { background: #8fb8f0; color: #1a1a2e; }
-        .psm-case2-btn.active:hover { background: #17406a; color: #fff; }
         .psm-source-badge {
             font-size: 10px;
             padding: 2px 7px;
@@ -2909,11 +2890,10 @@
             }
         }
 
-        // Update badge & Case 2 Mode button when source changes
+        // Update badge when source changes
         function onSourceChange() {
             const sel = document.getElementById('psm-source-select');
             const badge = document.getElementById('psm-source-badge');
-            const btn   = document.getElementById('psm-case2-btn');
             if (!sel) return;
             const _localSources = new Set(['PCES_BASE', 'PCES101', 'DEFAULT']);
             const isExternal = !_localSources.has(sel.value);
@@ -2921,28 +2901,9 @@
                 badge.textContent = isExternal ? 'External' : 'Internal';
                 badge.className   = 'psm-source-badge ' + (isExternal ? 'external' : 'internal');
             }
-            if (btn) {
-                btn.classList.toggle('active', isExternal);
-                btn.textContent = isExternal ? '✓ Case 2 Mode' : 'Case 2 Mode';
-            }
             // Clear any previous auth error when source changes
             const authErr = document.getElementById('psm-auth-error');
             if (authErr) authErr.style.display = 'none';
-        }
-
-        // Case 2 Mode toggle: switch between PCES_BASE and first external source
-        function toggleCase2Mode() {
-            const sel = document.getElementById('psm-source-select');
-            if (!sel) return;
-            if (sel.value === 'PCES_BASE') {
-                // Switch to first external source (second option)
-                const firstExt = Array.from(sel.options).find(o => o.value !== 'PCES_BASE');
-                if (firstExt) sel.value = firstExt.value;
-                else { showToast('⚠️ No external sources configured in p_party_affiliated.'); setTimeout(hideToast,3000); return; }
-            } else {
-                sel.value = 'PCES_BASE';
-            }
-            onSourceChange();
         }
 
         async function runPatientSearch() {
@@ -5378,7 +5339,6 @@ ${data.conclusion}
           <h2>🔍 Search Patient</h2>
           <div style="display:flex;align-items:center;gap:8px;">
             <span id="psm-source-badge" class="psm-source-badge internal">Internal</span>
-            <button class="psm-case2-btn" id="psm-case2-btn" onclick="toggleCase2Mode()">Case 2 Mode</button>
             <button class="psm-close" onclick="closePatientSearchModal()">✕</button>
           </div>
         </div>
