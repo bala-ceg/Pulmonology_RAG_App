@@ -532,10 +532,26 @@ def index():
     user = request.args.get("user", "guest")
     initialize_session(user)
     from config import Config  # noqa: PLC0415
+
+    # Pre-fetch hospital name for the login modal (best-effort)
+    default_hospital: str = "Default PCES"
+    try:
+        with _db_conn() as _hconn:
+            with _hconn.cursor() as _hcur:
+                _hcur.execute(
+                    "SELECT organization_name FROM pces_affiliates WHERE org_code = 'PCES101' LIMIT 1"
+                )
+                _hrow = _hcur.fetchone()
+                if _hrow and _hrow[0]:
+                    default_hospital = _hrow[0]
+    except Exception:
+        pass
+
     return render_template(
         "index.html",
         yodha_chat_url=Config.YODHA_CHAT_URL,
         doc_patient_v2_url=Config.DOC_PATIENT_V2_URL,
+        default_hospital=default_hospital,
     )
 
 
