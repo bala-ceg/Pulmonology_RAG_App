@@ -2373,7 +2373,7 @@
         <div class="yodha-login-modal">
             <h2>PCES Login</h2>
             <p class="modal-subtitle">Log in to access PCES features</p>
-            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#1f4e79;font-weight:600;min-height:18px;"></p>
+            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#1f4e79;font-weight:600;min-height:18px;">🏥 {{ default_hospital }}</p>
             <div class="field">
                 <label for="yodha-username">Username</label>
                 <input id="yodha-username" type="text" autocomplete="username" placeholder="Username" />
@@ -5159,22 +5159,6 @@ ${data.conclusion}
             msg.textContent = '';
             document.getElementById('yodha-login-overlay').classList.add('active');
             setTimeout(() => document.getElementById('yodha-username').focus(), 50);
-            // Load hospital name into modal (best-effort)
-            _loadLoginHospitalName();
-        }
-
-        async function _loadLoginHospitalName() {
-            const el = document.getElementById('login-hospital-info');
-            if (!el) return;
-            // Try sessionStorage first (already logged in once this session)
-            const cached = sessionStorage.getItem('pces_hospital_name');
-            if (cached) { el.textContent = '🏥 ' + cached; return; }
-            try {
-                const resp = await fetch('/api/affiliated-sources');
-                const sources = await resp.json();
-                const def = sources.find(s => s.is_default);
-                if (def && def.firm_name) el.textContent = '🏥 ' + def.firm_name;
-            } catch (_) { /* silently ignore */ }
         }
 
         function closePcesLoginModal() {
@@ -5334,9 +5318,6 @@ ${data.conclusion}
             const loginBtn = document.getElementById('header-login-btn');
             if (loginBtn) loginBtn.style.display = 'inline-block';
         }
-
-        // Pre-fetch hospital name so it's ready when login modal opens
-        _loadLoginHospitalName();
 
         // Restore patient selection from sessionStorage on page load
         if (window.selectedPatientId && window.currentPatientName) {
