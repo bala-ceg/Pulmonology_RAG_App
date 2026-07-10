@@ -2373,7 +2373,7 @@
         <div class="yodha-login-modal">
             <h2>PCES Login</h2>
             <p class="modal-subtitle">Log in to access PCES features</p>
-            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#a3c2f2;font-weight:600;min-height:18px;"></p>
+            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#1f4e79;font-weight:600;min-height:18px;"></p>
             <div class="field">
                 <label for="yodha-username">Username</label>
                 <input id="yodha-username" type="text" autocomplete="username" placeholder="Username" />
@@ -5334,6 +5334,9 @@ ${data.conclusion}
             const loginBtn = document.getElementById('header-login-btn');
             if (loginBtn) loginBtn.style.display = 'inline-block';
         }
+
+        // Pre-fetch hospital name so it's ready when login modal opens
+        _loadLoginHospitalName();
 
         // Restore patient selection from sessionStorage on page load
         if (window.selectedPatientId && window.currentPatientName) {
