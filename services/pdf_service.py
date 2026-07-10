@@ -630,6 +630,7 @@ class PDFService:
         summary: str = data.get("summary", "")
         conclusion: str = data.get("conclusion", "")
         patient_problem: str = data.get("patientProblem", "")
+        hospital_name: str = data.get("hospitalName", "")
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -649,7 +650,11 @@ class PDFService:
         story: list = []
 
         patient_display_name = patient_name if patient_name else "Patient Name"
-        main_title = f"Patient – {patient_display_name} – Recording Notes"
+        patient_title = (
+            f"{patient_display_name} – {hospital_name}"
+            if hospital_name else patient_display_name
+        )
+        main_title = f"Patient – {patient_title} – Recording Notes"
 
         self._build_header(story, main_title, "Patient Recording Notes", style_map)
 
@@ -779,6 +784,7 @@ class PDFService:
         patient_name: str = data.get("patientName", "")
         patient_id: str = data.get("patientId", "")
         patient_problem: str = data.get("patientProblem", "")
+        hospital_name: str = data.get("hospitalName", "")
         # Accept both field names for backward compatibility
         messages: list[dict] = data.get("chatHistory") or data.get("messages", [])
         json_data: str = data.get("jsonData", "")
@@ -816,7 +822,12 @@ class PDFService:
         story: list = []
 
         patient_display_name = patient_name if patient_name else "Patient Name"
-        main_title = f"Patient – {patient_display_name} – Research"
+        # Format: "<patient name> - <hospital name>" when hospital is available
+        patient_title = (
+            f"{patient_display_name} – {hospital_name}"
+            if hospital_name else patient_display_name
+        )
+        main_title = f"Patient – {patient_title} – Research"
 
         self._build_header(story, main_title, "Patient Recording Notes", style_map)
 

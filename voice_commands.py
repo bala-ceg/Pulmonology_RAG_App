@@ -178,22 +178,54 @@ def _fuzzy_match(command: str) -> tuple[str, dict] | tuple[None, None]:
 # parse_voice
 # ---------------------------------------------------------------------------
 
+# Minimum similarity score for the first spoken token to be accepted as the
+# wake word.  0.75 covers common ASR mishears:
+#   "Yoda"  → 0.80   "Yohda" → 0.80   "Yoga"  → 0.75   "Jodha" → 0.75
+_WAKE_WORD_THRESHOLD: float = 0.75
+
+
 def parse_voice(text: str) -> str | None:
     """Strip wake word and return the command phrase, or None if wake word absent.
 
+    Accepts fuzzy matches of the wake word so ASR mishears like "Yoda",
+    "Yohda", "Yoga" still trigger the engine.
+
+    Resolution order:
+        1. Exact prefix match (fast path)
+        2. First-token similarity ≥ _WAKE_WORD_THRESHOLD
+
     Examples:
         "Yodha Generate"       → "generate"
-        "Yodha Save File"      → "save file"
+        "Yoda Generate"        → "generate"   (fuzzy match)
+        "Yohda Save File"      → "save file"  (fuzzy match)
         "Generate"             → None   (no wake word)
         "Yodha"                → None   (wake word only, no command)
     """
     normalised = text.lower().strip()
-    if not normalised.startswith(WAKE_WORD):
-        logger.debug("parse_voice: wake word '%s' not found in %r", WAKE_WORD, text[:60])
+    if not normalised:
         return None
 
-    command = normalised[len(WAKE_WORD):].strip()
-    return command if command else None
+    # Fast path — exact prefix
+    if normalised.startswith(WAKE_WORD):
+        command = normalised[len(WAKE_WORD):].strip()
+        return command if command else None
+
+    # Fuzzy path — check first token only
+    tokens = normalised.split()
+    first_token = tokens[0]
+    score = _token_sim(first_token, WAKE_WORD)
+    if score >= _WAKE_WORD_THRESHOLD:
+        logger.debug(
+            "parse_voice: fuzzy wake word accepted %r (score=%.2f)", first_token, score
+        )
+        command = " ".join(tokens[1:]).strip()
+        return command if command else None
+
+    logger.debug(
+        "parse_voice: wake word not found in %r (best token=%r, score=%.2f)",
+        text[:60], first_token, score,
+    )
+    return None
 
 
 # ---------------------------------------------------------------------------

@@ -2373,6 +2373,7 @@
         <div class="yodha-login-modal">
             <h2>PCES Login</h2>
             <p class="modal-subtitle">Log in to access PCES features</p>
+            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#a3c2f2;font-weight:600;min-height:18px;"></p>
             <div class="field">
                 <label for="yodha-username">Username</label>
                 <input id="yodha-username" type="text" autocomplete="username" placeholder="Username" />
@@ -3509,18 +3510,18 @@
             
             showToast("🔄 Generating PDF... Please wait.");
 
-            // Prepare data for PDF generation
-            // Get patient problem from the editable element (same as patient PDF)
             const patientProblemElement = document.getElementById('problem-text');
             const patientProblem = patientProblemElement ? patientProblemElement.textContent.trim() : '';
-            
+            const hospitalName = sessionStorage.getItem('pces_hospital_name') || '';
+
             const pdfData = {
                 doctorName: doctorName,
-                patientName: patientName || '', // Include patient name if provided
-                patientId: '', // Add patientId field for consistency
-                patientProblem: patientProblem, // Include patient problem
+                patientName: patientName || '',
+                patientId: '',
+                patientProblem: patientProblem,
+                hospitalName: hospitalName,
                 messages: messages,
-                jsonData: '' // You can add JSON data here if needed
+                jsonData: ''
             };
 
             // Generate and download PDF
@@ -4192,6 +4193,7 @@
                             formData.append('audio', audioBlob, 'patient_recording.wav');
                             formData.append('doctor_name', doctorName);
                             formData.append('patient_name', patientName);
+                            formData.append('hospital_name', sessionStorage.getItem('pces_hospital_name') || '');
 
                             const response = await fetch('/transcribe_patient_notes', {
                                 method: 'POST',
@@ -4399,7 +4401,8 @@
                 transcription: editedTranscription,
                 summary: editedSummary || 'No summary provided',
                 conclusion: editedConclusion || 'No conclusion provided',
-                patientProblem: patientProblem, // NEW: Include patient problem
+                patientProblem: patientProblem,
+                hospitalName: sessionStorage.getItem('pces_hospital_name') || '',
                 timestamp: timestamp
             };
 
@@ -4767,8 +4770,7 @@ Generated on: ${new Date().toLocaleString()}
                 const patientName = window.currentConversationPatientName || 'Patient';
                 formData.append('doctor_name', doctorName);
                 formData.append('patient_name', patientName);
-                
-                // Get selected language
+                formData.append('hospital_name', sessionStorage.getItem('pces_hospital_name') || '');
                 const language = document.getElementById('conversation-language').value;
                 formData.append('language', language);
                 
@@ -5157,6 +5159,22 @@ ${data.conclusion}
             msg.textContent = '';
             document.getElementById('yodha-login-overlay').classList.add('active');
             setTimeout(() => document.getElementById('yodha-username').focus(), 50);
+            // Load hospital name into modal (best-effort)
+            _loadLoginHospitalName();
+        }
+
+        async function _loadLoginHospitalName() {
+            const el = document.getElementById('login-hospital-info');
+            if (!el) return;
+            // Try sessionStorage first (already logged in once this session)
+            const cached = sessionStorage.getItem('pces_hospital_name');
+            if (cached) { el.textContent = '🏥 ' + cached; return; }
+            try {
+                const resp = await fetch('/api/affiliated-sources');
+                const sources = await resp.json();
+                const def = sources.find(s => s.is_default);
+                if (def && def.firm_name) el.textContent = '🏥 ' + def.firm_name;
+            } catch (_) { /* silently ignore */ }
         }
 
         function closePcesLoginModal() {
@@ -5200,6 +5218,7 @@ ${data.conclusion}
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
+                sessionStorage.setItem('pces_hospital_name', data.hospital_name || 'Default PCES');
 
                 msg.className = 'login-msg success';
                 msg.textContent = `Welcome, ${data.full_name || data.username}!`;
@@ -5266,7 +5285,7 @@ ${data.conclusion}
             // Clear auth state
             _pcesAuthed = false;
             ['pces_auth','pces_doctor_name','pces_doctor_id','pces_doctor_department',
-             'pces_doctor_email','pces_doctor_role'].forEach(k => sessionStorage.removeItem(k));
+             'pces_doctor_email','pces_doctor_role','pces_hospital_name'].forEach(k => sessionStorage.removeItem(k));
             // Clear patient
             clearPatientInfoBar();
             // Clear chat messages (end session)
