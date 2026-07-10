@@ -2827,8 +2827,11 @@
             window.currentPatientName = '';
             sessionStorage.removeItem('pces_patient_id');
             sessionStorage.removeItem('pces_patient_name');
+            sessionStorage.removeItem('pces_patient_org');
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = '—';
+            const orgEl = document.getElementById('popup-doctor-org');
+            if (orgEl) orgEl.textContent = '—';
             _updateSendBtn();
         }
 
@@ -2976,11 +2979,17 @@
         function selectPatientFromModal(p) {
             const prevPatientId = window.selectedPatientId;
             window.selectedPatientId = p.patient_id;
-            window.currentPatientName = p.full_name || '';  // keep popup in sync
+            window.currentPatientName = p.full_name || '';
             setPatientInfoBar({ full_name: p.full_name, patient_id: p.patient_id });
-            // Update popup patient name immediately if popup is visible
+            // Update popup patient name
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = p.full_name || '—';
+            // Update Organisation from the source the patient was found in
+            const sel = document.getElementById('psm-source-select');
+            const orgName = sel ? (sel.options[sel.selectedIndex]?.text || sessionStorage.getItem('pces_hospital_name') || '—') : (sessionStorage.getItem('pces_hospital_name') || '—');
+            const orgEl = document.getElementById('popup-doctor-org');
+            if (orgEl) orgEl.textContent = orgName;
+            sessionStorage.setItem('pces_patient_org', orgName);
             closePatientSearchModal();
             // Notify backend immediately so session closes right at patient change
             if (prevPatientId && prevPatientId !== p.patient_id) {
@@ -5250,8 +5259,6 @@ ${data.conclusion}
                 document.getElementById('popup-doctor-name').textContent = name;
                 document.getElementById('popup-doctor-dept').textContent = deptDisplay;
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
-                const orgEl = document.getElementById('popup-doctor-org');
-                if (orgEl) orgEl.textContent = sessionStorage.getItem('pces_hospital_name') || '—';
                 el.style.display = 'inline-block';
             }
             // Hide login button, enable gated chat buttons
@@ -5278,7 +5285,7 @@ ${data.conclusion}
             // Clear auth state
             _pcesAuthed = false;
             ['pces_auth','pces_doctor_name','pces_doctor_id','pces_doctor_department',
-             'pces_doctor_email','pces_doctor_role','pces_hospital_name'].forEach(k => sessionStorage.removeItem(k));
+             'pces_doctor_email','pces_doctor_role','pces_hospital_name','pces_patient_org'].forEach(k => sessionStorage.removeItem(k));
             // Clear patient
             clearPatientInfoBar();
             // Clear chat messages (end session)
@@ -5334,9 +5341,12 @@ ${data.conclusion}
             if (section) {
                 document.getElementById('pi-name').textContent = window.currentPatientName;
                 section.classList.add('has-patient');
-                // Also update popup
                 const popupPt = document.getElementById('popup-patient-name');
                 if (popupPt) popupPt.textContent = window.currentPatientName;
+                // Restore organisation from when patient was selected
+                const savedOrg = sessionStorage.getItem('pces_patient_org');
+                const orgEl = document.getElementById('popup-doctor-org');
+                if (orgEl && savedOrg) orgEl.textContent = savedOrg;
             }
         }
         _updateSendBtn();
