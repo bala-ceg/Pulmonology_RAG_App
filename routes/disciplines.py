@@ -582,6 +582,21 @@ def login():
                 pass  # non-critical — falls back to username
 
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
+
+        # Look up the default hospital name from pces_affiliates (best-effort)
+        hospital_name: str = "Default PCES"
+        try:
+            with _db_conn() as _hconn:
+                with _hconn.cursor() as _hcur:
+                    _hcur.execute(
+                        "SELECT organization_name FROM pces_affiliates WHERE org_code = 'PCES101' LIMIT 1"
+                    )
+                    _hrow = _hcur.fetchone()
+                    if _hrow and _hrow[0]:
+                        hospital_name = _hrow[0]
+        except Exception:
+            pass  # non-critical — keep default
+
         return jsonify({
             "success": True,
             "username": db_username,
@@ -589,7 +604,8 @@ def login():
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
-            "department": pces_role or "",   # pces_role IS the specialty (CARDIOLOGIST, PULMONOLOGIST, etc.)
+            "department": pces_role or "",   # pces_role IS the specialty (CARDIOLOGIST, etc.)
+            "hospital_name": hospital_name,
         })
     except Exception as exc:
         logger.error("Login error: %s", exc)
