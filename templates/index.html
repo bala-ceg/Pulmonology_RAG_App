@@ -2497,6 +2497,13 @@
                                 </div>
                             </div>
                             <div class="doctor-popup-row">
+                                <span class="doctor-popup-icon">🏢</span>
+                                <div>
+                                    <div class="doctor-popup-label">Organisation</div>
+                                    <div class="doctor-popup-value" id="popup-doctor-org">—</div>
+                                </div>
+                            </div>
+                            <div class="doctor-popup-row">
                                 <span class="doctor-popup-icon">🧑‍⚕️</span>
                                 <div>
                                     <div class="doctor-popup-label">Current Patient</div>
@@ -5243,6 +5250,8 @@ ${data.conclusion}
                 document.getElementById('popup-doctor-name').textContent = name;
                 document.getElementById('popup-doctor-dept').textContent = deptDisplay;
                 document.getElementById('popup-doctor-email').textContent = sessionStorage.getItem('pces_doctor_email') || '—';
+                const orgEl = document.getElementById('popup-doctor-org');
+                if (orgEl) orgEl.textContent = sessionStorage.getItem('pces_hospital_name') || '—';
                 el.style.display = 'inline-block';
             }
             // Hide login button, enable gated chat buttons
