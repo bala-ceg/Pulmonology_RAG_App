@@ -2953,9 +2953,20 @@
                     authErr.style.display = 'block';
                     return;
                 }
-                const rows = await resp.json();
+                const data = await resp.json();
                 tbody.innerHTML = '';
-                if (!Array.isArray(rows) || !rows.length) {
+                // Server-down error (503) — show named hospital message
+                if (data && data.server_error) {
+                    table.style.display = 'none';
+                    noMsg.style.display = 'none';
+                    authErr.style.display = 'none';
+                    const errMsg = data.error || 'External data source not available, please try later';
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#c62828;padding:16px;font-weight:600;">⚠️ ${errMsg}</td></tr>`;
+                    table.style.display = 'table';
+                    return;
+                }
+                const rows = Array.isArray(data) ? data : [];
+                if (!rows.length) {
                     table.style.display = 'none';
                     noMsg.style.display = 'block';
                     return;
@@ -2973,6 +2984,7 @@
                 });
             } catch(err) {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#c62828;padding:16px;">Search unavailable. Please try again.</td></tr>';
+                document.getElementById('psm-results-table').style.display = 'table';
             }
         }
 
@@ -3844,7 +3856,21 @@
         // Otherwise → fill the input field as before.
         function _handleVoiceTranscript(text) {
             if (!text) return;
-            if (text.toLowerCase().trim().startsWith('yodha')) {
+            // Fuzzy wake-word check — mirrors Python _token_sim() + parse_voice()
+            // Character-bag overlap between first spoken token and "yodha".
+            // Threshold 0.75 accepts: Yoda(0.89), Yohda(0.80), Jodha(0.80)
+            // but rejects unrelated words like "Yoga"(0.67).
+            function _tokenSim(a, b) {
+                const ca = {}, cb = {};
+                for (const c of a) ca[c] = (ca[c] || 0) + 1;
+                for (const c of b) cb[c] = (cb[c] || 0) + 1;
+                let overlap = 0;
+                for (const c in ca) if (cb[c]) overlap += Math.min(ca[c], cb[c]);
+                return overlap / Math.max(a.length, b.length);
+            }
+            const firstToken = text.trim().toLowerCase().split(/\s+/)[0];
+            const isYodha = firstToken === 'yodha' || _tokenSim(firstToken, 'yodha') >= 0.75;
+            if (isYodha) {
                 console.log('[Yodha] Command detected:', text);
                 showToast('🎤 Yodha command: ' + text);
                 setTimeout(() => hideToast(), 2500);
