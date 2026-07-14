@@ -862,6 +862,21 @@ def search_patients_advanced():
 
     # ── Case 2: external CCM/EHR API (e.g. Contoso101 → Old VM) ─────────────
     if not is_local:
+        # Resolve org_code → display name for user-facing error messages
+        source_label = source
+        try:
+            with _db_conn() as _sc:
+                with _sc.cursor() as _scur:
+                    _scur.execute(
+                        "SELECT organization_name FROM pces_affiliates WHERE org_code = %s LIMIT 1",
+                        (source,),
+                    )
+                    _srow = _scur.fetchone()
+                    if _srow and _srow[0]:
+                        source_label = _srow[0]
+        except Exception:
+            pass  # keep source_label as org_code fallback
+
         try:
             results = ccm_ehr_client.search_patients(
                 first_name=first,
@@ -875,11 +890,17 @@ def search_patients_advanced():
             logger.warning("search_patients_advanced[ext]: auth error — %s", exc)
             return jsonify({"error": "CCM/EHR token missing or expired. Contact admin.", "auth_error": True}), 401
         except CCMEHRError as exc:
-            logger.warning("search_patients_advanced[ext]: unavailable — %s", exc)
-            return jsonify([])
+            logger.warning("search_patients_advanced[ext]: server unavailable (%s) — %s", source_label, exc)
+            return jsonify({
+                "error": f"{source_label} data not available, please try later",
+                "server_error": True,
+            }), 503
         except Exception as exc:
             logger.error("search_patients_advanced[ext]: unexpected — %s", exc)
-            return jsonify([])
+            return jsonify({
+                "error": f"{source_label} data not available, please try later",
+                "server_error": True,
+            }), 503
 
     # ── Case 1: local PCES_BASE (p_party direct query) ───────────────────────
     try:
