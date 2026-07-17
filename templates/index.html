@@ -3851,32 +3851,142 @@
             }
         }
 
-        // Intercept every audio transcription result.
-        // If it starts with "yodha" → route to voice dispatch.
-        // Otherwise → fill the input field as before.
+        // ── Yodha JS-First Command Engine ──────────────────────────────────────
+        //
+        // Deterministic 3-step matching — no floating-point thresholds for wake word:
+        //   Step 1: Wake word — first spoken token in YODHA_WAKE_WORDS list (exact).
+        //   Step 2: Command   — command text matched against YODHA_COMMANDS alias table
+        //                       (exact alias first, then token-similarity ≥ 0.70).
+        //   Step 3: Execute   — call YODHA_ACTION_MAP[action]() directly in JS.
+        //                       Falls back to backend _voiceDispatch() if no match.
+        //   Bonus:  Command-only mode — if no wake word but text exactly equals a
+        //           known alias (e.g. just "Generate"), fire the command.
+        //
+        // Accepted wake-word variants (common ASR mishears of "Yodha"):
+        const YODHA_WAKE_WORDS = new Set(['yodha','yoda','yoga','yohda','jodha','yotha','iotha','yodah','yodha.']);
+
+        // Command alias table — maps spoken phrases → action names.
+        // Add more aliases here as new ASR patterns are discovered.
+        const YODHA_COMMANDS_TABLE = [
+            { aliases: ['generate','jenerate','send','submit','run','answer','go'],           action: 'sendMessage',                      label: 'Generate' },
+            { aliases: ['save file','save','save chat','file','safe file'],                   action: 'saveChat',                         label: 'Save File' },
+            { aliases: ['plain english','plain','refine','simplify','english','playenglish'], action: 'refineInput',                      label: 'Plain English' },
+            { aliases: ['start recording','start','record','begin','begin recording'],        action: 'startRecording',                   label: 'Start Recording' },
+            { aliases: ['stop recording','stop','end','finish','end recording'],              action: 'stopRecording',                    label: 'Stop Recording' },
+            { aliases: ['update knowledge bank','update kb','knowledge bank',
+                        'adhoc rag','create adhoc rag','update knowledge'],                  action: 'createVectorDB',                   label: 'Update KB' },
+            { aliases: ['generate summary','summary','summarize','summarise','summarize'],    action: 'generateSummaryFromTranscription',  label: 'Generate Summary' },
+            { aliases: ['translation','translate','translate audio'],                         action: 'openTranslationModal',             label: 'Translation' },
+            { aliases: ['record patient notes','patient notes','patient recording',
+                        'record patient','patient'],                                          action: 'startPatientRecording',            label: 'Record Patient Notes' },
+            { aliases: ['logout','log out','sign out','exit','log me out'],                   action: 'logout',                           label: 'Logout' },
+        ];
+
+        // Character-bag overlap similarity — used only for command token fuzzy fallback.
+        function _yodhaSim(a, b) {
+            const ca = {}, cb = {};
+            for (const c of a) ca[c] = (ca[c] || 0) + 1;
+            for (const c of b) cb[c] = (cb[c] || 0) + 1;
+            let overlap = 0;
+            for (const c in ca) if (cb[c]) overlap += Math.min(ca[c], cb[c]);
+            return overlap / Math.max(a.length, b.length);
+        }
+
+        // Match a spoken command phrase against YODHA_COMMANDS_TABLE.
+        // Returns { action, label } or null.
+        function _matchYodhaCommand(phrase) {
+            const norm = phrase.toLowerCase().trim();
+            // 1. Exact alias match (fastest, most reliable)
+            for (const cmd of YODHA_COMMANDS_TABLE) {
+                if (cmd.aliases.includes(norm)) return cmd;
+            }
+            // 2. Partial / multi-word exact alias (spoken phrase contains alias or vice versa)
+            for (const cmd of YODHA_COMMANDS_TABLE) {
+                for (const alias of cmd.aliases) {
+                    if (norm.includes(alias) || alias.includes(norm)) return cmd;
+                }
+            }
+            // 3. Token-similarity fallback for ASR mishears (threshold 0.70 per token)
+            const spokenTokens = norm.split(/\s+/);
+            let bestCmd = null, bestScore = 0;
+            for (const cmd of YODHA_COMMANDS_TABLE) {
+                for (const alias of cmd.aliases) {
+                    const aliasTokens = alias.split(/\s+/);
+                    const matched = spokenTokens.filter(st =>
+                        aliasTokens.some(at => _yodhaSim(st, at) >= 0.70)
+                    ).length;
+                    if (matched === 0) continue;
+                    const score = matched / Math.max(spokenTokens.length, aliasTokens.length);
+                    if (score > bestScore) { bestScore = score; bestCmd = cmd; }
+                }
+            }
+            return bestScore >= 0.60 ? bestCmd : null;
+        }
+
+        // Execute a matched command locally in JS — no network round-trip.
+        function _executeYodhaAction(cmd, rawText) {
+            const states = _getButtonStates();
+            if (states[cmd.action]) {
+                // Button is disabled — still speak feedback, don't fire
+                _speak(`${cmd.label} is not available right now.`);
+                showToast(`⚠️ ${cmd.label} not available`);
+                setTimeout(() => hideToast(), 2000);
+                return;
+            }
+            _speak(`${cmd.label}`);
+            showToast(`🎤 Yodha: ${cmd.label}`);
+            setTimeout(() => hideToast(), 2000);
+            console.log('[Yodha] Executing:', cmd.action, '← matched from:', rawText);
+            if (YODHA_ACTION_MAP[cmd.action]) {
+                setTimeout(() => YODHA_ACTION_MAP[cmd.action](), 500);
+            }
+        }
+
+        // Intercept every speech transcript.
+        //   • Wake word detected → strip it, match command, execute locally.
+        //   • No wake word, but text exactly matches a known alias → execute (hands-free mode).
+        //   • No match → fill the chat input as plain text.
         function _handleVoiceTranscript(text) {
             if (!text) return;
-            // Fuzzy wake-word check — mirrors Python _token_sim() + parse_voice()
-            // Character-bag overlap between first spoken token and "yodha".
-            // Threshold 0.75 accepts: Yoda(0.89), Yohda(0.80), Jodha(0.80)
-            // but rejects unrelated words like "Yoga"(0.67).
-            function _tokenSim(a, b) {
-                const ca = {}, cb = {};
-                for (const c of a) ca[c] = (ca[c] || 0) + 1;
-                for (const c of b) cb[c] = (cb[c] || 0) + 1;
-                let overlap = 0;
-                for (const c in ca) if (cb[c]) overlap += Math.min(ca[c], cb[c]);
-                return overlap / Math.max(a.length, b.length);
-            }
-            const firstToken = text.trim().toLowerCase().split(/\s+/)[0];
-            const isYodha = firstToken === 'yodha' || _tokenSim(firstToken, 'yodha') >= 0.75;
-            if (isYodha) {
-                console.log('[Yodha] Command detected:', text);
-                showToast('🎤 Yodha command: ' + text);
-                setTimeout(() => hideToast(), 2500);
-                _voiceDispatch(text);
+            const norm = text.trim().toLowerCase();
+            const tokens = norm.split(/\s+/);
+            const firstToken = tokens[0].replace(/[.,!?]$/, ''); // strip trailing punctuation
+
+            if (YODHA_WAKE_WORDS.has(firstToken)) {
+                // Wake word confirmed — rest is the command phrase
+                const commandPhrase = tokens.slice(1).join(' ').trim();
+                console.log('[Yodha] Wake word detected, command phrase:', commandPhrase || '(empty)');
+                if (!commandPhrase) {
+                    _speak('Yes? Please say a command.');
+                    showToast('🎤 Yodha listening…');
+                    setTimeout(() => hideToast(), 2000);
+                    return;
+                }
+                const cmd = _matchYodhaCommand(commandPhrase);
+                if (cmd) {
+                    _executeYodhaAction(cmd, text);
+                } else {
+                    // JS couldn't match — fall back to backend for edge cases
+                    console.log('[Yodha] No local match, falling back to backend:', text);
+                    showToast('🎤 Yodha (backend): ' + commandPhrase);
+                    setTimeout(() => hideToast(), 2500);
+                    _voiceDispatch(text);
+                }
             } else {
-                document.getElementById('user-input').value = text;
+                // No wake word — check if the entire text exactly matches a known alias
+                // (allows hands-free: just say "Generate" or "Save File" directly)
+                const exactCmd = (() => {
+                    for (const cmd of YODHA_COMMANDS_TABLE) {
+                        if (cmd.aliases.includes(norm)) return cmd;
+                    }
+                    return null;
+                })();
+                if (exactCmd) {
+                    console.log('[Yodha] Command-only (no wake word):', norm, '→', exactCmd.label);
+                    _executeYodhaAction(exactCmd, text);
+                } else {
+                    document.getElementById('user-input').value = text;
+                }
             }
         }
         // ── End Yodha Voice Command Engine ─────────────────────────────────────
