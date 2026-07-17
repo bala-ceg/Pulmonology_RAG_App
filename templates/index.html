@@ -553,6 +553,7 @@
         .header-right {
             flex: 1;
             display: flex;
+            align-items: center;
             justify-content: flex-end;
         }
         #logged-in-doctor {
@@ -1177,6 +1178,53 @@
             0%   { opacity: 1;   transform: scale(1);   }
             70%  { opacity: 0;   transform: scale(1.5); }
             100% { opacity: 0;   transform: scale(1.5); }
+        }
+
+        /* ── Header Yodha Listen button (circular, top-right) ────────── */
+        #header-listen-wrapper {
+            display: none;          /* hidden until logged in */
+            flex-direction: column;
+            align-items: center;
+            margin-right: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        #header-listen-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 2px solid #adb5bd;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            position: relative;
+        }
+        #header-listen-btn:hover {
+            background: #e9ecef;
+            border-color: #6c757d;
+        }
+        #header-listen-btn.listening {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+        #header-listen-btn.listening::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid #dc3545;
+            animation: yodha-pulse 1.2s ease-out infinite;
+        }
+        #header-listen-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #dc3545;
+            margin-top: 2px;
+            letter-spacing: 0.3px;
         }
         #voice-preview {
             display: none;
@@ -2469,6 +2517,12 @@
                             background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:3px 9px;
                             color:#856404;user-select:none;" title="Developer mode: toggle routing traces"
                             onclick="toggleDevTraces()">🛠 Traces <span id="dev-trace-state">ON</span></span>
+                        <!-- Yodha header Listen button — circular, shown when logged in -->
+                        <div id="header-listen-wrapper" title="Toggle Yodha continuous voice listener"
+                             onclick="requireAuth(() => toggleContinuousListen())">
+                            <div id="header-listen-btn">🎤</div>
+                            <span id="header-listen-label">Listen</span>
+                        </div>
                         <button id="header-login-btn" onclick="openPcesLoginModal()" title="Login to PCES"
                             style="display:none;margin-right:10px;background:#ffffff;color:#1a1a2e;border:2px solid #1a1a2e;
                             border-radius:8px;padding:9px 22px;font-size:15px;font-weight:700;cursor:pointer;
@@ -4105,10 +4159,15 @@
                 this._active = true;
                 this._btn = document.getElementById('yodha-listen-btn');
                 this._preview = document.getElementById('voice-preview');
+                this._hdrBtn = document.getElementById('header-listen-btn');
 
                 if (this._btn) {
                     this._btn.textContent = '🔴 Listening…';
                     this._btn.classList.add('listening');
+                }
+                if (this._hdrBtn) {
+                    this._hdrBtn.textContent = '🔴';
+                    this._hdrBtn.classList.add('listening');
                 }
                 if (this._preview) {
                     this._preview.textContent = 'Listening — speak now…';
@@ -4133,6 +4192,11 @@
                 if (this._btn) {
                     this._btn.textContent = '🎤 Listen';
                     this._btn.classList.remove('listening');
+                }
+                const hdrBtn = document.getElementById('header-listen-btn');
+                if (hdrBtn) {
+                    hdrBtn.textContent = '🎤';
+                    hdrBtn.classList.remove('listening');
                 }
                 if (this._preview) {
                     this._preview.textContent = '';
@@ -5415,6 +5479,9 @@ ${data.conclusion}
                 const btn = document.getElementById(id);
                 if (btn) btn.disabled = !authed;
             });
+            // Show/hide the header circular listen button
+            const hdrWrapper = document.getElementById('header-listen-wrapper');
+            if (hdrWrapper) hdrWrapper.style.display = authed ? 'flex' : 'none';
         }
 
         function logout() {
@@ -5428,6 +5495,8 @@ ${data.conclusion}
             const chatMessages = document.getElementById('chat-messages');
             if (chatMessages) chatMessages.innerHTML = '';
             window.adhocRagReady = false;
+            // Stop continuous listener if active
+            if (_continuousVoice && _continuousVoice.isActive) _continuousVoice._stop();
             // Reset doctor badge
             const badge = document.getElementById('logged-in-doctor');
             if (badge) badge.style.display = 'none';
