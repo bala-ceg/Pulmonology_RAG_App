@@ -24,7 +24,7 @@ except ImportError:
 # Import our custom modules
 from config import Config
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
-from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search, AdHocRAG_Search, _set_adhoc_context, AVAILABLE_TOOLS
+from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Patient_History_Search, Pinecone_KB_Search, AdHocRAG_Search, _set_adhoc_context, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 from utils.error_handlers import get_logger
 
@@ -42,6 +42,7 @@ _TOOL_SOURCE_LABELS: Dict[str, str] = {
     'Internal_VectorDB':           'Uploaded Documents (Adhoc VectorDB)',
     'AdHocRAG_Search':             'Ad Hoc RAG (Doctor/Patient Documents)',
     'PostgreSQL_Diagnosis_Search': 'PostgreSQL EHR Database',
+    'Patient_History_Search':      'PCES EHR — Patient History (p_encounter + p_diagnosis)',
     'ArXiv_Search':                'arXiv Research Papers',
     'Tavily_Search':               'Web Search (Tavily)',
     'Wikipedia_Search':            'Wikipedia',
@@ -152,9 +153,9 @@ class IntegratedMedicalRAG:
         """Setup tools with proper context injection."""
         tools = []
         
-        # Create Wikipedia, ArXiv, Tavily, PostgreSQL, Pinecone KB, and AdHocRAG tools
+        # Create Wikipedia, ArXiv, Tavily, PostgreSQL, Pinecone KB, AdHocRAG, and Patient History tools
         # (these don't need RAG manager injected via closure)
-        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search, Pinecone_KB_Search])
+        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search, Patient_History_Search, Pinecone_KB_Search])
 
         # Inject rag_manager into the AdHocRAG_Search tool via module-level holder
         from config import Config as _Config
@@ -220,6 +221,7 @@ class IntegratedMedicalRAG:
         'ArXiv_Search',
         'Tavily_Search',
         'PostgreSQL_Diagnosis_Search',
+        'Patient_History_Search',
         'Wikipedia_Search',
     ]
 
@@ -365,6 +367,7 @@ class IntegratedMedicalRAG:
         'AdHocRAG_Search',
         'Internal_VectorDB',
         'PostgreSQL_Diagnosis_Search',
+        'Patient_History_Search',
     ]
 
     _FALLBACK_TOOL: str = 'Tavily_Search'
@@ -374,6 +377,7 @@ class IntegratedMedicalRAG:
         'Internal_VectorDB',
         'ArXiv_Search',
         'PostgreSQL_Diagnosis_Search',
+        'Patient_History_Search',
         'Wikipedia_Search',
         'Tavily_Search',
     ]

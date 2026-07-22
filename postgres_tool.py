@@ -243,7 +243,152 @@ class PostgreSQLTool:
                 'tool_info': "<div class='tool-route'><strong>❌ PostgreSQL Database Tool</strong><br>Status: Error</div>"
             }
 
-    def _generate_diagnosis_summary(self, content: str, search_term: str = None, result_count: int = 0, diagnosis_codes: List[str] = None) -> str:
+    def fetch_patient_history(
+        self,
+        patient_id: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        limit: int = 20,
+    ) -> dict:
+        """Fetch full patient medical history via p_party ↔ p_encounter ↔ p_diagnosis.
+
+        Looks up encounters (hospital visits) and associated diagnoses /
+        medications for a specific patient.  Accepts either party_id or
+        first_name + last_name (at least one must be supplied).
+
+        Returns:
+            Dict with keys: content, summary, citations, tool_info  (same
+            contract as fetch_diagnosis_descriptions so callers are uniform).
+        """
+        if not patient_id and not (first_name or last_name):
+            return {
+                'content': "No patient identifier supplied — provide party_id or first/last name.",
+                'summary': "Unable to fetch patient history: no patient identifier.",
+                'citations': f"Database: {self.database}.p_encounter + p_diagnosis",
+                'tool_info': "<div class='tool-route'><strong>⚠️ Patient History Tool</strong><br>Error: no identifier</div>",
+            }
+
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Build WHERE clause dynamically
+                    if patient_id:
+                        where_clause = "A.party_id = %s"
+                        params: tuple = (patient_id, limit)
+                    else:
+                        # Name-based lookup (case-insensitive)
+                        where_parts = []
+                        param_list: list = []
+                        if first_name:
+                            where_parts.append("LOWER(A.first_name) = LOWER(%s)")
+                            param_list.append(first_name)
+                        if last_name:
+                            where_parts.append("LOWER(A.last_name) = LOWER(%s)")
+                            param_list.append(last_name)
+                        where_clause = " AND ".join(where_parts)
+                        param_list.append(limit)
+                        params = tuple(param_list)
+
+                    sql = f"""
+                        SELECT
+                            A.party_id,
+                            A.first_name,
+                            COALESCE(A.middle_name, '') AS middle_name,
+                            A.last_name,
+                            A.date_of_birth,
+                            A.gender,
+                            B.encounter_id,
+                            B.encounter_type,
+                            B.notes AS encounter_notes,
+                            C.code          AS diagnosis_code,
+                            C.description   AS diagnosis_description
+                        FROM p_party A
+                        JOIN p_encounter B ON A.party_id = B.patient_id
+                        JOIN p_diagnosis C ON B.encounter_id = C.encounter_id
+                        WHERE {where_clause}
+                          AND A.party_type = 'PATIENT'
+                        ORDER BY B.encounter_id DESC
+                        LIMIT %s
+                    """
+                    cursor.execute(sql, params)
+                    rows = cursor.fetchall()
+
+                    if not rows:
+                        label = f"patient_id={patient_id}" if patient_id else f"{first_name} {last_name}"
+                        return {
+                            'content': f"No medical history records found for {label}.",
+                            'summary': f"No encounter or diagnosis history found for {label} in the database.",
+                            'citations': f"Database: {self.database}.p_encounter + p_diagnosis",
+                            'tool_info': "<div class='tool-route'><strong>🗄️ Patient History Tool</strong><br>Result: No records</div>",
+                        }
+
+                    # Build human-readable content grouped by encounter
+                    seen_encounters: dict = {}
+                    for row in rows:
+                        enc_id = row['encounter_id']
+                        if enc_id not in seen_encounters:
+                            seen_encounters[enc_id] = {
+                                'patient_name': f"{row['first_name']} {row['middle_name']} {row['last_name']}".strip(),
+                                'dob': row['date_of_birth'],
+                                'gender': row['gender'],
+                                'encounter_type': row['encounter_type'],
+                                'notes': row['encounter_notes'],
+                                'diagnoses': [],
+                            }
+                        seen_encounters[enc_id]['diagnoses'].append({
+                            'code': row['diagnosis_code'],
+                            'description': row['diagnosis_description'],
+                        })
+
+                    content_parts = []
+                    patient_name_label = list(seen_encounters.values())[0]['patient_name']
+                    for i, (enc_id, enc) in enumerate(seen_encounters.items(), 1):
+                        diag_lines = "\n".join(
+                            f"    • [{d['code']}] {d['description']}"
+                            for d in enc['diagnoses']
+                        )
+                        content_parts.append(
+                            f"**Encounter {i} (ID: {enc_id}) — {enc['encounter_type'] or 'General Visit'}**\n"
+                            f"  Visit Notes: {enc['notes'] or 'No notes recorded'}\n"
+                            f"  Diagnoses & Medications:\n{diag_lines}"
+                        )
+
+                    full_content = (
+                        f"**Patient:** {patient_name_label}\n"
+                        f"**DOB:** {list(seen_encounters.values())[0]['dob']}  "
+                        f"**Gender:** {list(seen_encounters.values())[0]['gender']}\n\n"
+                        + "\n\n".join(content_parts)
+                    )
+
+                    summary = (
+                        f"Found {len(seen_encounters)} encounter(s) for {patient_name_label} "
+                        f"with a total of {len(rows)} diagnosis/medication entries. "
+                        "Records include visit notes, diagnosis codes, and medication descriptions "
+                        "retrieved from the PCES EHR system."
+                    )
+
+                    return {
+                        'content': full_content,
+                        'summary': summary,
+                        'citations': f"Database: {self.database} (p_party + p_encounter + p_diagnosis)",
+                        'tool_info': (
+                            f"<div class='tool-route'><strong>🏥 Patient History Tool</strong><br>"
+                            f"Patient: {patient_name_label} | "
+                            f"Encounters: {len(seen_encounters)} | "
+                            f"Diagnoses: {len(rows)}</div>"
+                        ),
+                    }
+
+        except Exception as exc:
+            logger.error("fetch_patient_history error: %s", exc)
+            return {
+                'content': f"Error retrieving patient history: {exc}",
+                'summary': "Patient history query failed due to a database error.",
+                'citations': "Database error",
+                'tool_info': "<div class='tool-route'><strong>❌ Patient History Tool</strong><br>Status: Error</div>",
+            }
+
+
         """
         Generate an LLM summary of diagnosis data consistent with other tools
         
@@ -453,3 +598,28 @@ def get_diagnosis_by_code(code: str) -> Dict[str, str]:
         Dict containing diagnosis information
     """
     return postgres_tool.get_diagnosis_by_code(code)
+
+
+def get_patient_history(
+    patient_id: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    limit: int = 20,
+) -> Dict[str, str]:
+    """Fetch patient medical history (encounters + diagnoses) from pces_ehr_ccm.
+
+    Args:
+        patient_id:  p_party.party_id  (e.g. '101')
+        first_name:  Patient first name (used when party_id unknown)
+        last_name:   Patient last name
+        limit:       Max encounter rows to return
+
+    Returns:
+        Dict with content, summary, citations, tool_info
+    """
+    return postgres_tool.fetch_patient_history(
+        patient_id=patient_id,
+        first_name=first_name,
+        last_name=last_name,
+        limit=limit,
+    )
