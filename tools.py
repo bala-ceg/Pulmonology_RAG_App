@@ -752,9 +752,12 @@ def Pinecone_KB_Search(query: str) -> str:
 _adhoc_rag_manager_holder: List = [None]
 _adhoc_context_holder: dict = {}
 
+# Patient history context holder — populated by _set_adhoc_context when a patient is selected
+_history_patient_holder: dict = {}
+
 
 def _set_adhoc_context(rag_manager, tenant_id: str, doctor_id: str, patient_id: str | None, doctor_name: str = "") -> None:
-    """Inject adhoc context used by AdHocRAG_Search at query time."""
+    """Inject adhoc context used by AdHocRAG_Search and Patient_History_Search at query time."""
     _adhoc_rag_manager_holder[0] = rag_manager
     _adhoc_context_holder.update({
         "tenant_id": tenant_id,
@@ -762,6 +765,8 @@ def _set_adhoc_context(rag_manager, tenant_id: str, doctor_id: str, patient_id: 
         "patient_id": patient_id,
         "doctor_name": doctor_name,
     })
+    # Also cache patient_id for the patient history tool
+    _history_patient_holder["patient_id"] = patient_id
 
 
 @tool
@@ -835,6 +840,107 @@ def AdHocRAG_Search(query: str) -> str:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Patient History tool — joins p_party + p_encounter + p_diagnosis
+# ---------------------------------------------------------------------------
+
+@tool
+def Patient_History_Search(query: str) -> str:
+    """
+    Retrieve a patient's complete medical history from the PCES EHR database.
+
+    Queries three linked tables in pces_ehr_ccm:
+      • p_party     — patient demographics (name, DOB, gender)
+      • p_encounter — hospital visit records (encounter type, clinical notes)
+      • p_diagnosis — diagnosis codes and medication/prescription descriptions
+
+    USE this tool when:
+    - Query asks about "patient history", "medical history", "past visits",
+      "previous diagnoses", "clinical history", "admission records"
+    - User asks about "what medications has the patient been prescribed",
+      "what conditions does the patient have", "allergy history", "drug history"
+    - User mentions a specific patient name followed by "history", "records",
+      "diagnosis", "encounters" (e.g. "Steven Raju's history")
+    - Query contains "encounter notes", "visit notes", "hospital visits",
+      "p_encounter", "p_diagnosis", "EHR history"
+    - Doctor asks to review a patient's background before treatment
+
+    DO NOT use this tool when:
+    - Query is about general medical knowledge (use Wikipedia or Pinecone_KB_Search)
+    - Query is about recent research / papers (use ArXiv_Search or Tavily_Search)
+    - Query is about uploaded session documents (use AdHocRAG_Search)
+    - No patient is selected and no patient name is mentioned in the query
+    """
+    try:
+        from postgres_tool import get_patient_history
+    except ImportError:
+        return "Patient history tool not available. Please ensure psycopg2 and database credentials are configured."
+
+    # Attempt to get the currently selected patient_id from context
+    patient_id: str | None = _history_patient_holder.get("patient_id")
+
+    # Try to parse a name from the query as a fallback
+    first_name: str | None = None
+    last_name: str | None = None
+
+    if not patient_id:
+        # Simple name-extraction heuristic: look for Title Case words not in stopwords
+        import re as _re
+        _STOPWORDS = {
+            'what', 'show', 'me', 'the', 'a', 'an', 'is', 'for', 'of', 'about',
+            'medical', 'history', 'patient', 'doctor', 'past', 'records', 'visits',
+            'please', 'diagnoses', 'diagnosis', 'medications', 'prescribed', 'has',
+            'been', 'clinical', 'encounter', 'notes', 'hospital', 'this', 'my',
+        }
+        candidates = [
+            w for w in _re.findall(r"[A-Z][a-z]+", query)
+            if w.lower() not in _STOPWORDS
+        ]
+        if len(candidates) >= 2:
+            first_name, last_name = candidates[0], candidates[1]
+        elif len(candidates) == 1:
+            first_name = candidates[0]
+
+    if not patient_id and not first_name:
+        return (
+            "No patient is currently selected. Please select a patient from the patient "
+            "search panel, or include the patient's name in your query (e.g. 'Show me "
+            "Steven Raju's medical history')."
+        )
+
+    logger.info(
+        "Patient_History_Search: patient_id=%r first=%r last=%r query=%r",
+        patient_id, first_name, last_name, query[:60],
+    )
+
+    try:
+        result = _run_with_timeout(
+            get_patient_history,
+            kwargs={"patient_id": patient_id, "first_name": first_name, "last_name": last_name},
+            timeout_seconds=15,
+        )
+    except TimeoutError:
+        return "Patient history search timed out. Please try again."
+    except Exception as exc:
+        logger.error("Patient_History_Search error: %s", exc)
+        return f"Error retrieving patient history: {exc}"
+
+    content_text = (result.get('summary') or result.get('content') or '').strip()
+    _no_data = ('no medical history', 'no records found', 'no encounter', 'error retrieving')
+    if not content_text or any(s in content_text.lower() for s in _no_data):
+        return "No medical history found for the selected patient."
+
+    # Format output
+    parts = []
+    if result.get('summary'):
+        parts.append(f"**Patient History Summary:**\n{result['summary']}\n")
+    if result.get('content'):
+        parts.append(result['content'])
+    parts.append(f"\n\nSources:\n- Source: PCES EHR Database (pces_ehr_ccm — p_encounter + p_diagnosis)")
+
+    return "\n".join(parts)
+
+
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'Wikipedia_Search': Wikipedia_Search,
@@ -843,6 +949,7 @@ AVAILABLE_TOOLS = {
     'Internal_VectorDB': Internal_VectorDB,
     'AdHocRAG_Search': AdHocRAG_Search,
     'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search,
+    'Patient_History_Search': Patient_History_Search,
     'Pinecone_KB_Search': Pinecone_KB_Search,
 }
 
@@ -861,5 +968,6 @@ def get_tool_descriptions() -> Dict[str, str]:
         'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content.",
         'AdHocRAG_Search': "Search doctor-uploaded patient-specific clinical notes, case files, and session documents in the Ad Hoc RAG store.",
         'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table.",
+        'Patient_History_Search': "Retrieve a patient's complete medical history from the EHR database — past encounters, visit notes, diagnosis codes, and medication/prescription descriptions (p_party + p_encounter + p_diagnosis).",
         'Pinecone_KB_Search': "Search PCES organisation Pinecone knowledge base for curated department clinical guidelines, protocols, and standard-of-care content.",
     }
