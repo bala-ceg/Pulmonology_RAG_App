@@ -5364,7 +5364,16 @@ ${data.conclusion}
 
         /** Doc-Patient v2 — opens URL from .env, gated by requireAuth. */
         function openDocPatientV2() {
-            window.open(DOC_PATIENT_V2_URL, '_blank');
+            const doctorName  = sessionStorage.getItem('pces_doctor_name') || '';
+            const doctorId    = sessionStorage.getItem('pces_doctor_id')   || '';
+            const patientName = sessionStorage.getItem('pces_patient_name')|| '';
+            const patientId   = sessionStorage.getItem('pces_patient_id')  || window.selectedPatientId || '';
+            const url = new URL(DOC_PATIENT_V2_URL);
+            if (doctorName)  url.searchParams.set('doctor',     doctorName);
+            if (doctorId)    url.searchParams.set('doctor_id',  doctorId);
+            if (patientName) url.searchParams.set('patient',    patientName);
+            if (patientId)   url.searchParams.set('patient_id', patientId);
+            window.open(url.toString(), '_blank');
         }
 
         function openPcesLoginModal() {
