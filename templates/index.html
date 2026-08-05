@@ -2272,6 +2272,288 @@
             border-bottom: none;
         }
 
+        /* ── Reference desktop layout ───────────────────────────────── */
+        body {
+            background: #fff;
+            padding: 8px;
+            min-width: 1024px;
+        }
+
+        .container {
+            height: calc(100vh - 16px);
+            gap: 16px;
+            background: #fff;
+        }
+
+        .sidebar {
+            width: 278px;
+            height: 100%;
+            padding: 10px;
+            color: #111;
+            background: #fff;
+            border: 1px solid #111;
+            transition: none;
+        }
+
+        .sidebar-scroll-area {
+            overflow: auto;
+        }
+
+        .sidebar-bottom {
+            display: none;
+        }
+
+        .sidebar ul li.no-bullet {
+            margin: 0 0 8px;
+            overflow: visible;
+            white-space: normal;
+        }
+
+        .sidebar-section-box {
+            min-height: 80px;
+            margin: 0;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #111;
+            border-radius: 13px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .sidebar-section-label {
+            margin: 0;
+            color: #111;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 18px;
+            text-align: center;
+        }
+
+        .section-btn {
+            width: 110px;
+            min-height: 31px;
+            margin: 8px auto 0;
+            padding: 3px 10px;
+            color: #111;
+            background: #a3c2f2;
+            border: 1px solid #183b64;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 13px;
+        }
+
+        .section-btn:hover:not(:disabled) {
+            background: #8fb4e8;
+        }
+
+        .chat-container {
+            height: 100%;
+            min-width: 0;
+        }
+
+        .chat-header {
+            height: 65px;
+            flex: 0 0 65px;
+            padding: 7px 16px;
+            background: #a3c2f2;
+            border: 1px solid #5f7e9f;
+        }
+
+        .header-content {
+            position: relative;
+            height: 100%;
+            justify-content: flex-end;
+        }
+
+        .header-spacer {
+            display: none;
+        }
+
+        .header-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            gap: 10px;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+        }
+
+        .header-center .logo {
+            width: 45px;
+            height: 45px;
+        }
+
+        .header-center h1 {
+            margin: 0;
+            font-size: clamp(20px, 2.05vw, 26px);
+            line-height: 1;
+        }
+
+        .header-right {
+            flex: 0 0 auto;
+        }
+
+        #logged-in-doctor {
+            font-size: 11px;
+            padding: 5px 10px;
+        }
+
+        .chat-messages {
+            position: relative;
+            margin: 6px 0 8px;
+            padding: 12px;
+            background: #fff;
+            border: 1px solid #111;
+        }
+
+        #chat-messages:empty::before {
+            content: "AI RESPONSE AREA";
+            position: absolute;
+            top: 9px;
+            left: 0;
+            width: 100%;
+            color: #111;
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .medical-history-panel {
+            flex: 0 0 105px;
+            margin-bottom: 7px;
+            overflow: hidden;
+            border: 1px solid #111;
+            background: #fff;
+        }
+
+        .medical-history-table {
+            width: 100%;
+            height: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            color: #111;
+            font-size: 13px;
+        }
+
+        .medical-history-table th,
+        .medical-history-table td {
+            padding: 4px 8px;
+            border-right: 1px solid #111;
+            border-bottom: 1px solid #111;
+            vertical-align: middle;
+        }
+
+        .medical-history-table th:last-child,
+        .medical-history-table td:last-child {
+            border-right: 0;
+        }
+
+        .medical-history-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .medical-history-table th {
+            height: 25px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .medical-history-table .history-empty {
+            color: #6b7280;
+            font-style: italic;
+            text-align: center;
+        }
+
+        .problem-row {
+            flex: 0 0 47px;
+            min-height: 47px;
+            margin: 0 0 6px;
+            padding: 4px;
+            border: 0;
+            border-radius: 6px;
+            background: #eef1f5;
+        }
+
+        .patient-info-section {
+            flex-basis: 30%;
+            min-height: 39px;
+            padding: 4px 8px;
+            border-color: #c8d1db;
+            border-radius: 5px;
+            background: #f8fafc;
+            font-size: 10px;
+        }
+
+        .patient-info-section .pi-placeholder {
+            font-size: 10px;
+        }
+
+        .patient-problem-section {
+            gap: 7px;
+        }
+
+        .pill {
+            padding: 7px 12px;
+            font-size: 12px;
+        }
+
+        .pill.large {
+            min-height: 35px;
+            padding: 7px 14px;
+            font-size: 12px;
+        }
+
+        .chat-input {
+            flex: 0 0 42px;
+            min-height: 42px;
+            gap: 5px;
+            padding: 3px 0;
+            border: 0;
+        }
+
+        #user-input {
+            min-width: 120px;
+            height: 31px;
+            padding: 6px 8px;
+            font-size: 11px;
+            border-color: #c9ced6;
+        }
+
+        .chat-input button {
+            height: 31px;
+            margin-left: 0;
+            padding: 5px 8px;
+            color: #111;
+            font-size: 11px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 1100px) {
+            body {
+                min-width: 0;
+                padding: 4px;
+            }
+
+            .container {
+                height: calc(100vh - 8px);
+                gap: 8px;
+            }
+
+            .sidebar {
+                width: 225px;
+            }
+
+            .header-center h1 {
+                font-size: 18px;
+            }
+
+            .chat-input {
+                overflow-x: auto;
+            }
+        }
     </style>
 </head>
 <body> 
@@ -2495,8 +2777,8 @@
             <ul>
             <!-- Section 1: Create Local Data -->
                 <li class="no-bullet">
-                <div class="sidebar-section-label">1. Create Local Data</div>
                 <div class="sidebar-section-box">
+                    <div class="sidebar-section-label">1. Create Local Data</div>
                     <button class="section-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
                     <!-- hidden: Add PDF and Update KB kept for JS/voice commands -->
@@ -2507,8 +2789,8 @@
 
             <!-- Section 2: Doc / Patient Conversation -->
             <li class="no-bullet">
-            <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
             <div class="sidebar-section-box">
+                <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
                 <button class="section-btn" id="start-conversation-btn">Start<br>Conversation</button>
                 <!-- hidden stop button kept for JS state management -->
                 <button class="section-btn" style="display:none" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>End Conversation</button>
@@ -2517,16 +2799,16 @@
 
             <!-- Section 3: Doc / Patient Multi-Lingual -->
             <li class="no-bullet">
-            <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
             <div class="sidebar-section-box">
+                <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
                 <button class="section-btn" onclick="requireAuth(() => openDocPatientV2())">Start<br>Conversation</button>
             </div>
             </li>
 
             <!-- Section 4: Record Patient Notes -->
             <li class="no-bullet">
-            <div class="sidebar-section-label">4. Record Patient Notes</div>
             <div class="sidebar-section-box">
+                <div class="sidebar-section-label">4. Record Patient Notes</div>
                 <button class="section-btn" id="record-patient-btn" onclick="requireAuth(() => startPatientRecording())">Start<br>Conversation</button>
                 <!-- hidden stop button kept for JS state management -->
                 <button class="section-btn" style="display:none" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>End Conversation</button>
@@ -2622,7 +2904,30 @@
                 </div>
             </div>
             <div id="chat-messages" class="chat-messages"></div>
-            
+
+            <!-- Frontend-only patient history shell; data wiring is intentionally deferred. -->
+            <section class="medical-history-panel" aria-label="Medical History">
+                <table class="medical-history-table">
+                    <colgroup>
+                        <col style="width:60px">
+                        <col style="width:108px">
+                        <col>
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">S No</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Medical History</th>
+                        </tr>
+                    </thead>
+                    <tbody id="medical-history-body">
+                        <tr>
+                            <td class="history-empty" colspan="3" id="medical-history-empty-state">Select a patient to view medical history.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
             <!-- Problem Row Section -->
             <div class="problem-row">
               <!-- Patient Info — 30% left (click opens search modal) -->
@@ -2901,6 +3206,14 @@
             if (sendBtn) sendBtn.disabled = !(_pcesAuthed && window.selectedPatientId);
         }
 
+        function updateMedicalHistoryEmptyState(hasPatient) {
+            const state = document.getElementById('medical-history-empty-state');
+            if (!state) return;
+            state.textContent = hasPatient
+                ? 'No medical history is available for the selected patient.'
+                : 'Select a patient to view medical history.';
+        }
+
         function setPatientInfoBar(data) {
             const section = document.getElementById('patient-info-section');
             if (!section) return;
@@ -2915,6 +3228,7 @@
                 window.currentPatientName = data.full_name;
                 sessionStorage.setItem('pces_patient_name', data.full_name);
             }
+            updateMedicalHistoryEmptyState(Boolean(window.selectedPatientId));
             _updateSendBtn();
         }
 
@@ -2933,6 +3247,7 @@
             if (popupPt) popupPt.textContent = '—';
             const orgEl = document.getElementById('popup-doctor-org');
             if (orgEl) orgEl.textContent = '—';
+            updateMedicalHistoryEmptyState(false);
             _updateSendBtn();
         }
 
