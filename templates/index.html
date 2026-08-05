@@ -95,6 +95,23 @@
             overflow: hidden;            /* Prevent container scrolling */
         }
 
+        .sidebar-section-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #d0e4f7;
+            letter-spacing: 0.4px;
+            margin: 6px 4px 2px 4px;
+        }
+
+        .sidebar-btn-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .sidebar-btn-row button {
+            flex: 1;
+        }
+
         .sidebar .light-btn {
             background-color: #a3c2f2;  /* Choose Files blue */
             color: #1a1a2e;
@@ -2442,11 +2459,12 @@
         <div class="sidebar" id="sidebar">
             <div class="sidebar-scroll-area">
             <ul>
-                <!-- inside your existing <ul> ... -->
+            <!-- Section 1: Create Local Data -->
                 <li class="no-bullet">
+                <div class="sidebar-section-label">1. Create Local Data</div>
                 <ul class="red-box">
                     <li>
-                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Choose Files</button>
+                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
                     </li>
                     <li>
@@ -2458,30 +2476,34 @@
                 </ul>
                 </li>
 
-                
-            <!-- Doctor-Patient Conversation (moved above Record Patient Notes) -->
+            <!-- Section 2: Doc / Patient Conversation -->
             <li class="no-bullet">
+            <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
             <ul class="red-box">
-                <li>
-                    <button class="conversation-btn" id="start-conversation-btn">Doc / Patient Conversation</button>
-                </li>
-                <li>
-                    <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>Stop Recording</button>
-                </li>
-                <li>
-                    <button class="doc-patient-v2-btn" onclick="requireAuth(() => openDocPatientV2())">Doc-Patient v2</button>
+                <li class="sidebar-btn-row">
+                    <button class="conversation-btn" id="start-conversation-btn">Start Conversation</button>
+                    <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>End Conversation</button>
                 </li>
             </ul>
             </li>
 
-            <!-- Record Patient Notes (moved below Doctor-Patient Conversation) -->
+            <!-- Section 3: Doc / Patient Multi-Lingual -->
             <li class="no-bullet">
+            <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
             <ul class="red-box">
                 <li>
-                    <button id="record-patient-btn" class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Record Patient Notes</button>
+                    <button class="doc-patient-v2-btn" onclick="requireAuth(() => openDocPatientV2())">Start Conversation</button>
                 </li>
-                <li>
-                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>Stop Patient Recording</button>
+            </ul>
+            </li>
+
+            <!-- Section 4: Record Patient Notes -->
+            <li class="no-bullet">
+            <div class="sidebar-section-label">4. Record Patient Notes</div>
+            <ul class="red-box">
+                <li class="sidebar-btn-row">
+                    <button id="record-patient-btn" class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Start Conversation</button>
+                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>End Conversation</button>
                 </li>
             </ul>
             </li>
