@@ -98,9 +98,9 @@
         .sidebar-section-label {
             font-size: 12px;
             font-weight: 700;
-            color: #d0e4f7;
-            letter-spacing: 0.4px;
-            margin: 6px 4px 2px 4px;
+            color: #1a3a5c;
+            letter-spacing: 0.3px;
+            margin: 8px 2px 4px 2px;
         }
 
         .sidebar-btn-row {
@@ -110,6 +110,40 @@
 
         .sidebar-btn-row button {
             flex: 1;
+        }
+
+        /* Section box: white card on light sidebar */
+        .sidebar-section-box {
+            background: #fff;
+            border: 1.5px solid #d0d8e8;
+            border-radius: 6px;
+            padding: 10px 10px 4px 10px;
+            margin-bottom: 4px;
+        }
+
+        /* Primary action button inside section boxes */
+        .section-btn {
+            background: #fff;
+            color: #1a3a5c;
+            font-weight: 600;
+            font-size: 13px;
+            width: 100%;
+            padding: 9px 10px;
+            border: 1.5px solid #a3c2f2;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .section-btn:hover {
+            background: #e8f0fc;
+        }
+
+        .section-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         .sidebar .light-btn {
@@ -451,9 +485,9 @@
         }
 
         .sidebar {
-            background-color: #333;
-            color: white;
-            width: 240px;
+            background-color: #eef2f7;
+            color: #1a3a5c;
+            width: 220px;
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -475,7 +509,7 @@
         .sidebar-bottom {
             flex-shrink: 0;
             padding: 10px 0 4px;
-            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-top: 1px solid #c8d8ec;
             margin-top: 8px;
         }
 
@@ -485,17 +519,17 @@
         }
 
         .sidebar-scroll-area::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.05);
             border-radius: 3px;
         }
 
         .sidebar-scroll-area::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.2);
             border-radius: 3px;
         }
 
         .sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.35);
         }
 
         .sidebar.collapsed {
@@ -1985,13 +2019,13 @@
         }
 
        .red-box {
-        border: 2px solid white !important;
+       border: 1.5px solid #c8d8ec;
         border-radius: 6px;
-        padding: 12px 36px;
+       padding: 10px;
         margin: 8px auto;
-        background-color: transparent;
+       background-color: #fff;
         max-width: 100%;
-        max-height: 250px;           /* Increased from 200px to accommodate all buttons */
+       max-height: 250px;
         overflow-y: auto;
         }
 
@@ -2006,17 +2040,17 @@
         }
 
         .red-box::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.05);
             border-radius: 3px;
         }
 
         .red-box::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.6);
+            background: rgba(0, 0, 0, 0.2);
             border-radius: 3px;
         }
 
         .red-box::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(0, 0, 0, 0.35);
         }
 
         .red-box li {
@@ -2462,50 +2496,41 @@
             <!-- Section 1: Create Local Data -->
                 <li class="no-bullet">
                 <div class="sidebar-section-label">1. Create Local Data</div>
-                <ul class="red-box">
-                    <li>
-                    <button class="light-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
+                <div class="sidebar-section-box">
+                    <button class="section-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
-                    </li>
-                    <li>
-                    <button class="dark-btn" onclick="requireAuth(() => uploadFiles('pdf'))">Add PDF</button>
-                    </li>
-                    <li>
-                    <button class="dark-btn" onclick="requireAuth(() => createVectorDB())">Update KB</button>
-                    </li>
-                </ul>
+                    <!-- hidden: Add PDF and Update KB kept for JS/voice commands -->
+                    <button class="section-btn" style="display:none" onclick="requireAuth(() => uploadFiles('pdf'))" id="add-pdf-btn">Add PDF</button>
+                    <button class="section-btn" style="display:none" onclick="requireAuth(() => createVectorDB())" id="update-kb-btn">Update KB</button>
+                </div>
                 </li>
 
             <!-- Section 2: Doc / Patient Conversation -->
             <li class="no-bullet">
             <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
-            <ul class="red-box">
-                <li class="sidebar-btn-row">
-                    <button class="conversation-btn" id="start-conversation-btn">Start Conversation</button>
-                    <button class="light-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>End Conversation</button>
-                </li>
-            </ul>
+            <div class="sidebar-section-box">
+                <button class="section-btn" id="start-conversation-btn">Start<br>Conversation</button>
+                <!-- hidden stop button kept for JS state management -->
+                <button class="section-btn" style="display:none" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>End Conversation</button>
+            </div>
             </li>
 
             <!-- Section 3: Doc / Patient Multi-Lingual -->
             <li class="no-bullet">
             <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
-            <ul class="red-box">
-                <li>
-                    <button class="doc-patient-v2-btn" onclick="requireAuth(() => openDocPatientV2())">Start Conversation</button>
-                </li>
-            </ul>
+            <div class="sidebar-section-box">
+                <button class="section-btn" onclick="requireAuth(() => openDocPatientV2())">Start<br>Conversation</button>
+            </div>
             </li>
 
             <!-- Section 4: Record Patient Notes -->
             <li class="no-bullet">
             <div class="sidebar-section-label">4. Record Patient Notes</div>
-            <ul class="red-box">
-                <li class="sidebar-btn-row">
-                    <button id="record-patient-btn" class="patient-notes-btn" onclick="requireAuth(() => startPatientRecording())">Start Conversation</button>
-                    <button class="light-btn" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>End Conversation</button>
-                </li>
-            </ul>
+            <div class="sidebar-section-box">
+                <button class="section-btn" id="record-patient-btn" onclick="requireAuth(() => startPatientRecording())">Start<br>Conversation</button>
+                <!-- hidden stop button kept for JS state management -->
+                <button class="section-btn" style="display:none" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>End Conversation</button>
+            </div>
             </li>
 
             <!-- SME Training Panel -->
