@@ -2372,6 +2372,53 @@
             background: #8fb4e8;
         }
 
+        .section-action-row,
+        .recording-action-row {
+            display: flex;
+            width: 100%;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .section-action-row {
+            margin-top: 8px;
+        }
+
+        .section-action-row[hidden],
+        .recording-action-row [hidden] {
+            display: none;
+        }
+
+        .section-action-row .section-btn,
+        .recording-action-row .section-btn {
+            margin: 0;
+        }
+
+        .section-action-row .section-btn {
+            width: calc(50% - 4px);
+        }
+
+        .recording-action-row.is-recording {
+            justify-content: space-between;
+        }
+
+        .recording-action-row.is-recording .section-btn {
+            width: calc(50% - 4px);
+        }
+
+        .file-selection-status {
+            min-height: 14px;
+            margin-top: 5px;
+            color: #334155;
+            font-size: 10px;
+            line-height: 14px;
+            text-align: center;
+        }
+
+        .file-selection-status[hidden] {
+            display: none;
+        }
+
         .chat-container {
             height: 100%;
             min-width: 0;
@@ -2805,9 +2852,11 @@
                     <div class="sidebar-section-label">1. Create Local Data</div>
                     <button class="section-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
                     <input type="file" id="pdf-upload" multiple style="display: none;">
-                    <!-- hidden: Add PDF and Update KB kept for JS/voice commands -->
-                    <button class="section-btn" style="display:none" onclick="requireAuth(() => uploadFiles('pdf'))" id="add-pdf-btn">Add PDF</button>
-                    <button class="section-btn" style="display:none" onclick="requireAuth(() => createVectorDB())" id="update-kb-btn">Update KB</button>
+                    <div id="pdf-selection-status" class="file-selection-status" hidden aria-live="polite"></div>
+                    <div id="pdf-upload-actions" class="section-action-row" hidden>
+                        <button class="section-btn" onclick="requireAuth(() => uploadFiles('pdf'))" id="add-pdf-btn">Add PDF</button>
+                        <button class="section-btn" onclick="requireAuth(() => createVectorDB())" id="update-kb-btn" hidden>Update KB</button>
+                    </div>
                 </div>
                 </li>
 
@@ -2815,9 +2864,10 @@
             <li class="no-bullet">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
-                <button class="section-btn" id="start-conversation-btn">Start<br>Conversation</button>
-                <!-- hidden stop button kept for JS state management -->
-                <button class="section-btn" style="display:none" onclick="stopConversationRecording()" id="stop-conversation-btn" disabled>End Conversation</button>
+                <div id="conversation-recording-actions" class="recording-action-row">
+                    <button class="section-btn" id="start-conversation-btn">Start<br>Conversation</button>
+                    <button class="section-btn" onclick="stopConversationRecording()" id="stop-conversation-btn" hidden disabled>End<br>Conversation</button>
+                </div>
             </div>
             </li>
 
@@ -2833,9 +2883,10 @@
             <li class="no-bullet">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">4. Record Patient Notes</div>
-                <button class="section-btn" id="record-patient-btn" onclick="requireAuth(() => startPatientRecording())">Start<br>Conversation</button>
-                <!-- hidden stop button kept for JS state management -->
-                <button class="section-btn" style="display:none" onclick="stopPatientRecording()" id="stop-patient-btn" disabled>End Conversation</button>
+                <div id="patient-recording-actions" class="recording-action-row">
+                    <button class="section-btn" id="record-patient-btn" onclick="requireAuth(() => startPatientRecording())">Start<br>Conversation</button>
+                    <button class="section-btn" onclick="stopPatientRecording()" id="stop-patient-btn" hidden disabled>End<br>Conversation</button>
+                </div>
             </div>
             </li>
 
@@ -3236,6 +3287,59 @@
             state.textContent = hasPatient
                 ? 'No medical history is available for the selected patient.'
                 : 'Select a patient to view medical history.';
+        }
+
+        function setPdfUploadControls({ hasFiles, uploaded = false, busy = false }) {
+            const actions = document.getElementById('pdf-upload-actions');
+            const addButton = document.getElementById('add-pdf-btn');
+            const updateButton = document.getElementById('update-kb-btn');
+            const status = document.getElementById('pdf-selection-status');
+            const input = document.getElementById('pdf-upload');
+            if (!actions || !addButton || !updateButton || !status || !input) return;
+
+            const fileCount = input.files.length;
+            actions.hidden = !hasFiles;
+            addButton.hidden = !hasFiles;
+            updateButton.hidden = !uploaded;
+            addButton.disabled = busy;
+            updateButton.disabled = busy || !uploaded;
+
+            if (!hasFiles) {
+                status.hidden = true;
+                status.textContent = '';
+                return;
+            }
+
+            status.hidden = false;
+            if (busy) {
+                status.textContent = uploaded
+                    ? 'Updating knowledge bank…'
+                    : 'Uploading selected PDF file(s)…';
+            } else if (uploaded) {
+                status.textContent = `${fileCount} PDF file${fileCount === 1 ? '' : 's'} uploaded. You can now update the KB.`;
+            } else {
+                status.textContent = `${fileCount} PDF file${fileCount === 1 ? '' : 's'} selected. Add them to upload.`;
+            }
+        }
+
+        function setRecordingActionState(type, isRecording) {
+            const isConversation = type === 'conversation';
+            const row = document.getElementById(
+                isConversation ? 'conversation-recording-actions' : 'patient-recording-actions'
+            );
+            const endButton = document.getElementById(
+                isConversation ? 'stop-conversation-btn' : 'stop-patient-btn'
+            );
+            if (!row || !endButton) return;
+            row.classList.toggle('is-recording', isRecording);
+            endButton.hidden = !isRecording;
+        }
+
+        const pdfUploadInput = document.getElementById('pdf-upload');
+        if (pdfUploadInput) {
+            pdfUploadInput.addEventListener('change', () => {
+                setPdfUploadControls({ hasFiles: pdfUploadInput.files.length > 0 });
+            });
         }
 
         function setPatientInfoBar(data) {
@@ -4776,6 +4880,7 @@
                         // Reset button states
                         document.getElementById('record-patient-btn').disabled = false;
                         document.getElementById('stop-patient-btn').disabled = true;
+                        setRecordingActionState('patient', false);
                         
                         // Clear timeout if it exists
                         if (patientRecordingTimeout) {
@@ -4834,6 +4939,7 @@
                     });
 
                     mediaRecorder.start();
+                    setRecordingActionState('patient', true);
                     
                     // Set 3-minute timeout
                     patientRecordingTimeout = setTimeout(() => {
@@ -4850,6 +4956,7 @@
                     // Reset button states on error
                     document.getElementById('record-patient-btn').disabled = false;
                     document.getElementById('stop-patient-btn').disabled = true;
+                    setRecordingActionState('patient', false);
                 });
         }
 
@@ -5100,6 +5207,10 @@ Generated on: ${new Date().toLocaleString()}
 
         async function uploadFiles(type) {     
             const inputElement = type === 'pdf' ? document.getElementById('pdf-upload') : document.getElementById('url-upload');
+            if (!inputElement) {
+                showToast('Upload control is unavailable.');
+                return;
+            }
             const files = inputElement.files;
 
             if (!files.length) {
@@ -5121,46 +5232,74 @@ Generated on: ${new Date().toLocaleString()}
             formData.append('user', 'guest');
 
             const endpoint = type === 'pdf' ? '/upload_pdf' : '/upload_url';
-            
-            fetch(endpoint, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                showToast(data.message || "Upload successful");
-                setTimeout(() => hideToast(), 1000);
+
+            if (type === 'pdf') {
+                setPdfUploadControls({ hasFiles: true, busy: true });
+            }
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (!response.ok || (type === 'pdf' && !Array.isArray(data.files))) {
+                    throw new Error(data.error || data.message || 'Upload failed');
+                }
+
+                showToast(`✅ ${data.message || 'PDFs uploaded successfully'}`);
+                if (type === 'pdf') {
+                    setPdfUploadControls({ hasFiles: true, uploaded: true });
+                }
+                setTimeout(() => hideToast(), 3000);
                 console.log("Response:", data);
-            })
-            .catch(error => {
-                showToast("Upload failed");
-                setTimeout(() => hideToast(), 1000);
-                console.error("Error:", error);
-            });
+            } catch (error) {
+                const message = error.message || 'Upload failed';
+                showToast(`❌ ${message}`);
+                if (type === 'pdf') {
+                    setPdfUploadControls({ hasFiles: true });
+                }
+                setTimeout(() => hideToast(), 4000);
+                console.error("Upload error:", error);
+            }
         }
 
 
         
         async function createVectorDB() {
-            showToast("Knowledge Bank is updating... please wait.");
-            let response = await fetch('/create_vector_db', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
-                    patient_id: window.selectedPatientId || ''
-                })
-            });
-            let data = await response.json();
-            if (response.ok) {
-                window.adhocRagReady = true;
-                console.log('[PCES Session] Ad Hoc RAG built successfully — adhocRagReady=true');
-                showToast("✅ Knowledge Bank updated. Ad Hoc RAG active.");
-            } else {
-                console.warn('[PCES Session] Ad Hoc RAG build failed — adhocRagReady remains false');
-                showToast("Knowledge Bank update failed.");
+            const pdfInput = document.getElementById('pdf-upload');
+            const hasSelectedPdf = Boolean(pdfInput && pdfInput.files.length);
+            if (hasSelectedPdf) {
+                setPdfUploadControls({ hasFiles: true, uploaded: true, busy: true });
             }
-            setTimeout(() => hideToast(), 2000);
+            showToast("Knowledge Bank is updating... please wait.");
+            try {
+                const response = await fetch('/create_vector_db', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        doctor_id: sessionStorage.getItem('pces_doctor_id') || '',
+                        patient_id: window.selectedPatientId || ''
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    window.adhocRagReady = true;
+                    console.log('[PCES Session] Ad Hoc RAG built successfully — adhocRagReady=true');
+                    showToast(`✅ ${data.message || 'Knowledge Bank updated. Ad Hoc RAG active.'}`);
+                } else {
+                    console.warn('[PCES Session] Ad Hoc RAG build failed — adhocRagReady remains false');
+                    showToast(`❌ ${data.error || data.message || 'Knowledge Bank update failed.'}`);
+                }
+            } catch (error) {
+                console.error('[PCES Session] Ad Hoc RAG request failed:', error);
+                showToast('❌ Knowledge Bank update failed. Please try again.');
+            } finally {
+                if (hasSelectedPdf) {
+                    setPdfUploadControls({ hasFiles: true, uploaded: true });
+                }
+                setTimeout(() => hideToast(), 3000);
+            }
         }
 
         function toggleSidebar() {
@@ -5333,6 +5472,7 @@ Generated on: ${new Date().toLocaleString()}
                     conversationIsRecording = true;
                     document.getElementById('start-conversation-btn').disabled = true;
                     document.getElementById('stop-conversation-btn').disabled = false;
+                    setRecordingActionState('conversation', true);
                     showToast('Recording doctor-patient conversation...');
                 };
                 
@@ -5340,6 +5480,7 @@ Generated on: ${new Date().toLocaleString()}
                     conversationIsRecording = false;
                     document.getElementById('start-conversation-btn').disabled = false;
                     document.getElementById('stop-conversation-btn').disabled = true;
+                    setRecordingActionState('conversation', false);
                     
                     // Stop all tracks
                     stream.getTracks().forEach(track => track.stop());
@@ -5351,6 +5492,7 @@ Generated on: ${new Date().toLocaleString()}
                 
             } catch (error) {
                 console.error('Error starting conversation recording:', error);
+                setRecordingActionState('conversation', false);
                 showToast('Error starting recording. Please check microphone permissions.');
             }
         }
