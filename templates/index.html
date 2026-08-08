@@ -2334,7 +2334,7 @@
         }
 
         .sidebar-section-box {
-            min-height: 80px;
+            min-height: 90px;
             margin: 0;
             padding: 10px;
             background: #fff;
@@ -2354,7 +2354,10 @@
             text-align: center;
         }
 
-        .section-btn {
+        /* ── Canonical sidebar button ── */
+        .section-btn,
+        .sidebar .yodha-chat-btn,
+        .sidebar .rlhf-admin-btn {
             width: 110px;
             min-height: 31px;
             margin: 8px auto 0;
@@ -2366,10 +2369,26 @@
             font-size: 12px;
             font-weight: 600;
             line-height: 13px;
+            text-align: center;
+            cursor: pointer;
+            display: inline-block;
         }
 
-        .section-btn:hover:not(:disabled) {
+        .section-btn:hover:not(:disabled),
+        .sidebar .yodha-chat-btn:hover,
+        .sidebar .rlhf-admin-btn:hover {
             background: #8fb4e8;
+        }
+
+        /* Chat Services / SME Services — full-width within their container */
+        .sidebar .yodha-chat-btn {
+            width: 100%;
+            margin: 0;
+        }
+
+        .sidebar .rlhf-admin-btn {
+            width: 100%;
+            margin: 0;
         }
 
         .section-action-row,
@@ -2480,15 +2499,15 @@
         }
 
         #chat-messages:empty::before {
-            content: "AI RESPONSE AREA";
+            content: "CLINICAL AI RESPONSE";
             position: absolute;
             top: 9px;
-            left: 0;
-            width: 100%;
+            left: 12px;
+            width: auto;
             color: #111;
             font-size: 14px;
             font-weight: 700;
-            text-align: center;
+            text-align: left;
         }
 
         .medical-history-panel {
@@ -2894,7 +2913,7 @@
             <li id="sme-training-container" class="no-bullet" style="display:none">
             <ul class="red-box">
                 <li>
-                    <button id="sme-training-btn" class="rlhf-admin-btn" onclick="window.open('/admin/rlhf', '_blank')">SME Training</button>
+                    <button id="sme-training-btn" class="rlhf-admin-btn" onclick="window.open('/admin/rlhf', '_blank')">SME Services</button>
                 </li>
             </ul>
             </li>
@@ -2903,7 +2922,7 @@
 
             <!-- ChatYodha — pinned to the bottom of the sidebar -->
             <div class="sidebar-bottom">
-                <button class="yodha-chat-btn" onclick="openChatYodha()">ChatYodha</button>
+                <button class="yodha-chat-btn" onclick="openChatYodha()">Chat Services</button>
             </div>
         </div><!-- /.sidebar -->
 
