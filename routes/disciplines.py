@@ -1125,3 +1125,65 @@ def get_patient_info(patient_id: str):
         })
 
 
+@disciplines_bp.route("/api/patient/<patient_id>/history", methods=["GET"])
+@handle_route_errors
+def get_patient_history(patient_id: str):
+    """Return last 3 encounters with diagnosis codes for a patient from pces_ehr_ccm."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH latest_encounters AS (
+                        SELECT encounter_id, provider_id, encounter_date
+                        FROM p_encounter
+                        WHERE patient_id = %s
+                        ORDER BY encounter_date DESC
+                        LIMIT 3
+                    )
+                    SELECT
+                        e.encounter_id,
+                        d.diagnosis_id,
+                        d.code,
+                        d.description,
+                        provider.first_name  AS doctor_first_name,
+                        provider.last_name   AS doctor_last_name,
+                        e.encounter_date
+                    FROM latest_encounters e
+                    INNER JOIN p_diagnosis d   ON d.encounter_id = e.encounter_id
+                    INNER JOIN p_party provider ON e.provider_id  = provider.party_id
+                    ORDER BY e.encounter_date DESC, d.diagnosis_id
+                    """,
+                    (patient_id,),
+                )
+                rows = cursor.fetchall()
+
+        if not rows:
+            return jsonify({"rows": [], "db_available": True})
+
+        result = []
+        for idx, row in enumerate(rows, 1):
+            enc_id, diag_id, code, description, doc_first, doc_last, enc_date = row
+            date_str = ""
+            if enc_date:
+                try:
+                    from datetime import date as _date
+                    d = enc_date if hasattr(enc_date, "strftime") else _date.fromisoformat(str(enc_date)[:10])
+                    date_str = d.strftime("%d/%m/%Y")
+                except Exception:
+                    date_str = str(enc_date)[:10]
+            result.append({
+                "s_no":        idx,
+                "date":        date_str,
+                "code":        code or "",
+                "description": description or "",
+                "doctor":      f"{doc_first or ''} {doc_last or ''}".strip(),
+            })
+
+        return jsonify({"rows": result, "db_available": True})
+
+    except Exception as exc:
+        logger.warning("get_patient_history: DB unavailable for %s (%s)", patient_id, exc)
+        return jsonify({"rows": [], "db_available": False, "error": str(exc)})
+
+

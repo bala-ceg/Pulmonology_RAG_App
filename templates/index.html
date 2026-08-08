@@ -3307,6 +3307,41 @@
                 : 'Select a patient to view medical history.';
         }
 
+        function clearMedicalHistory() {
+            const tbody = document.getElementById('medical-history-body');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td class="history-empty" colspan="3" id="medical-history-empty-state">Select a patient to view medical history.</td></tr>';
+        }
+
+        async function loadMedicalHistory(patientId) {
+            const tbody = document.getElementById('medical-history-body');
+            if (!tbody || !patientId) return;
+            // Loading state
+            tbody.innerHTML = '<tr><td class="history-empty" colspan="3">Loading history…</td></tr>';
+            try {
+                const res = await fetch(`/api/patient/${encodeURIComponent(patientId)}/history`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!data.rows || data.rows.length === 0) {
+                    tbody.innerHTML = '<tr><td class="history-empty" colspan="3" id="medical-history-empty-state">No medical history is available for the selected patient.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.rows.map(r => {
+                    const historyCell = r.code
+                        ? `[${r.code}] ${r.description || ''}${r.doctor ? ' — Dr. ' + r.doctor : ''}`
+                        : (r.description || '—');
+                    return `<tr>
+                        <td style="text-align:center">${r.s_no}</td>
+                        <td style="text-align:center;white-space:nowrap">${r.date}</td>
+                        <td>${historyCell}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                console.warn('[MedicalHistory] fetch failed:', err);
+                tbody.innerHTML = '<tr><td class="history-empty" colspan="3" id="medical-history-empty-state">No medical history is available for the selected patient.</td></tr>';
+            }
+        }
+
         function setPdfUploadControls({ hasFiles, uploaded = false, busy = false }) {
             const actions = document.getElementById('pdf-upload-actions');
             const addButton = document.getElementById('add-pdf-btn');
@@ -3375,6 +3410,7 @@
                 sessionStorage.setItem('pces_patient_name', data.full_name);
             }
             updateMedicalHistoryEmptyState(Boolean(window.selectedPatientId));
+            if (data.patient_id) loadMedicalHistory(data.patient_id);
             _updateSendBtn();
         }
 
@@ -3394,6 +3430,7 @@
             const orgEl = document.getElementById('popup-doctor-org');
             if (orgEl) orgEl.textContent = '—';
             updateMedicalHistoryEmptyState(false);
+            clearMedicalHistory();
             _updateSendBtn();
         }
 
@@ -5886,6 +5923,11 @@ ${data.conclusion}
                     closeConversationModal();
                 }
             });
+
+            // Restore medical history if patient was already selected in a prior session
+            if (window.selectedPatientId) {
+                loadMedicalHistory(window.selectedPatientId);
+            }
         });
 
         // ── PCES Authentication Gate ──────────────────────────────────────
