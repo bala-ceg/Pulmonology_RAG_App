@@ -2874,7 +2874,7 @@
                     <div id="pdf-selection-status" class="file-selection-status" hidden aria-live="polite"></div>
                     <div id="pdf-upload-actions" class="section-action-row" hidden>
                         <button class="section-btn" onclick="requireAuth(() => uploadFiles('pdf'))" id="add-pdf-btn">Add PDF</button>
-                        <button class="section-btn" onclick="requireAuth(() => createVectorDB())" id="update-kb-btn" hidden>Update KB</button>
+                        <button class="section-btn" onclick="requireAuth(() => createVectorDB())" id="update-kb-btn">Update KB</button>
                     </div>
                 </div>
                 </li>
@@ -3342,7 +3342,7 @@
             }
         }
 
-        function setPdfUploadControls({ hasFiles, uploaded = false, busy = false }) {
+        function setPdfUploadControls({ hasFiles, busy = false }) {
             const actions = document.getElementById('pdf-upload-actions');
             const addButton = document.getElementById('add-pdf-btn');
             const updateButton = document.getElementById('update-kb-btn');
@@ -3352,10 +3352,8 @@
 
             const fileCount = input.files.length;
             actions.hidden = !hasFiles;
-            addButton.hidden = !hasFiles;
-            updateButton.hidden = !uploaded;
             addButton.disabled = busy;
-            updateButton.disabled = busy || !uploaded;
+            updateButton.disabled = busy;
 
             if (!hasFiles) {
                 status.hidden = true;
@@ -3365,13 +3363,9 @@
 
             status.hidden = false;
             if (busy) {
-                status.textContent = uploaded
-                    ? 'Updating knowledge bank…'
-                    : 'Uploading selected PDF file(s)…';
-            } else if (uploaded) {
-                status.textContent = `${fileCount} PDF file${fileCount === 1 ? '' : 's'} uploaded. You can now update the KB.`;
+                status.textContent = 'Processing… please wait.';
             } else {
-                status.textContent = `${fileCount} PDF file${fileCount === 1 ? '' : 's'} selected. Add them to upload.`;
+                status.textContent = `${fileCount} file${fileCount === 1 ? '' : 's'} selected.`;
             }
         }
 
@@ -5304,7 +5298,7 @@ Generated on: ${new Date().toLocaleString()}
 
                 showToast(`✅ ${data.message || 'PDFs uploaded successfully'}`);
                 if (type === 'pdf') {
-                    setPdfUploadControls({ hasFiles: true, uploaded: true });
+                    setPdfUploadControls({ hasFiles: true });
                 }
                 setTimeout(() => hideToast(), 3000);
                 console.log("Response:", data);
@@ -5325,7 +5319,7 @@ Generated on: ${new Date().toLocaleString()}
             const pdfInput = document.getElementById('pdf-upload');
             const hasSelectedPdf = Boolean(pdfInput && pdfInput.files.length);
             if (hasSelectedPdf) {
-                setPdfUploadControls({ hasFiles: true, uploaded: true, busy: true });
+                setPdfUploadControls({ hasFiles: true, busy: true });
             }
             showToast("Knowledge Bank is updating... please wait.");
             try {
@@ -5351,7 +5345,7 @@ Generated on: ${new Date().toLocaleString()}
                 showToast('❌ Knowledge Bank update failed. Please try again.');
             } finally {
                 if (hasSelectedPdf) {
-                    setPdfUploadControls({ hasFiles: true, uploaded: true });
+                    setPdfUploadControls({ hasFiles: true });
                 }
                 setTimeout(() => hideToast(), 3000);
             }
