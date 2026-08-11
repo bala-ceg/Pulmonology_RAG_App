@@ -5948,15 +5948,16 @@ ${data.conclusion}
         function openSmeServices() {
             const btn = document.getElementById('sme-training-btn');
             window.open('/admin/rlhf', '_blank');
-            if (btn) btn.disabled = true;
+            // Small delay so the tab-switch blur/focus cycle completes before we disable
+            setTimeout(() => { if (btn) btn.disabled = true; }, 300);
         }
 
-        // Re-enable multilingual and SME buttons when user returns to this tab
-        window.addEventListener('focus', function() {
-            const mlBtn = document.getElementById('multilingual-start-btn');
-            if (mlBtn) mlBtn.disabled = false;
-            const smeBtn = document.getElementById('sme-training-btn');
-            if (smeBtn) smeBtn.disabled = false;
+        // Re-enable SME button when user returns to this tab (visibilitychange is reliable)
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                const smeBtn = document.getElementById('sme-training-btn');
+                if (smeBtn) smeBtn.disabled = false;
+            }
         });
 
         function openPcesLoginModal() {
