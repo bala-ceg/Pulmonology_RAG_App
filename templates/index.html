@@ -2346,7 +2346,7 @@
         }
 
         .sidebar-section-label {
-            margin: 0;
+            margin: 0 0 2px;
             color: #111;
             font-size: 14px;
             font-weight: 700;
@@ -2397,6 +2397,7 @@
             width: 100%;
             gap: 8px;
             justify-content: center;
+            margin-top: 8px;
         }
 
         .section-action-row {
@@ -2408,9 +2409,9 @@
             display: none !important;
         }
 
-        .section-action-row .section-btn,
         .recording-action-row .section-btn {
             margin: 0;
+            flex: 1;
         }
 
         .section-action-row .section-btn {
@@ -2511,18 +2512,19 @@
         }
 
         .medical-history-panel {
-            flex: 0 0 105px;
+            flex: 0 0 130px;
+            max-height: 130px;
             margin-bottom: 7px;
-            overflow: hidden;
+            overflow: auto;
             border: 1px solid #111;
             background: #fff;
         }
 
         .medical-history-table {
             width: 100%;
-            height: 100%;
+            min-width: 600px;
             border-collapse: collapse;
-            table-layout: fixed;
+            table-layout: auto;
             color: #111;
             font-size: 13px;
         }
@@ -2533,6 +2535,7 @@
             border-right: 1px solid #111;
             border-bottom: 1px solid #111;
             vertical-align: middle;
+            white-space: nowrap;
         }
 
         .medical-history-table th:last-child,
@@ -2545,15 +2548,20 @@
         }
 
         .medical-history-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
             height: 25px;
             font-weight: 700;
             text-align: center;
+            background: #a3c2f2;
         }
 
         .medical-history-table .history-empty {
             color: #6b7280;
             font-style: italic;
             text-align: center;
+            white-space: normal;
         }
 
         .problem-row {
@@ -2890,7 +2898,10 @@
             <li class="no-bullet">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
-                <button class="section-btn" onclick="requireAuth(() => openDocPatientV2())">Start<br>Conversation</button>
+                <div id="multilingual-recording-actions" class="recording-action-row">
+                    <button class="section-btn" id="multilingual-start-btn" onclick="requireAuth(() => startMultilingualSession())">Start<br>Conversation</button>
+                    <button class="section-btn" id="multilingual-stop-btn" hidden onclick="stopMultilingualSession()">End<br>Conversation</button>
+                </div>
             </div>
             </li>
 
@@ -2909,7 +2920,7 @@
             <li id="sme-training-container" class="no-bullet" style="display:none">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">5. SME Services</div>
-                <button id="sme-training-btn" class="section-btn" onclick="window.open('/admin/rlhf', '_blank')">SME Services</button>
+                <button id="sme-training-btn" class="section-btn" onclick="openSmeServices()">SME Services</button>
             </div>
             </li>
             </ul>
@@ -2998,8 +3009,8 @@
             <section class="medical-history-panel" aria-label="Medical History">
                 <table class="medical-history-table">
                     <colgroup>
-                        <col style="width:60px">
-                        <col style="width:108px">
+                        <col style="width:50px">
+                        <col style="width:90px">
                         <col>
                     </colgroup>
                     <thead>
@@ -3340,20 +3351,28 @@
 
         function setRecordingActionState(type, isRecording) {
             const isConversation = type === 'conversation';
-            const row = document.getElementById(
-                isConversation ? 'conversation-recording-actions' : 'patient-recording-actions'
-            );
-            const startButton = document.getElementById(
-                isConversation ? 'start-conversation-btn' : 'record-patient-btn'
-            );
-            const endButton = document.getElementById(
-                isConversation ? 'stop-conversation-btn' : 'stop-patient-btn'
-            );
+            const isMultilingual = type === 'multilingual';
+            let rowId, startId, endId;
+            if (isConversation) {
+                rowId   = 'conversation-recording-actions';
+                startId = 'start-conversation-btn';
+                endId   = 'stop-conversation-btn';
+            } else if (isMultilingual) {
+                rowId   = 'multilingual-recording-actions';
+                startId = 'multilingual-start-btn';
+                endId   = 'multilingual-stop-btn';
+            } else {
+                rowId   = 'patient-recording-actions';
+                startId = 'record-patient-btn';
+                endId   = 'stop-patient-btn';
+            }
+            const row         = document.getElementById(rowId);
+            const startButton = document.getElementById(startId);
+            const endButton   = document.getElementById(endId);
             if (!row || !startButton || !endButton) return;
             row.classList.toggle('is-recording', isRecording);
-            // When recording: hide Start, show End. When stopped: show Start, hide End.
             startButton.hidden = isRecording;
-            endButton.hidden = !isRecording;
+            endButton.hidden   = !isRecording;
         }
 
         const pdfUploadInput = document.getElementById('pdf-upload');
@@ -5923,6 +5942,31 @@ ${data.conclusion}
             if (patientId)   url.searchParams.set('patient_id', patientId);
             window.open(url.toString(), '_blank');
         }
+
+        /** Section 3: start multilingual session — same Start/End toggle as Sections 2 & 4 */
+        function startMultilingualSession() {
+            openDocPatientV2();
+            setRecordingActionState('multilingual', true);
+        }
+
+        function stopMultilingualSession() {
+            setRecordingActionState('multilingual', false);
+        }
+
+        /** Section 5: SME Services — disable button while tab is open, re-enable on return */
+        function openSmeServices() {
+            const btn = document.getElementById('sme-training-btn');
+            window.open('/admin/rlhf', '_blank');
+            if (btn) btn.disabled = true;
+        }
+
+        // Re-enable multilingual and SME buttons when user returns to this tab
+        window.addEventListener('focus', function() {
+            const mlBtn = document.getElementById('multilingual-start-btn');
+            if (mlBtn) mlBtn.disabled = false;
+            const smeBtn = document.getElementById('sme-training-btn');
+            if (smeBtn) smeBtn.disabled = false;
+        });
 
         function openPcesLoginModal() {
             document.getElementById('yodha-username').value = '';
