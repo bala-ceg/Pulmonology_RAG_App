@@ -2482,24 +2482,42 @@
             padding: 5px 10px;
         }
 
+        /* ── Allergy bar + permanent CLINICAL AI RESPONSE label ── */
+        .allergy-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 12px;
+            background: #fff;
+            border: 1px solid #111;
+            border-bottom: none;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .allergy-bar .response-label {
+            font-size: 14px;
+            font-weight: 700;
+            color: #111;
+            white-space: nowrap;
+            border-right: 1px solid #ccc;
+            padding-right: 10px;
+        }
+
+        .allergy-bar .allergy-info {
+            font-weight: 700;
+            color: #c0392b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .chat-messages {
             position: relative;
-            margin: 6px 0 8px;
+            margin: 0 0 8px;
             padding: 12px;
             background: #fff;
             border: 1px solid #111;
-        }
-
-        #chat-messages:empty::before {
-            content: "CLINICAL AI RESPONSE";
-            position: absolute;
-            top: 9px;
-            left: 12px;
-            width: auto;
-            color: #111;
-            font-size: 14px;
-            font-weight: 700;
-            text-align: left;
         }
 
         .medical-history-panel {
@@ -2994,6 +3012,11 @@
                     </div>
                 </div>
             </div>
+            <!-- Allergy bar: permanent CLINICAL AI RESPONSE label + live allergy data -->
+            <div class="allergy-bar">
+                <span class="response-label">CLINICAL AI RESPONSE</span>
+                <span class="allergy-info" id="allergy-info">—</span>
+            </div>
             <div id="chat-messages" class="chat-messages"></div>
 
             <!-- Frontend-only patient history shell; data wiring is intentionally deferred. -->
@@ -3311,6 +3334,30 @@
             tbody.innerHTML = '<tr><td class="history-empty" colspan="3" id="medical-history-empty-state">Select a patient to view medical history.</td></tr>';
         }
 
+        function clearPatientAllergies() {
+            const el = document.getElementById('allergy-info');
+            if (el) el.textContent = '—';
+        }
+
+        async function loadPatientAllergies(patientId) {
+            const el = document.getElementById('allergy-info');
+            if (!el || !patientId) return;
+            el.textContent = 'Loading…';
+            try {
+                const res = await fetch(`/api/patient/${encodeURIComponent(patientId)}/allergies`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.allergens && data.allergens.length > 0) {
+                    el.textContent = 'Known Allergies: ' + data.allergens.join(', ');
+                } else {
+                    el.textContent = 'No known allergies';
+                }
+            } catch (err) {
+                console.warn('[Allergies] fetch failed:', err);
+                el.textContent = 'No known allergies';
+            }
+        }
+
         async function loadMedicalHistory(patientId) {
             const tbody = document.getElementById('medical-history-body');
             if (!tbody || !patientId) return;
@@ -3403,6 +3450,7 @@
             }
             updateMedicalHistoryEmptyState(Boolean(window.selectedPatientId));
             if (data.patient_id) loadMedicalHistory(data.patient_id);
+            if (data.patient_id) loadPatientAllergies(data.patient_id);
             _updateSendBtn();
         }
 
@@ -3423,6 +3471,7 @@
             if (orgEl) orgEl.textContent = '—';
             updateMedicalHistoryEmptyState(false);
             clearMedicalHistory();
+            clearPatientAllergies();
             _updateSendBtn();
         }
 
@@ -5894,9 +5943,10 @@ ${data.conclusion}
                 }
             });
 
-            // Restore medical history if patient was already selected in a prior session
+            // Restore medical history and allergies if patient was already selected in a prior session
             if (window.selectedPatientId) {
                 loadMedicalHistory(window.selectedPatientId);
+                loadPatientAllergies(window.selectedPatientId);
             }
         });
 

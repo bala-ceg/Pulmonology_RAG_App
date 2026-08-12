@@ -1187,3 +1187,24 @@ def get_patient_history(patient_id: str):
         return jsonify({"rows": [], "db_available": False, "error": str(exc)})
 
 
+@disciplines_bp.route("/api/patient/<patient_id>/allergies", methods=["GET"])
+@handle_route_errors
+def get_patient_allergies(patient_id: str):
+    """Return known allergens for a patient from p_allergy (pces_ehr_ccm)."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT allergen FROM p_allergy WHERE patient_id = %s ORDER BY allergen",
+                    (patient_id,),
+                )
+                rows = cursor.fetchall()
+
+        allergens = [row[0] for row in rows if row[0]]
+        return jsonify({"allergens": allergens, "db_available": True})
+
+    except Exception as exc:
+        logger.warning("get_patient_allergies: DB unavailable for %s (%s)", patient_id, exc)
+        return jsonify({"allergens": [], "db_available": False, "error": str(exc)})
+
+
