@@ -5970,7 +5970,11 @@ ${data.conclusion}
             window.open(YODHA_CHAT_URL, '_blank');
         }
 
-        /** Doc-Patient v2 — opens URL from .env, gated by requireAuth. */
+        // Window references for single-session enforcement (sections 3 & 5)
+        let _multilingualWindow = null;
+        let _smeWindow          = null;
+
+        /** Doc-Patient v2 — opens URL from .env, returns window reference. */
         function openDocPatientV2() {
             const doctorName  = sessionStorage.getItem('pces_doctor_name') || '';
             const doctorId    = sessionStorage.getItem('pces_doctor_id')   || '';
@@ -5981,32 +5985,48 @@ ${data.conclusion}
             if (doctorId)    url.searchParams.set('doctor_id',  doctorId);
             if (patientName) url.searchParams.set('patient',    patientName);
             if (patientId)   url.searchParams.set('patient_id', patientId);
-            window.open(url.toString(), '_blank');
+            return window.open(url.toString(), 'pces_multilingual_session');
         }
 
-        /** Section 3: start multilingual session — same Start/End toggle as Sections 2 & 4 */
+        /** Section 3: one session at a time — focus existing tab if already open. */
         function startMultilingualSession() {
-            openDocPatientV2();
+            if (_multilingualWindow && !_multilingualWindow.closed) {
+                _multilingualWindow.focus();
+                return; // already running — bring to front, no new tab
+            }
+            _multilingualWindow = openDocPatientV2();
             setRecordingActionState('multilingual', true);
         }
 
         function stopMultilingualSession() {
+            _multilingualWindow = null;
             setRecordingActionState('multilingual', false);
         }
 
-        /** Section 5: SME Services — disable button while tab is open, re-enable on return */
+        /** Section 5: one session at a time — focus existing tab if already open. */
         function openSmeServices() {
+            if (_smeWindow && !_smeWindow.closed) {
+                _smeWindow.focus();
+                return; // already running — bring to front, no new tab
+            }
+            _smeWindow = window.open('/admin/rlhf', 'pces_sme_session');
             const btn = document.getElementById('sme-training-btn');
-            window.open('/admin/rlhf', '_blank');
-            // Small delay so the tab-switch blur/focus cycle completes before we disable
-            setTimeout(() => { if (btn) btn.disabled = true; }, 300);
+            if (btn) btn.disabled = true; // immediate — no delay needed with named target
         }
 
-        // Re-enable SME button when user returns to this tab (visibilitychange is reliable)
+        // Re-enable buttons only when the external tab is actually closed
         document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                const smeBtn = document.getElementById('sme-training-btn');
-                if (smeBtn) smeBtn.disabled = false;
+            if (document.visibilityState !== 'visible') return;
+            // Section 3: if multilingual tab was closed, reset state
+            if (_multilingualWindow && _multilingualWindow.closed) {
+                _multilingualWindow = null;
+                setRecordingActionState('multilingual', false);
+            }
+            // Section 5: if SME tab was closed, re-enable button
+            if (_smeWindow && _smeWindow.closed) {
+                _smeWindow = null;
+                const btn = document.getElementById('sme-training-btn');
+                if (btn) btn.disabled = false;
             }
         });
 
