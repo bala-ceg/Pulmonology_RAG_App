@@ -2909,7 +2909,6 @@
                 <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
                 <div id="multilingual-recording-actions" class="recording-action-row">
                     <button class="section-btn" id="multilingual-start-btn" onclick="requireAuth(() => startMultilingualSession())">Start<br>Conversation</button>
-                    <button class="section-btn" id="multilingual-stop-btn" hidden onclick="stopMultilingualSession()">End<br>Conversation</button>
                 </div>
             </div>
             </li>
@@ -3389,16 +3388,11 @@
 
         function setRecordingActionState(type, isRecording) {
             const isConversation = type === 'conversation';
-            const isMultilingual = type === 'multilingual';
             let rowId, startId, endId;
             if (isConversation) {
                 rowId   = 'conversation-recording-actions';
                 startId = 'start-conversation-btn';
                 endId   = 'stop-conversation-btn';
-            } else if (isMultilingual) {
-                rowId   = 'multilingual-recording-actions';
-                startId = 'multilingual-start-btn';
-                endId   = 'multilingual-stop-btn';
             } else {
                 rowId   = 'patient-recording-actions';
                 startId = 'record-patient-btn';
@@ -5988,19 +5982,15 @@ ${data.conclusion}
             return window.open(url.toString(), 'pces_multilingual_session');
         }
 
-        /** Section 3: one session at a time — focus existing tab if already open. */
+        /** Section 3: one session at a time — focus existing tab if already open, else disable button. */
         function startMultilingualSession() {
             if (_multilingualWindow && !_multilingualWindow.closed) {
                 _multilingualWindow.focus();
                 return; // already running — bring to front, no new tab
             }
             _multilingualWindow = openDocPatientV2();
-            setRecordingActionState('multilingual', true);
-        }
-
-        function stopMultilingualSession() {
-            _multilingualWindow = null;
-            setRecordingActionState('multilingual', false);
+            const btn = document.getElementById('multilingual-start-btn');
+            if (btn) btn.disabled = true;
         }
 
         /** Section 5: one session at a time — focus existing tab if already open. */
@@ -6017,10 +6007,11 @@ ${data.conclusion}
         // Re-enable buttons only when the external tab is actually closed
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState !== 'visible') return;
-            // Section 3: if multilingual tab was closed, reset state
+            // Section 3: if multilingual tab was closed, re-enable Start button
             if (_multilingualWindow && _multilingualWindow.closed) {
                 _multilingualWindow = null;
-                setRecordingActionState('multilingual', false);
+                const btn = document.getElementById('multilingual-start-btn');
+                if (btn) btn.disabled = false;
             }
             // Section 5: if SME tab was closed, re-enable button
             if (_smeWindow && _smeWindow.closed) {
