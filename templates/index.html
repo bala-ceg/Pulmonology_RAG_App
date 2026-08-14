@@ -5986,44 +5986,66 @@ ${data.conclusion}
 
         /** Section 3: one session at a time — focus existing tab if already open, else disable button. */
         function startMultilingualSession() {
+            console.log('[PCES][S3] startMultilingualSession called | _multilingualWindow:', _multilingualWindow, '| closed:', _multilingualWindow ? _multilingualWindow.closed : 'N/A');
             if (_multilingualWindow && !_multilingualWindow.closed) {
+                console.log('[PCES][S3] Tab already open — focusing existing tab, no new tab opened');
                 _multilingualWindow.focus();
-                return; // already running — bring to front, no new tab
+                return;
             }
             // Disable button immediately — before opening tab so any error can't leave it enabled
             const btn = document.getElementById('multilingual-start-btn');
-            if (btn) btn.disabled = true;
+            if (btn) {
+                btn.disabled = true;
+                console.log('[PCES][S3] Start Conversation button → DISABLED (timestamp:', new Date().toISOString() + ')');
+            }
             try {
                 _multilingualWindow = openDocPatientV2();
+                console.log('[PCES][S3] Tab opened | window ref:', _multilingualWindow);
             } catch (e) {
-                console.error('Section 3: failed to open Doc-Patient tab', e);
-                // keep button disabled — don't allow retry on error
+                console.error('[PCES][S3] Failed to open Doc-Patient tab — button stays disabled', e);
             }
         }
 
         /** Section 5: one session at a time — focus existing tab if already open. */
         function openSmeServices() {
+            console.log('[PCES][S5] openSmeServices called | _smeWindow:', _smeWindow, '| closed:', _smeWindow ? _smeWindow.closed : 'N/A');
             if (_smeWindow && !_smeWindow.closed) {
+                console.log('[PCES][S5] SME tab already open — focusing existing tab, no new tab opened');
                 _smeWindow.focus();
-                return; // already running — bring to front, no new tab
+                return;
             }
             _smeWindow = window.open('/admin/rlhf', 'pces_sme_session');
+            console.log('[PCES][S5] SME tab opened | window ref:', _smeWindow);
             const btn = document.getElementById('sme-training-btn');
-            if (btn) btn.disabled = true; // immediate — no delay needed with named target
+            if (btn) {
+                btn.disabled = true;
+                console.log('[PCES][S5] SME Services button → DISABLED (timestamp:', new Date().toISOString() + ')');
+            }
         }
 
         // Re-enable buttons only when the external tab is actually closed
         document.addEventListener('visibilitychange', function() {
+            console.log('[PCES][VC] visibilitychange fired | state:', document.visibilityState);
             if (document.visibilityState !== 'visible') return;
             // Section 3: track closed tab but keep button disabled (one-time session per page load)
-            if (_multilingualWindow && _multilingualWindow.closed) {
-                _multilingualWindow = null;
+            if (_multilingualWindow) {
+                console.log('[PCES][S3][VC] multilingual window exists | closed:', _multilingualWindow.closed);
+                if (_multilingualWindow.closed) {
+                    console.log('[PCES][S3][VC] Tab closed detected — clearing ref (button stays DISABLED)');
+                    _multilingualWindow = null;
+                }
             }
             // Section 5: if SME tab was closed, re-enable button
-            if (_smeWindow && _smeWindow.closed) {
-                _smeWindow = null;
-                const btn = document.getElementById('sme-training-btn');
-                if (btn) btn.disabled = false;
+            if (_smeWindow) {
+                console.log('[PCES][S5][VC] SME window exists | closed:', _smeWindow.closed);
+                if (_smeWindow.closed) {
+                    _smeWindow = null;
+                    const btn = document.getElementById('sme-training-btn');
+                    if (btn) {
+                        btn.disabled = false;
+                        console.log('[PCES][S5][VC] SME tab closed — button → ENABLED (timestamp:', new Date().toISOString() + ')');
+                    }
+                }
             }
         });
 
