@@ -5967,6 +5967,47 @@ ${data.conclusion}
         // Window references for single-session enforcement (sections 3 & 5)
         let _multilingualWindow = null;
         let _smeWindow          = null;
+        let _sessionPollTimer   = null;
+
+        /** Poll every second while any external tab is open — updates button states automatically. */
+        function _startSessionPoll() {
+            if (_sessionPollTimer) return; // already polling
+            console.log('[PCES][POLL] Session poll started');
+            _sessionPollTimer = setInterval(function() {
+                let anyOpen = false;
+
+                // Section 3: keep button disabled always; just clear ref when tab closes
+                if (_multilingualWindow) {
+                    if (_multilingualWindow.closed) {
+                        console.log('[PCES][POLL][S3] Tab closed detected — clearing ref (button stays DISABLED)');
+                        _multilingualWindow = null;
+                    } else {
+                        anyOpen = true;
+                    }
+                }
+
+                // Section 5: re-enable SME button when tab closes
+                if (_smeWindow) {
+                    if (_smeWindow.closed) {
+                        _smeWindow = null;
+                        const btn = document.getElementById('sme-training-btn');
+                        if (btn) {
+                            btn.disabled = false;
+                            console.log('[PCES][POLL][S5] SME tab closed — button → ENABLED (timestamp:', new Date().toISOString() + ')');
+                        }
+                    } else {
+                        anyOpen = true;
+                    }
+                }
+
+                // Stop polling once all external tabs are closed
+                if (!anyOpen) {
+                    clearInterval(_sessionPollTimer);
+                    _sessionPollTimer = null;
+                    console.log('[PCES][POLL] No open sessions — poll stopped');
+                }
+            }, 1000);
+        }
 
         /** Doc-Patient v2 — opens URL from .env, returns window reference. */
         function openDocPatientV2() {
@@ -6001,6 +6042,7 @@ ${data.conclusion}
             try {
                 _multilingualWindow = openDocPatientV2();
                 console.log('[PCES][S3] Tab opened | window ref:', _multilingualWindow);
+                _startSessionPoll(); // auto-detect tab close
             } catch (e) {
                 console.error('[PCES][S3] Failed to open Doc-Patient tab — button stays disabled', e);
             }
@@ -6021,6 +6063,7 @@ ${data.conclusion}
                 btn.disabled = true;
                 console.log('[PCES][S5] SME Services button → DISABLED (timestamp:', new Date().toISOString() + ')');
             }
+            _startSessionPoll(); // auto-detect tab close
         }
 
         // Re-enable buttons only when the external tab is actually closed
