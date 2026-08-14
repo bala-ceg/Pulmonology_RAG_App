@@ -5976,11 +5976,15 @@ ${data.conclusion}
             _sessionPollTimer = setInterval(function() {
                 let anyOpen = false;
 
-                // Section 3: keep button disabled always; just clear ref when tab closes
+                // Section 3: re-enable Start button when tab closes
                 if (_multilingualWindow) {
                     if (_multilingualWindow.closed) {
-                        console.log('[PCES][POLL][S3] Tab closed detected — clearing ref (button stays DISABLED)');
                         _multilingualWindow = null;
+                        const btn = document.getElementById('multilingual-start-btn');
+                        if (btn) {
+                            btn.disabled = false;
+                            console.log('[PCES][POLL][S3] Tab closed — button → ENABLED (timestamp:', new Date().toISOString() + ')');
+                        }
                     } else {
                         anyOpen = true;
                     }
@@ -6070,12 +6074,16 @@ ${data.conclusion}
         document.addEventListener('visibilitychange', function() {
             console.log('[PCES][VC] visibilitychange fired | state:', document.visibilityState);
             if (document.visibilityState !== 'visible') return;
-            // Section 3: track closed tab but keep button disabled (one-time session per page load)
+            // Section 3: re-enable Start button when tab closes
             if (_multilingualWindow) {
                 console.log('[PCES][S3][VC] multilingual window exists | closed:', _multilingualWindow.closed);
                 if (_multilingualWindow.closed) {
-                    console.log('[PCES][S3][VC] Tab closed detected — clearing ref (button stays DISABLED)');
                     _multilingualWindow = null;
+                    const btn = document.getElementById('multilingual-start-btn');
+                    if (btn) {
+                        btn.disabled = false;
+                        console.log('[PCES][S3][VC] Tab closed — button → ENABLED (timestamp:', new Date().toISOString() + ')');
+                    }
                 }
             }
             // Section 5: if SME tab was closed, re-enable button
