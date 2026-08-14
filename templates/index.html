@@ -5970,11 +5970,13 @@ ${data.conclusion}
 
         /** Doc-Patient v2 — opens URL from .env, returns window reference. */
         function openDocPatientV2() {
+            const rawUrl = "{{ doc_patient_v2_url }}";
+            if (!rawUrl) { alert('Doc-Patient URL is not configured (DOC_PATIENT_V2_URL).'); return null; }
             const doctorName  = sessionStorage.getItem('pces_doctor_name') || '';
             const doctorId    = sessionStorage.getItem('pces_doctor_id')   || '';
             const patientName = sessionStorage.getItem('pces_patient_name')|| '';
             const patientId   = sessionStorage.getItem('pces_patient_id')  || window.selectedPatientId || '';
-            const url = new URL(DOC_PATIENT_V2_URL);
+            const url = new URL(rawUrl);
             if (doctorName)  url.searchParams.set('doctor',     doctorName);
             if (doctorId)    url.searchParams.set('doctor_id',  doctorId);
             if (patientName) url.searchParams.set('patient',    patientName);
@@ -5988,9 +5990,15 @@ ${data.conclusion}
                 _multilingualWindow.focus();
                 return; // already running — bring to front, no new tab
             }
-            _multilingualWindow = openDocPatientV2();
+            // Disable button immediately — before opening tab so any error can't leave it enabled
             const btn = document.getElementById('multilingual-start-btn');
             if (btn) btn.disabled = true;
+            try {
+                _multilingualWindow = openDocPatientV2();
+            } catch (e) {
+                console.error('Section 3: failed to open Doc-Patient tab', e);
+                // keep button disabled — don't allow retry on error
+            }
         }
 
         /** Section 5: one session at a time — focus existing tab if already open. */
