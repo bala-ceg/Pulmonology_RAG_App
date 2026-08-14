@@ -6013,6 +6013,14 @@ ${data.conclusion}
             }, 1000);
         }
 
+        /** Builds a unique window name: PCES_<AppName>_<DoctorId> (spaces/specials stripped for safety). */
+        function _windowName(appName) {
+            const doctorId = (sessionStorage.getItem('pces_doctor_id') || 'guest').replace(/[^a-zA-Z0-9_-]/g, '');
+            const name = 'PCES_' + appName + '_' + doctorId;
+            console.log('[PCES][WIN] window name =', name);
+            return name;
+        }
+
         /** Doc-Patient v2 — opens URL from .env, returns window reference. */
         function openDocPatientV2() {
             const rawUrl = "{{ doc_patient_v2_url }}";
@@ -6026,7 +6034,7 @@ ${data.conclusion}
             if (doctorId)    url.searchParams.set('doctor_id',  doctorId);
             if (patientName) url.searchParams.set('patient',    patientName);
             if (patientId)   url.searchParams.set('patient_id', patientId);
-            return window.open(url.toString(), 'pces_multilingual_session');
+            return window.open(url.toString(), _windowName('DocPatient'));
         }
 
         /** Section 3: one session at a time — focus existing tab if already open, else disable button. */
@@ -6060,7 +6068,7 @@ ${data.conclusion}
                 _smeWindow.focus();
                 return;
             }
-            _smeWindow = window.open('/admin/rlhf', 'pces_sme_session');
+            _smeWindow = window.open('/admin/rlhf', _windowName('SME'));
             console.log('[PCES][S5] SME tab opened | window ref:', _smeWindow);
             const btn = document.getElementById('sme-training-btn');
             if (btn) {
