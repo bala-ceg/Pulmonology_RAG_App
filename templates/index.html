@@ -6007,11 +6007,9 @@ ${data.conclusion}
         // Re-enable buttons only when the external tab is actually closed
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState !== 'visible') return;
-            // Section 3: if multilingual tab was closed, re-enable Start button
+            // Section 3: track closed tab but keep button disabled (one-time session per page load)
             if (_multilingualWindow && _multilingualWindow.closed) {
                 _multilingualWindow = null;
-                const btn = document.getElementById('multilingual-start-btn');
-                if (btn) btn.disabled = false;
             }
             // Section 5: if SME tab was closed, re-enable button
             if (_smeWindow && _smeWindow.closed) {
