@@ -9,6 +9,9 @@ Routes:
   GET  /search_patients           — patient autocomplete (CCM/EHR API)
   GET  /api/patient/search        — advanced patient search (CCM/EHR API)
   GET  /api/hospitals/search      — hospital search (CCM/EHR API)
+  GET  /api/patient/<id>/history  — last 3 encounter diagnoses (pces_ehr_ccm)
+  GET  /api/patient/<id>/allergies — known allergens (pces_ehr_ccm)
+  GET  /api/patient/<id>/ai_summary — AI-generated clinical summary via LLM
 
 Also owns:
   load_disciplines_config()
@@ -1206,5 +1209,107 @@ def get_patient_allergies(patient_id: str):
     except Exception as exc:
         logger.warning("get_patient_allergies: DB unavailable for %s (%s)", patient_id, exc)
         return jsonify({"allergens": [], "db_available": False, "error": str(exc)})
+
+
+@disciplines_bp.route("/api/patient/<patient_id>/ai_summary", methods=["GET"])
+@handle_route_errors
+def get_patient_ai_summary(patient_id: str):
+    """Generate an AI clinical summary using a patient's diagnosis history and allergies."""
+    from datetime import date as _date
+
+    # ── 1. Fetch clinical data from pces_ehr_ccm ───────────────────────────
+    history_rows = []
+    allergens = []
+    db_available = True
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    WITH latest_encounters AS (
+                        SELECT encounter_id, provider_id, encounter_date
+                        FROM p_encounter
+                        WHERE patient_id = %s
+                        ORDER BY encounter_date DESC
+                        LIMIT 3
+                    )
+                    SELECT
+                        d.code,
+                        d.description,
+                        provider.first_name,
+                        provider.last_name,
+                        e.encounter_date
+                    FROM latest_encounters e
+                    INNER JOIN p_diagnosis d    ON d.encounter_id = e.encounter_id
+                    INNER JOIN p_party provider ON e.provider_id  = provider.party_id
+                    ORDER BY e.encounter_date DESC, d.diagnosis_id
+                    """,
+                    (patient_id,),
+                )
+                history_rows = cur.fetchall()
+
+                cur.execute(
+                    "SELECT allergen FROM p_allergy WHERE patient_id = %s ORDER BY allergen",
+                    (patient_id,),
+                )
+                allergens = [row[0] for row in cur.fetchall() if row[0]]
+
+    except Exception as exc:
+        logger.warning("get_patient_ai_summary: DB unavailable for %s (%s)", patient_id, exc)
+        db_available = False
+
+    if not db_available:
+        return jsonify({"summary": "", "db_available": False,
+                        "error": "Clinical database unavailable"}), 503
+
+    if not history_rows:
+        return jsonify({"summary": "", "db_available": True,
+                        "message": "No clinical history available for this patient."})
+
+    # ── 2. Build clinical prompt ───────────────────────────────────────────
+    history_lines = []
+    for code, description, doc_first, doc_last, enc_date in history_rows:
+        try:
+            d = enc_date if hasattr(enc_date, "strftime") else _date.fromisoformat(str(enc_date)[:10])
+            date_str = d.strftime("%d/%m/%Y")
+        except Exception:
+            date_str = str(enc_date)[:10] if enc_date else "Unknown date"
+        doctor = f"{doc_first or ''} {doc_last or ''}".strip() or "Unknown physician"
+        history_lines.append(f"- [{date_str}] {code}: {description} (Treating: Dr. {doctor})")
+
+    allergy_text = ", ".join(allergens) if allergens else "No known allergies"
+
+    prompt = (
+        "You are a clinical decision-support assistant. "
+        "Given the following patient encounter history and known allergies, "
+        "write a concise AI-generated clinical summary (3–5 paragraphs) covering:\n"
+        "1. Clinical presentation and key diagnoses\n"
+        "2. Treatment considerations and risk factors\n"
+        "3. Allergy implications for management\n\n"
+        "Patient Encounter History (most recent first):\n"
+        + "\n".join(history_lines)
+        + f"\n\nKnown Allergies: {allergy_text}\n\n"
+        "Write the summary in a professional clinical tone suitable for a treating physician."
+    )
+
+    # ── 3. Invoke LLM ──────────────────────────────────────────────────────
+    try:
+        llm = current_app.config.get("LLM_INSTANCE")
+        if not llm:
+            return jsonify({"summary": "", "error": "LLM not initialised"}), 503
+
+        response = llm.invoke(prompt)
+        summary = (
+            response.content.strip()
+            if hasattr(response, "content")
+            else str(response).strip()
+        )
+        logger.info("get_patient_ai_summary: generated summary for %s (%d chars)", patient_id, len(summary))
+        return jsonify({"summary": summary, "db_available": True})
+
+    except Exception as exc:
+        logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
+        return jsonify({"summary": "", "error": f"LLM error: {exc}"}), 500
 
 
