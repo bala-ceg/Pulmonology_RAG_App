@@ -25,8 +25,14 @@ MODELS_TO_TEST = [
     "gpt-4o-mini",
     "gpt-4o",
     "gpt-4-turbo",
-    # Add GPT-5 model name here when available, e.g.:
-    # "gpt-5",
+    # ── GPT-5 models — uncomment when your API key has access ──────────
+    # "gpt-5",               # base GPT-5 (when GA)
+    # "gpt-5-mini",          # cost-optimised GPT-5 variant
+    # "o3",                  # OpenAI o3 reasoning model
+    # "o4-mini",             # OpenAI o4-mini reasoning model
+    # ───────────────────────────────────────────────────────────────────
+    # To add any model: append its exact API model ID string above,
+    # then run:  python tests/test_ai_summary_models.py
 ]
 
 

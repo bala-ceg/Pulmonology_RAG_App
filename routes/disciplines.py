@@ -1279,14 +1279,15 @@ def get_patient_ai_summary(patient_id: str):
     prompt = (
         "You are a clinical decision-support assistant. "
         "Given the following complete patient encounter history and known allergies, "
-        "write a concise AI-generated clinical summary (3–5 paragraphs) covering:\n"
+        "write a concise AI-generated clinical summary in no more than 500 words covering:\n"
         "1. Clinical presentation and key diagnoses\n"
         "2. Treatment considerations and risk factors\n"
         "3. Allergy implications for management\n\n"
         f"Patient Encounter History ({len(history_lines)} records, most recent first):\n"
         + "\n".join(history_lines)
         + f"\n\nKnown Allergies: {allergy_text}\n\n"
-        "Write the summary in a professional clinical tone suitable for a treating physician."
+        "Write the summary in a professional clinical tone suitable for a treating physician. "
+        "Keep the total response under 500 words."
     )
 
     # ── 3. Invoke LLM with timing ──────────────────────────────────────────

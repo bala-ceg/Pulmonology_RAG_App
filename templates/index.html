@@ -3424,9 +3424,12 @@
         let _epPendingCallback = null; // callback to run if user confirms "proceed anyway"
 
         // Session-scoped state — restored from sessionStorage if available
-        window.selectedPatientId   = sessionStorage.getItem('pces_patient_id') || null;
-        window.currentPatientName  = sessionStorage.getItem('pces_patient_name') || '';
-        window.adhocRagReady       = false;
+        // Guard against "null" / "undefined" strings stored by older code paths
+        const _rawPatientId = sessionStorage.getItem('pces_patient_id');
+        window.selectedPatientId  = (_rawPatientId && _rawPatientId !== 'null' && _rawPatientId !== 'undefined')
+                                    ? _rawPatientId : null;
+        window.currentPatientName = sessionStorage.getItem('pces_patient_name') || '';
+        window.adhocRagReady      = false;
         console.log('[PCES Session] init — patient=%s name=%s', window.selectedPatientId, window.currentPatientName);
 
         /** Enable Generate only when BOTH doctor is logged in AND a patient is selected. */
@@ -3476,11 +3479,15 @@
         let _aiSummaryAbortCtrl = null; // AbortController for in-flight fetch
 
         async function loadPatientAiSummary(patientId) {
-            // Guard: never call without a patient
-            if (!patientId) return;
-
             const panel = document.getElementById('ai-summary-panel');
             const body  = document.getElementById('ai-summary-body');
+
+            // Guard: never call without a valid patient AND a logged-in doctor
+            if (!patientId || patientId === 'null' || patientId === 'undefined' || !_pcesAuthed) {
+                if (panel) panel.hidden = true;
+                console.warn('[PCES][AISummary] Blocked — no patient selected or not authenticated');
+                return;
+            }
             if (!panel || !body) return;
 
             // Abort any in-flight request for a previous patient
@@ -6141,6 +6148,10 @@ ${data.conclusion}
                 loadMedicalHistory(window.selectedPatientId);
                 loadPatientAllergies(window.selectedPatientId);
                 loadPatientAiSummary(window.selectedPatientId);
+            } else {
+                // Belt-and-suspenders: ensure panel is hidden when no patient is selected
+                const _panel = document.getElementById('ai-summary-panel');
+                if (_panel) _panel.hidden = true;
             }
         });
 
