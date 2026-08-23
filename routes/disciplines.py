@@ -1214,10 +1214,11 @@ def get_patient_allergies(patient_id: str):
 @disciplines_bp.route("/api/patient/<patient_id>/ai_summary", methods=["GET"])
 @handle_route_errors
 def get_patient_ai_summary(patient_id: str):
-    """Generate an AI clinical summary using a patient's diagnosis history and allergies."""
+    """Generate an AI clinical summary using a patient's FULL diagnosis history and allergies."""
+    import time as _time
     from datetime import date as _date
 
-    # ── 1. Fetch clinical data from pces_ehr_ccm ───────────────────────────
+    # ── 1. Fetch ALL clinical data from pces_ehr_ccm ───────────────────────
     history_rows = []
     allergens = []
     db_available = True
@@ -1225,24 +1226,19 @@ def get_patient_ai_summary(patient_id: str):
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cur:
+                # No LIMIT — use complete encounter history for a richer summary
                 cur.execute(
                     """
-                    WITH latest_encounters AS (
-                        SELECT encounter_id, provider_id, encounter_date
-                        FROM p_encounter
-                        WHERE patient_id = %s
-                        ORDER BY encounter_date DESC
-                        LIMIT 3
-                    )
                     SELECT
                         d.code,
                         d.description,
                         provider.first_name,
                         provider.last_name,
                         e.encounter_date
-                    FROM latest_encounters e
+                    FROM p_encounter e
                     INNER JOIN p_diagnosis d    ON d.encounter_id = e.encounter_id
                     INNER JOIN p_party provider ON e.provider_id  = provider.party_id
+                    WHERE e.patient_id = %s
                     ORDER BY e.encounter_date DESC, d.diagnosis_id
                     """,
                     (patient_id,),
@@ -1282,31 +1278,44 @@ def get_patient_ai_summary(patient_id: str):
 
     prompt = (
         "You are a clinical decision-support assistant. "
-        "Given the following patient encounter history and known allergies, "
+        "Given the following complete patient encounter history and known allergies, "
         "write a concise AI-generated clinical summary (3–5 paragraphs) covering:\n"
         "1. Clinical presentation and key diagnoses\n"
         "2. Treatment considerations and risk factors\n"
         "3. Allergy implications for management\n\n"
-        "Patient Encounter History (most recent first):\n"
+        f"Patient Encounter History ({len(history_lines)} records, most recent first):\n"
         + "\n".join(history_lines)
         + f"\n\nKnown Allergies: {allergy_text}\n\n"
         "Write the summary in a professional clinical tone suitable for a treating physician."
     )
 
-    # ── 3. Invoke LLM ──────────────────────────────────────────────────────
+    # ── 3. Invoke LLM with timing ──────────────────────────────────────────
     try:
         llm = current_app.config.get("LLM_INSTANCE")
         if not llm:
             return jsonify({"summary": "", "error": "LLM not initialised"}), 503
 
+        model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None) or "unknown"
+        t_start = _time.time()
         response = llm.invoke(prompt)
+        generation_time_ms = round((_time.time() - t_start) * 1000)
+
         summary = (
             response.content.strip()
             if hasattr(response, "content")
             else str(response).strip()
         )
-        logger.info("get_patient_ai_summary: generated summary for %s (%d chars)", patient_id, len(summary))
-        return jsonify({"summary": summary, "db_available": True})
+        logger.info(
+            "get_patient_ai_summary: patient=%s model=%s encounters=%d time=%dms chars=%d",
+            patient_id, model_name, len(history_lines), generation_time_ms, len(summary),
+        )
+        return jsonify({
+            "summary": summary,
+            "db_available": True,
+            "model": model_name,
+            "generation_time_ms": generation_time_ms,
+            "encounter_count": len(history_lines),
+        })
 
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)

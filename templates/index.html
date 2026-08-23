@@ -2500,16 +2500,19 @@
             font-weight: 700;
             color: #111;
             white-space: nowrap;
-            border-right: 1px solid #ccc;
-            padding-right: 10px;
         }
 
-        .allergy-bar .allergy-info {
+        /* Known Allergies inside the AI summary panel */
+        .ai-allergy-bar {
+            flex-shrink: 0;
+            padding: 5px 11px;
+            font-size: 12px;
             font-weight: 700;
             color: #c0392b;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            background: #fff5f5;
+            border-bottom: 1px solid #f5c6cb;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .chat-messages {
@@ -3111,10 +3114,9 @@
                     </div>
                 </div>
             </div>
-            <!-- Allergy bar: permanent CLINICAL AI RESPONSE label + live allergy data -->
+            <!-- Allergy bar: permanent CLINICAL AI RESPONSE label (allergy data moved to AI panel) -->
             <div class="allergy-bar">
                 <span class="response-label">CLINICAL AI RESPONSE</span>
-                <span class="allergy-info" id="allergy-info">—</span>
             </div>
             <!-- Chat area + AI Summary panel side by side -->
             <div class="chat-ai-row">
@@ -3126,6 +3128,8 @@
                         <h3>AI Generated Patient<br>Summary.</h3>
                         <button class="ai-summary-toggle" onclick="toggleAiSummary()" title="Collapse/Expand" id="ai-summary-toggle-btn">▲</button>
                     </div>
+                    <!-- Known Allergies — shown inside the panel -->
+                    <div class="ai-allergy-bar" id="allergy-info">—</div>
                     <div class="ai-summary-body" id="ai-summary-body">
                         <div class="ai-summary-spinner">Generating…</div>
                     </div>
@@ -3470,22 +3474,37 @@
         }
 
         /* ── AI Generated Patient Summary ─────────────────────────────── */
+        let _aiSummaryAbortCtrl = null; // AbortController for in-flight fetch
+
         async function loadPatientAiSummary(patientId) {
+            // Guard: never call without a patient
+            if (!patientId) return;
+
             const panel = document.getElementById('ai-summary-panel');
             const body  = document.getElementById('ai-summary-body');
-            if (!panel || !body || !patientId) return;
+            if (!panel || !body) return;
+
+            // Abort any in-flight request for a previous patient
+            if (_aiSummaryAbortCtrl) { _aiSummaryAbortCtrl.abort(); }
+            _aiSummaryAbortCtrl = new AbortController();
 
             // Show panel with spinner
             panel.hidden = false;
             body.classList.remove('collapsed');
-            document.getElementById('ai-summary-toggle-btn').textContent = '▲';
+            const toggleBtn = document.getElementById('ai-summary-toggle-btn');
+            if (toggleBtn) toggleBtn.textContent = '▲';
             body.innerHTML = '<div class="ai-summary-spinner">Generating…</div>';
             console.log('[PCES][AISummary] Fetching summary for patient', patientId);
 
+            const t0 = performance.now();
             try {
-                const res = await fetch(`/api/patient/${encodeURIComponent(patientId)}/ai_summary`);
+                const res = await fetch(
+                    `/api/patient/${encodeURIComponent(patientId)}/ai_summary`,
+                    { signal: _aiSummaryAbortCtrl.signal }
+                );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
+                const clientMs = Math.round(performance.now() - t0);
 
                 if (data.summary) {
                     // Convert inline markdown (**bold**, *italic*) → HTML, then render paragraphs
@@ -3494,18 +3513,32 @@
                         .replace(/\*([^*]+?)\*/g,   '<em>$1</em>');
                     const paras = data.summary.split(/\n{2,}/).filter(p => p.trim());
                     body.innerHTML = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
-                    console.log('[PCES][AISummary] Summary loaded (' + data.summary.length + ' chars)');
+                    console.log(
+                        `[PCES][AISummary] ✅ model=${data.model || 'n/a'} | ` +
+                        `encounters=${data.encounter_count || 'n/a'} | ` +
+                        `server=${data.generation_time_ms || '?'}ms | client=${clientMs}ms | ` +
+                        `chars=${data.summary.length}`
+                    );
                 } else {
                     body.innerHTML = '<p class="ai-summary-error">No clinical summary available for this patient.</p>';
                     console.warn('[PCES][AISummary] Empty summary:', data.message || data.error);
                 }
             } catch (err) {
+                if (err.name === 'AbortError') {
+                    console.log('[PCES][AISummary] Fetch aborted (patient changed)');
+                    return; // don't overwrite spinner — new patient's fetch is now running
+                }
                 body.innerHTML = '<p class="ai-summary-error">Unable to generate summary. Please try again later.</p>';
                 console.error('[PCES][AISummary] Fetch error:', err);
             }
         }
 
         function clearPatientAiSummary() {
+            // Abort any in-flight request immediately
+            if (_aiSummaryAbortCtrl) {
+                _aiSummaryAbortCtrl.abort();
+                _aiSummaryAbortCtrl = null;
+            }
             const panel = document.getElementById('ai-summary-panel');
             const body  = document.getElementById('ai-summary-body');
             if (!panel || !body) return;
