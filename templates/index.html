@@ -2500,19 +2500,19 @@
             font-weight: 700;
             color: #111;
             white-space: nowrap;
+            border-right: 1px solid #ccc;
+            padding-right: 10px;
         }
 
-        /* Known Allergies inside the AI summary panel */
-        .ai-allergy-bar {
-            flex-shrink: 0;
-            padding: 5px 11px;
-            font-size: 12px;
+        .allergy-bar .allergy-info {
+            margin-left: auto;          /* push to far right */
             font-weight: 700;
             color: #c0392b;
-            background: #fff5f5;
-            border-bottom: 1px solid #f5c6cb;
-            white-space: normal;
-            word-break: break-word;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 65%;
         }
 
         .chat-messages {
@@ -3114,9 +3114,10 @@
                     </div>
                 </div>
             </div>
-            <!-- Allergy bar: permanent CLINICAL AI RESPONSE label (allergy data moved to AI panel) -->
+            <!-- Allergy bar: CLINICAL AI RESPONSE label (left) + Known Allergies (right) -->
             <div class="allergy-bar">
                 <span class="response-label">CLINICAL AI RESPONSE</span>
+                <span class="allergy-info" id="allergy-info">—</span>
             </div>
             <!-- Chat area + AI Summary panel side by side -->
             <div class="chat-ai-row">
@@ -3128,8 +3129,6 @@
                         <h3>AI Generated Patient<br>Summary.</h3>
                         <button class="ai-summary-toggle" onclick="toggleAiSummary()" title="Collapse/Expand" id="ai-summary-toggle-btn">▲</button>
                     </div>
-                    <!-- Known Allergies — shown inside the panel -->
-                    <div class="ai-allergy-bar" id="allergy-info">—</div>
                     <div class="ai-summary-body" id="ai-summary-body">
                         <div class="ai-summary-spinner">Generating…</div>
                     </div>
