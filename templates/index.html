@@ -2986,7 +2986,7 @@
             <div class="sidebar-scroll-area">
             <ul>
             <!-- Section 1: Create Local Data -->
-                <li class="no-bullet">
+                <li class="no-bullet" id="sidebar-s1">
                 <div class="sidebar-section-box">
                     <div class="sidebar-section-label">1. Create Local Data</div>
                     <button class="section-btn" id="select-files-btn" onclick="requireAuth(() => document.getElementById('pdf-upload').click())">Select Files</button>
@@ -2996,7 +2996,7 @@
                 </li>
 
             <!-- Section 2: Doc / Patient Conversation -->
-            <li class="no-bullet">
+            <li class="no-bullet" id="sidebar-s2">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">2. Doc / Patient Conversation</div>
                 <div id="conversation-recording-actions" class="recording-action-row">
@@ -3007,7 +3007,7 @@
             </li>
 
             <!-- Section 3: Doc / Patient Multi-Lingual -->
-            <li class="no-bullet">
+            <li class="no-bullet" id="sidebar-s3">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">3. Doc / Patient Multi-Lingual</div>
                 <div id="multilingual-recording-actions" class="recording-action-row">
@@ -3017,7 +3017,7 @@
             </li>
 
             <!-- Section 4: Record Patient Notes -->
-            <li class="no-bullet">
+            <li class="no-bullet" id="sidebar-s4">
             <div class="sidebar-section-box">
                 <div class="sidebar-section-label">4. Record Patient Notes</div>
                 <div id="patient-recording-actions" class="recording-action-row">
@@ -6391,6 +6391,54 @@ ${data.conclusion}
             if (e.key === 'Enter') submitPcesLogin();
         });
 
+        /* ── Role-Based Section Visibility ───────────────────────────────── */
+        /**
+         * Parse pces_role comma-separated string → normalized uppercase array.
+         * e.g. "CARDIOLOGY, GENERAL SURGEON, SME" → ["CARDIOLOGY","GENERAL SURGEON","SME"]
+         */
+        function _parseRoles(roleStr) {
+            return (roleStr || '').split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
+        }
+        function _hasRole(roles, target) {
+            return roles.includes(target.toUpperCase());
+        }
+
+        /**
+         * Apply sidebar section visibility based on role string from pces_users.pces_role.
+         * Call after login, on page-load restore, and on logout (pass '' to reset).
+         *
+         * NURSE      → S1 hidden, S2 visible, S3 visible, S4 hidden, S5 hidden
+         * OFFICE_ADMIN → S1–S5 all hidden
+         * other      → all visible (SME gate for S5 handled separately)
+         */
+        function applyRoleVisibility(roleStr) {
+            const roles   = _parseRoles(roleStr);
+            const isNurse = _hasRole(roles, 'NURSE');
+            const isAdmin = _hasRole(roles, 'OFFICE_ADMIN');
+
+            const hide = el => { if (el) el.style.display = 'none'; };
+            const show = el => { if (el) el.style.display = '';     };
+
+            const s1 = document.getElementById('sidebar-s1');
+            const s2 = document.getElementById('sidebar-s2');
+            const s3 = document.getElementById('sidebar-s3');
+            const s4 = document.getElementById('sidebar-s4');
+            const s5 = document.getElementById('sme-training-container');
+
+            if (isNurse) {
+                hide(s1); show(s2); show(s3); hide(s4); hide(s5);
+                console.log('[PCES][Role] NURSE — S1,S4,S5 hidden | S2,S3 visible');
+            } else if (isAdmin) {
+                hide(s1); hide(s2); hide(s3); hide(s4); hide(s5);
+                console.log('[PCES][Role] OFFICE_ADMIN — all sections hidden');
+            } else {
+                // Doctor / ADMIN / default: restore all (S5 left to SME gate)
+                show(s1); show(s2); show(s3); show(s4);
+                // Don't touch s5 here — the SME gate in showLoggedInDoctor handles it
+                console.log('[PCES][Role] Default role — all sections visible');
+            }
+        }
+
         function showLoggedInDoctor() {
             const name = sessionStorage.getItem('pces_doctor_name');
             const el = document.getElementById('logged-in-doctor');
@@ -6413,6 +6461,8 @@ ${data.conclusion}
                 const isSME = role.split(',').map(r => r.trim()).includes('SME');
                 smeContainer.style.display = isSME ? '' : 'none';
             }
+            // Apply role-based section visibility (nurse / office_admin restrictions)
+            applyRoleVisibility(sessionStorage.getItem('pces_doctor_role') || '');
         }
 
         /** Enable/disable the three auth-gated bottom buttons (not send/stop/save which have their own guards). */
@@ -6453,6 +6503,8 @@ ${data.conclusion}
                 .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
             const smeContainer = document.getElementById('sme-training-container');
             if (smeContainer) smeContainer.style.display = 'none';
+            // Reset section visibility to default (removes nurse/admin restrictions)
+            applyRoleVisibility('');
             // Reset patient problem text
             const problemText = document.getElementById('problem-text');
             if (problemText) problemText.textContent = 'Patient problem not mentioned';
