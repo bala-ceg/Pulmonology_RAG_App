@@ -2603,6 +2603,11 @@
             overflow: hidden;
         }
 
+        /* Ensure the HTML hidden attribute wins even against display:flex */
+        .ai-summary-panel[hidden] {
+            display: none !important;
+        }
+
         .ai-summary-header {
             display: flex;
             align-items: center;
