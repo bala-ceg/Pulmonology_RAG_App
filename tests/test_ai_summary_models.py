@@ -41,16 +41,26 @@ except ImportError:
 PATIENT_ID = "11111111-1111-1111-1111-111111111001"
 
 MODELS_TO_TEST = [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4-turbo",
-    # ── GPT-5 models — uncomment when your API key has access ──────────────
-    # "gpt-5",          # base GPT-5 (when GA)
-    # "gpt-5-mini",     # cost-optimised GPT-5 variant
-    # "o3",             # OpenAI o3 reasoning model
-    # "o4-mini",        # OpenAI o4-mini reasoning model
-    # ── To add any model: append its exact OpenAI API model ID string above,
-    #    then re-run:  python tests/test_ai_summary_models.py
+    # ── GPT-3.5 ────────────────────────────────────────────────────────────
+    "gpt-3.5-turbo",          # fast, cheap baseline
+
+    # ── GPT-4 ──────────────────────────────────────────────────────────────
+    "gpt-4o-mini",            # cost-optimised GPT-4o
+    "gpt-4o",                 # full GPT-4o
+    "gpt-4-turbo",            # GPT-4 Turbo
+
+    # ── GPT-5 — uncomment when your API key has access ─────────────────────
+    # "gpt-5",                # base GPT-5
+    # "gpt-5-mini",           # cost-optimised GPT-5
+    # "gpt-5-turbo",          # GPT-5 Turbo variant (if released)
+
+    # ── OpenAI reasoning models ────────────────────────────────────────────
+    # "o3",                   # o3 reasoning model
+    # "o3-mini",              # o3-mini
+    # "o4-mini",              # o4-mini reasoning model
+
+    # ── To add any model: append its exact OpenAI API model ID above,
+    #    then re-run:  python3 tests/test_ai_summary_models.py
 ]
 
 PROMPT_TEMPLATE = (
