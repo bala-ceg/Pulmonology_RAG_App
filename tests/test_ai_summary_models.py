@@ -49,10 +49,10 @@ MODELS_TO_TEST = [
     "gpt-4o",                 # full GPT-4o
     "gpt-4-turbo",            # GPT-4 Turbo
 
-    # ── GPT-5 — uncomment when your API key has access ─────────────────────
-    # "gpt-5",                # base GPT-5
-    # "gpt-5-mini",           # cost-optimised GPT-5
-    # "gpt-5-turbo",          # GPT-5 Turbo variant (if released)
+    # ── GPT-5 (temperature must be 1 — handled automatically below) ────────
+    "gpt-5",                  # base GPT-5
+    "gpt-5-mini",             # cost-optimised GPT-5
+    # "gpt-5-turbo",          # ❌ model not found — does not exist yet
 
     # ── OpenAI reasoning models ────────────────────────────────────────────
     # "o3",                   # o3 reasoning model
@@ -153,11 +153,15 @@ def _call_llm(model: str, prompt: str):
         base_url=os.getenv("base_url") or None,
     )
 
+    # Models that only accept temperature=1 (GPT-5 family)
+    FIXED_TEMP_MODELS = {"gpt-5", "gpt-5-mini", "gpt-5-turbo"}
+    temp = 1 if model in FIXED_TEMP_MODELS else 0.1
+
     t0 = time.perf_counter()
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1,
+        temperature=temp,
         timeout=120,
     )
     elapsed_ms = round((time.perf_counter() - t0) * 1000)
