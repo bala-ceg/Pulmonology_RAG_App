@@ -616,6 +616,7 @@ def generate_summary():
         transcription = data.get("transcription", "").strip()
         doctor_name = data.get("doctor_name", "").strip()
         patient_name = data.get("patient_name", "").strip()
+        provider_label = data.get("provider_label", "Doctor").strip() or "Doctor"
 
         if not transcription:
             return (
@@ -632,7 +633,7 @@ def generate_summary():
         As a medical AI assistant, please analyze the following patient consultation transcript and provide a professional medical summary.
         
         Patient: {patient_name if patient_name else 'Not specified'}
-        Doctor: {doctor_name if doctor_name else 'Not specified'}
+        {provider_label}: {doctor_name if doctor_name else 'Not specified'}
         Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         Transcript:

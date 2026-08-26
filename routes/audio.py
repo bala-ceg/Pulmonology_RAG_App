@@ -277,6 +277,7 @@ def transcribe_patient_notes():
         audio_file = request.files.get("audio")
         doctor_name = request.form.get("doctor_name", "")
         patient_name = request.form.get("patient_name", "")
+        provider_label = request.form.get("provider_label", "Doctor")
 
         logger.info(
             "Processing patient recording for: %s by Dr. %s", patient_name, doctor_name
@@ -314,7 +315,7 @@ def transcribe_patient_notes():
         As a medical AI assistant, please analyze the following patient consultation transcript and provide a professional medical summary.
         
         Patient: {patient_name}
-        Doctor: {doctor_name}
+        {provider_label}: {doctor_name}
         Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         Transcript:

@@ -2833,7 +2833,7 @@
                 </strong>
                 </div>
                 <div class="name-display">
-                    <strong>Doctor's Name: <span id="display-doctor-name">[Enter Doctor Name]</span></strong>
+                    <strong id="notes-doctor-label">Doctor's Name: <span id="display-doctor-name">[Enter Doctor Name]</span></strong>
                 </div>
             </div>
 
@@ -5200,6 +5200,7 @@
                             formData.append('doctor_name', doctorName);
                             formData.append('patient_name', patientName);
                             formData.append('hospital_name', sessionStorage.getItem('pces_hospital_name') || '');
+                            formData.append('provider_label', window._pcesProviderLabel || 'Doctor');
 
                             const response = await fetch('/transcribe_patient_notes', {
                                 method: 'POST',
@@ -5335,7 +5336,8 @@
                 body: JSON.stringify({
                     transcription: transcriptionText,
                     doctor_name: doctorName,
-                    patient_name: patientName
+                    patient_name: patientName,
+                    provider_label: window._pcesProviderLabel || 'Doctor'
                 })
             })
             .then(response => response.json())
@@ -5410,7 +5412,8 @@
                 conclusion: editedConclusion || 'No conclusion provided',
                 patientProblem: patientProblem,
                 hospitalName: sessionStorage.getItem('pces_hospital_name') || '',
-                timestamp: timestamp
+                timestamp: timestamp,
+                providerLabel: window._pcesProviderLabel || 'Doctor'
             };
 
             // Generate and download PDF
@@ -5794,6 +5797,7 @@ Generated on: ${new Date().toLocaleString()}
                 formData.append('doctor_name', doctorName);
                 formData.append('patient_name', patientName);
                 formData.append('hospital_name', sessionStorage.getItem('pces_hospital_name') || '');
+                formData.append('provider_label', window._pcesProviderLabel || 'Doctor');
                 const language = document.getElementById('conversation-language').value;
                 formData.append('language', language);
                 
@@ -5925,7 +5929,8 @@ Generated on: ${new Date().toLocaleString()}
                     totalSegments: currentConversationData.transcript ? currentConversationData.transcript.length : 0,
                     language: currentConversationData.language || 'en',
                     translated: currentConversationData.translated || false
-                }
+                },
+                providerLabel: window._pcesProviderLabel || 'Doctor'
             };
             
             // Generate and download PDF using existing chat PDF endpoint (we'll modify it)
@@ -6011,7 +6016,8 @@ Generated on: ${new Date().toLocaleString()}
                 body: JSON.stringify({
                     transcription: conversationText,
                     doctor_name: 'Medical AI Assistant',
-                    patient_name: 'Patient from Chat Conversation'
+                    patient_name: 'Patient from Chat Conversation',
+                    provider_label: window._pcesProviderLabel || 'Doctor'
                 })
             })
             .then(response => response.json())
@@ -6086,7 +6092,8 @@ ${data.conclusion}
                 body: JSON.stringify({
                     transcription: transcriptionText,
                     doctor_name: doctorName,
-                    patient_name: patientName
+                    patient_name: patientName,
+                    provider_label: window._pcesProviderLabel || 'Doctor'
                 })
             })
             .then(response => response.json())
@@ -6419,6 +6426,75 @@ ${data.conclusion}
         }
 
         /**
+         * Apply user-facing label text based on role.
+         * When NURSE: "Doctor" → "Nurse" in sections 2 & 3 labels, modals, edit prompts.
+         * Also sets window._pcesProviderLabel for use in API calls.
+         */
+        function applyRoleLabels(roleStr) {
+            const roles   = _parseRoles(roleStr);
+            const isNurse = _hasRole(roles, 'NURSE');
+            window._pcesProviderLabel = isNurse ? 'Nurse' : 'Doctor';
+
+            const lbl = isNurse ? 'Nurse' : 'Doctor';
+            const oldLbl = isNurse ? 'Doctor' : 'Nurse';
+
+            // Sidebar S2 / S3 section labels
+            const s2label = document.querySelector('#sidebar-s2 .sidebar-section-label');
+            const s3label = document.querySelector('#sidebar-s3 .sidebar-section-label');
+            if (s2label) s2label.textContent = `2. ${lbl} / Patient Conversation`;
+            if (s3label) s3label.textContent = `3. ${lbl} / Patient Multi-Lingual`;
+
+            // Name input modal: label + placeholder
+            const doctorLabel = document.querySelector('label[for="doctor-name-input"]');
+            if (doctorLabel) doctorLabel.innerHTML = `🩺 ${lbl}'s Name:`;
+            const doctorInput = document.getElementById('doctor-name-input');
+            if (doctorInput) doctorInput.placeholder = `Start typing ${lbl.toLowerCase()}'s name...`;
+
+            // Patient notes modal strong label
+            const notesLbl = document.getElementById('notes-doctor-label');
+            if (notesLbl) {
+                const span = notesLbl.querySelector('#display-doctor-name');
+                notesLbl.childNodes.forEach(n => {
+                    if (n.nodeType === Node.TEXT_NODE) {
+                        n.textContent = n.textContent.replace(oldLbl, lbl);
+                    }
+                });
+            }
+
+            // Conversation segments modal h1
+            const segModal = document.getElementById('conversation-segments-modal');
+            if (segModal) {
+                const h1 = segModal.querySelector('.main-header h1');
+                if (h1) h1.textContent = h1.textContent.replace(oldLbl, lbl);
+                // "Doctor:" / "Nurse:" label before conv-doctor-name
+                const convDocEl = document.getElementById('conv-doctor-name');
+                if (convDocEl) {
+                    const strong = convDocEl.closest('.name-display')?.querySelector('strong');
+                    if (strong) {
+                        strong.childNodes.forEach(n => {
+                            if (n.nodeType === Node.TEXT_NODE)
+                                n.textContent = n.textContent.replace(oldLbl + ':', lbl + ':');
+                        });
+                    }
+                }
+                // All edit-prompt divs inside the modal
+                segModal.querySelectorAll('.edit-prompt').forEach(el => {
+                    el.textContent = el.textContent.replace(oldLbl, lbl);
+                });
+            }
+
+            // Edit prompts in patient notes modal
+            const notesModal = document.getElementById('patient-notes-modal');
+            if (notesModal) {
+                notesModal.querySelectorAll('.edit-prompt').forEach(el => {
+                    el.textContent = el.textContent.replace(oldLbl, lbl);
+                });
+            }
+
+            console.log(`[PCES][RoleLabel] provider label → ${lbl}`);
+        }
+
+        /**
          * Apply sidebar section visibility based on role string from pces_users.pces_role.
          * Call after login, on page-load restore, and on logout (pass '' to reset).
          *
@@ -6452,6 +6528,8 @@ ${data.conclusion}
                 // Don't touch s5 here — the SME gate in showLoggedInDoctor handles it
                 console.log('[PCES][Role] Default role — all sections visible');
             }
+            // Apply role-aware label text (Doctor ↔ Nurse)
+            applyRoleLabels(roleStr);
         }
 
         function showLoggedInDoctor() {

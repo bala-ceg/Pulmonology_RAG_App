@@ -94,6 +94,7 @@ def transcribe_doctor_patient_conversation():
         doctor_name = request.form.get("doctor_name", "Unknown Doctor")
         patient_name = request.form.get("patient_name", "Unknown Patient")
         language = request.form.get("language", "en")
+        provider_label = request.form.get("provider_label", "Doctor")
 
         logger.info(
             "Processing conversation for %s and %s in language: %s",
@@ -334,7 +335,7 @@ CRITICAL Rules:
                     "transcript": transcript,
                     "raw_transcript": raw_transcript,
                     "original_transcript": original_transcript,
-                    "role_mapping": {"Doctor": doctor_name, "Patient": patient_name},
+                    "role_mapping": {provider_label: doctor_name, "Patient": patient_name},
                     "language": language,
                     "translated": True,
                 }
@@ -382,7 +383,7 @@ CRITICAL Rules:
                     summary_prompt = f"""
                     As a medical AI assistant, please analyze the following doctor-patient conversation transcript and provide a professional medical summary.
                     
-                    Doctor: {doctor_name}
+                    {provider_label}: {doctor_name}
                     Patient: {patient_name}
                     Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     

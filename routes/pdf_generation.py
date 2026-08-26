@@ -148,6 +148,7 @@ def generate_patient_pdf():
     summary = data.get("summary", "")
     conclusion = data.get("conclusion", "")
     patient_problem = data.get("patientProblem", "")
+    provider_label = data.get("providerLabel", "Doctor") or "Doctor"
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -237,7 +238,7 @@ def generate_patient_pdf():
     story.append(Spacer(1, 5))
     story.append(
         Paragraph(
-            f"Doctor's Name: {doctor_name if doctor_name else 'Unknown Doctor'}",
+            f"{provider_label}'s Name: {doctor_name if doctor_name else f'Unknown {provider_label}'}",
             styles["Normal"],
         )
     )
@@ -368,6 +369,7 @@ def generate_chat_pdf():
     patient_problem = data.get("patientProblem", "")
     messages = data.get("messages", [])
     json_data = data.get("jsonData", "")
+    provider_label = data.get("providerLabel", "Doctor") or "Doctor"
 
     now = datetime.now()
     formatted_date = now.strftime("%m/%d/%Y, %I:%M:%S %p")
@@ -496,7 +498,7 @@ def generate_chat_pdf():
     story.append(Spacer(1, 5))
     story.append(
         Paragraph(
-            f"Doctor's Name: {doctor_name if doctor_name else 'Unknown Doctor'}",
+            f"{provider_label}'s Name: {doctor_name if doctor_name else f'Unknown {provider_label}'}",
             styles["Normal"],
         )
     )
@@ -769,6 +771,7 @@ def generate_conversation_pdf():
     conclusion = data.get("conclusion", "")
     processing_info = data.get("processingInfo", {})
     is_duplicate = data.get("isDuplicate", False)
+    provider_label = data.get("providerLabel", "Doctor") or "Doctor"
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -862,7 +865,7 @@ def generate_conversation_pdf():
     )
     story.append(Spacer(1, 10))
 
-    story.append(Paragraph(f"Doctor: {doctor_name}", styles["Normal"]))
+    story.append(Paragraph(f"{provider_label}: {doctor_name}", styles["Normal"]))
     story.append(Spacer(1, 5))
     story.append(Paragraph(f"Patient: {patient_name}", styles["Normal"]))
     story.append(Spacer(1, 15))
