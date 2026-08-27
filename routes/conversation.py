@@ -91,10 +91,11 @@ def transcribe_doctor_patient_conversation():
         from langchain_openai import ChatOpenAI
 
         audio_file = request.files["audio"]
-        doctor_name = request.form.get("doctor_name", "Unknown Doctor")
+        doctor_name = request.form.get("doctor_name", "")
         patient_name = request.form.get("patient_name", "Unknown Patient")
         language = request.form.get("language", "en")
         provider_label = request.form.get("provider_label", "Doctor")
+        doctor_name = doctor_name or f"Unknown {provider_label}"
 
         logger.info(
             "Processing conversation for %s and %s in language: %s",
@@ -280,7 +281,7 @@ CRITICAL Rules:
                 for i, segment in enumerate(segments):
                     role = segment.get("speaker", "unknown").lower()
                     if role == "doctor":
-                        role = "Doctor"
+                        role = provider_label
                     elif role == "patient":
                         role = "Patient"
                     else:
@@ -475,7 +476,7 @@ CRITICAL Rules:
                 {
                     "success": True,
                     "conversation_data": conversation_data,
-                    "message": "Doctor-patient conversation processed successfully",
+                    "message": f"{provider_label}-patient conversation processed successfully",
                 }
             )
 

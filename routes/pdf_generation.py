@@ -686,7 +686,7 @@ def generate_chat_pdf():
         formatted_content = _convert_markdown_to_reportlab(content)
 
         if role == "user":
-            story.append(Paragraph("Doctor Input:", section_header_style))
+            story.append(Paragraph(f"{provider_label} Input:", section_header_style))
         elif role == "ai":
             story.append(Paragraph("System Output:", section_header_style))
         else:
@@ -833,7 +833,7 @@ def generate_conversation_pdf():
 
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ClientLogo101.png")
     duplicate_text = " (Duplicate)" if is_duplicate else ""
-    main_title = f"Doctor-Patient Conversation Analysis{duplicate_text}"
+    main_title = f"{provider_label}-Patient Conversation Analysis{duplicate_text}"
 
     if os.path.exists(logo_path):
         try:

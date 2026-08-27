@@ -6433,10 +6433,19 @@ ${data.conclusion}
         function applyRoleLabels(roleStr) {
             const roles   = _parseRoles(roleStr);
             const isNurse = _hasRole(roles, 'NURSE');
-            window._pcesProviderLabel = isNurse ? 'Nurse' : 'Doctor';
+            const isAdmin = _hasRole(roles, 'OFFICE_ADMIN');
 
-            const lbl = isNurse ? 'Nurse' : 'Doctor';
-            const oldLbl = isNurse ? 'Doctor' : 'Nurse';
+            let lbl, oldLbl;
+            if (isNurse) {
+                lbl = 'Nurse'; oldLbl = 'Doctor';
+                window._pcesProviderLabel = 'Nurse';
+            } else if (isAdmin) {
+                lbl = 'Admin Staff'; oldLbl = 'Doctor';
+                window._pcesProviderLabel = 'Admin Staff';
+            } else {
+                lbl = 'Doctor'; oldLbl = 'Nurse';
+                window._pcesProviderLabel = 'Doctor';
+            }
 
             // Sidebar S2 / S3 section labels
             const s2label = document.querySelector('#sidebar-s2 .sidebar-section-label');
@@ -6498,9 +6507,9 @@ ${data.conclusion}
          * Apply sidebar section visibility based on role string from pces_users.pces_role.
          * Call after login, on page-load restore, and on logout (pass '' to reset).
          *
-         * NURSE      → S1 hidden, S2 visible, S3 visible, S4 hidden, S5 hidden
-         * OFFICE_ADMIN → S1–S5 all hidden
-         * other      → all visible (SME gate for S5 handled separately)
+         * NURSE        → S1 hidden, S2 visible, S3 visible, S4 hidden, S5 hidden
+         * OFFICE_ADMIN → S1 hidden, S2 visible, S3 visible, S4 hidden, S5 hidden
+         * other        → all visible (SME gate for S5 handled separately)
          */
         function applyRoleVisibility(roleStr) {
             const roles   = _parseRoles(roleStr);
@@ -6520,8 +6529,8 @@ ${data.conclusion}
                 hide(s1); show(s2); show(s3); hide(s4); hide(s5);
                 console.log('[PCES][Role] NURSE — S1,S4,S5 hidden | S2,S3 visible');
             } else if (isAdmin) {
-                hide(s1); hide(s2); hide(s3); hide(s4); hide(s5);
-                console.log('[PCES][Role] OFFICE_ADMIN — all sections hidden');
+                hide(s1); show(s2); show(s3); hide(s4); hide(s5);
+                console.log('[PCES][Role] OFFICE_ADMIN — S1,S4,S5 hidden | S2,S3 visible');
             } else {
                 // Doctor / ADMIN / default: restore all (S5 left to SME gate)
                 show(s1); show(s2); show(s3); show(s4);

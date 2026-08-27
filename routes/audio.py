@@ -287,7 +287,7 @@ def transcribe_patient_notes():
             return jsonify({"error": "No audio file provided"}), 400
 
         if not doctor_name or not patient_name:
-            return jsonify({"error": "Doctor name and patient name are required"}), 400
+            return jsonify({"error": f"{provider_label} name and patient name are required"}), 400
 
         whisper_model = _get_whisper()
         llm = _get_llm()
