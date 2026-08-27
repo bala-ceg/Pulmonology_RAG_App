@@ -2681,6 +2681,78 @@
             padding: 8px 0;
         }
 
+        /* AI Summary Fullscreen Modal */
+        #ai-summary-modal {
+            z-index: 10000;
+            background: rgba(0,0,0,0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #ai-summary-modal[hidden] { display: none !important; }
+        .ai-summary-modal-content {
+            background: #fff;
+            border-radius: 8px;
+            width: 780px;
+            max-width: 96vw;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.28);
+        }
+        .ai-summary-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px 12px;
+            border-bottom: 1px solid #dde3ea;
+            flex-shrink: 0;
+        }
+        .ai-summary-modal-header h2 {
+            margin: 0;
+            font-size: 17px;
+            color: #1a3a5c;
+        }
+        .ai-summary-modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #555;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        .ai-summary-modal-close:hover { background: #f0f0f0; }
+        .ai-summary-modal-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 18px 24px;
+            font-size: 13.5px;
+            line-height: 1.65;
+            color: #1a1a1a;
+        }
+        /* Hint cursor on summary body to signal double-clickable */
+        #ai-summary-body.has-content {
+            cursor: zoom-in;
+        }
+        #ai-summary-body.has-content::after {
+            content: '↗ double-click to expand';
+            display: block;
+            text-align: right;
+            font-size: 10px;
+            color: #aaa;
+            margin-top: 6px;
+        }
+
+        /* Readonly textarea style for non-doctor roles */
+        textarea.pces-readonly {
+            background: #f5f5f5 !important;
+            color: #666 !important;
+            cursor: not-allowed !important;
+            border-color: #ccc !important;
+        }
+
         .problem-row {
             flex: 0 0 47px;
             min-height: 47px;
@@ -2833,7 +2905,7 @@
                 </strong>
                 </div>
                 <div class="name-display">
-                    <strong id="notes-doctor-label">Doctor's Name: <span id="display-doctor-name">[Enter Doctor Name]</span></strong>
+                    <strong id="notes-doctor-label"><span id="notes-provider-text">Doctor</span>'s Name: <span id="display-doctor-name">[Enter Doctor Name]</span></strong>
                 </div>
             </div>
 
@@ -2885,19 +2957,30 @@
         </div>
     </div>
 
+    <!-- AI Summary Fullscreen Modal (opened by double-clicking the summary panel) -->
+    <div id="ai-summary-modal" class="modal-overlay" hidden>
+        <div class="ai-summary-modal-content">
+            <div class="ai-summary-modal-header">
+                <h2>AI Generated Patient Summary</h2>
+                <button class="ai-summary-modal-close" onclick="closeAiSummaryModal()" title="Close">✕</button>
+            </div>
+            <div class="ai-summary-modal-body" id="ai-summary-modal-body"></div>
+        </div>
+    </div>
+
     <!-- Conversation Segments Modal -->
     <div id="conversation-segments-modal" class="modal-overlay">
         <div class="conversation-segments-modal">
             <!-- Header -->
             <div class="main-header">
-                <h1>Doctor-Patient Conversation Segments</h1>
+                <h1 id="conv-segments-h1">Doctor-Patient Conversation Segments</h1>
                 <h2>Voice Diarization Results</h2>
             </div>
             
             <!-- Conversation Info -->
             <div class="names-section">
                 <div class="name-display">
-                    <strong>Doctor: <span id="conv-doctor-name">Doctor</span></strong>
+                    <strong><span id="conv-provider-strong-label">Doctor</span>: <span id="conv-doctor-name">Doctor</span></strong>
                 </div>
                 <div class="name-display">
                     <strong>Patient: <span id="conv-patient-name">Patient</span></strong>
@@ -3077,7 +3160,7 @@
                             <div class="doctor-popup-row">
                                 <span class="doctor-popup-icon">🩺</span>
                                 <div>
-                                    <div class="doctor-popup-label">Doctor</div>
+                                    <div class="doctor-popup-label" id="popup-provider-role-label">Doctor</div>
                                     <div class="doctor-popup-value" id="popup-doctor-name">—</div>
                                 </div>
                             </div>
@@ -3501,7 +3584,7 @@
 
             // Show panel with spinner
             panel.hidden = false;
-            body.classList.remove('collapsed');
+            body.classList.remove('collapsed', 'has-content');
             const toggleBtn = document.getElementById('ai-summary-toggle-btn');
             if (toggleBtn) toggleBtn.textContent = '▲';
             body.innerHTML = '<div class="ai-summary-spinner">Generating…</div>';
@@ -3524,6 +3607,7 @@
                         .replace(/\*([^*]+?)\*/g,   '<em>$1</em>');
                     const paras = data.summary.split(/\n{2,}/).filter(p => p.trim());
                     body.innerHTML = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
+                    body.classList.add('has-content');
                     console.log(
                         `[PCES][AISummary] ✅ model=${data.model || 'n/a'} | ` +
                         `encounters=${data.encounter_count || 'n/a'} | ` +
@@ -3555,7 +3639,7 @@
             if (!panel || !body) return;
             panel.hidden = true;
             body.innerHTML = '<div class="ai-summary-spinner">Generating…</div>';
-            body.classList.remove('collapsed');
+            body.classList.remove('collapsed', 'has-content');
         }
 
         function toggleAiSummary() {
@@ -3564,6 +3648,22 @@
             if (!body || !btn) return;
             const collapsed = body.classList.toggle('collapsed');
             btn.textContent = collapsed ? '▼' : '▲';
+        }
+
+        function openAiSummaryModal() {
+            const src  = document.getElementById('ai-summary-body');
+            const dest = document.getElementById('ai-summary-modal-body');
+            const modal = document.getElementById('ai-summary-modal');
+            if (!src || !dest || !modal) return;
+            // Don't open if only spinner/error is showing
+            if (src.querySelector('.ai-summary-spinner') || !src.innerHTML.trim()) return;
+            dest.innerHTML = src.innerHTML;
+            modal.hidden = false;
+        }
+
+        function closeAiSummaryModal() {
+            const modal = document.getElementById('ai-summary-modal');
+            if (modal) modal.hidden = true;
         }
 
         async function loadMedicalHistory(patientId) {
@@ -6148,11 +6248,24 @@ ${data.conclusion}
                 }
             });
             
-            // ESC key to close conversation modal
+            // ESC key to close conversation modal and ai-summary modal
             document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && document.getElementById('conversation-segments-modal').classList.contains('show')) {
-                    closeConversationModal();
+                if (e.key === 'Escape') {
+                    if (document.getElementById('conversation-segments-modal').classList.contains('show')) {
+                        closeConversationModal();
+                    }
+                    if (!document.getElementById('ai-summary-modal').hidden) {
+                        closeAiSummaryModal();
+                    }
                 }
+            });
+
+            // Double-click AI summary body → open fullscreen modal
+            document.getElementById('ai-summary-body').addEventListener('dblclick', openAiSummaryModal);
+
+            // Click outside ai-summary-modal content to close
+            document.getElementById('ai-summary-modal').addEventListener('click', function(e) {
+                if (e.target === this) closeAiSummaryModal();
             });
 
             // Restore medical history and allergies if patient was already selected in a prior session
@@ -6435,19 +6548,12 @@ ${data.conclusion}
             const isNurse = _hasRole(roles, 'NURSE');
             const isAdmin = _hasRole(roles, 'OFFICE_ADMIN');
 
-            let lbl, oldLbl;
-            if (isNurse) {
-                lbl = 'Nurse'; oldLbl = 'Doctor';
-                window._pcesProviderLabel = 'Nurse';
-            } else if (isAdmin) {
-                lbl = 'Admin Staff'; oldLbl = 'Doctor';
-                window._pcesProviderLabel = 'Admin Staff';
-            } else {
-                lbl = 'Doctor'; oldLbl = 'Nurse';
-                window._pcesProviderLabel = 'Doctor';
-            }
+            let lbl;
+            if (isNurse)       { lbl = 'Nurse';      window._pcesProviderLabel = 'Nurse'; }
+            else if (isAdmin)  { lbl = 'Admin Staff'; window._pcesProviderLabel = 'Admin Staff'; }
+            else               { lbl = 'Doctor';      window._pcesProviderLabel = 'Doctor'; }
 
-            // Sidebar S2 / S3 section labels
+            // Sidebar S2 / S3 section labels — direct assignment (no replace)
             const s2label = document.querySelector('#sidebar-s2 .sidebar-section-label');
             const s3label = document.querySelector('#sidebar-s3 .sidebar-section-label');
             if (s2label) s2label.textContent = `2. ${lbl} / Patient Conversation`;
@@ -6459,48 +6565,70 @@ ${data.conclusion}
             const doctorInput = document.getElementById('doctor-name-input');
             if (doctorInput) doctorInput.placeholder = `Start typing ${lbl.toLowerCase()}'s name...`;
 
-            // Patient notes modal strong label
-            const notesLbl = document.getElementById('notes-doctor-label');
-            if (notesLbl) {
-                const span = notesLbl.querySelector('#display-doctor-name');
-                notesLbl.childNodes.forEach(n => {
-                    if (n.nodeType === Node.TEXT_NODE) {
-                        n.textContent = n.textContent.replace(oldLbl, lbl);
-                    }
-                });
-            }
+            // Patient notes modal: stable span inside strong
+            const notesProvText = document.getElementById('notes-provider-text');
+            if (notesProvText) notesProvText.textContent = lbl;
 
-            // Conversation segments modal h1
-            const segModal = document.getElementById('conversation-segments-modal');
-            if (segModal) {
-                const h1 = segModal.querySelector('.main-header h1');
-                if (h1) h1.textContent = h1.textContent.replace(oldLbl, lbl);
-                // "Doctor:" / "Nurse:" label before conv-doctor-name
-                const convDocEl = document.getElementById('conv-doctor-name');
-                if (convDocEl) {
-                    const strong = convDocEl.closest('.name-display')?.querySelector('strong');
-                    if (strong) {
-                        strong.childNodes.forEach(n => {
-                            if (n.nodeType === Node.TEXT_NODE)
-                                n.textContent = n.textContent.replace(oldLbl + ':', lbl + ':');
-                        });
-                    }
-                }
-                // All edit-prompt divs inside the modal
-                segModal.querySelectorAll('.edit-prompt').forEach(el => {
-                    el.textContent = el.textContent.replace(oldLbl, lbl);
-                });
-            }
+            // Conversation segments modal — direct assignment via stable IDs
+            const segH1 = document.getElementById('conv-segments-h1');
+            if (segH1) segH1.textContent = `${lbl}-Patient Conversation Segments`;
 
-            // Edit prompts in patient notes modal
-            const notesModal = document.getElementById('patient-notes-modal');
-            if (notesModal) {
-                notesModal.querySelectorAll('.edit-prompt').forEach(el => {
-                    el.textContent = el.textContent.replace(oldLbl, lbl);
-                });
-            }
+            const convProvStrong = document.getElementById('conv-provider-strong-label');
+            if (convProvStrong) convProvStrong.textContent = lbl;
+
+            // Doctor popup role label
+            const popupRoleLabel = document.getElementById('popup-provider-role-label');
+            if (popupRoleLabel) popupRoleLabel.textContent = lbl;
+
+            // Edit-prompt divs — direct assignment based on lbl (not text replacement)
+            document.querySelectorAll('.edit-prompt').forEach(el => {
+                const txt = el.textContent || '';
+                // Replace any of the possible role words with the current lbl
+                el.textContent = txt
+                    .replace(/\b(Doctor|Nurse|Admin Staff)\b/g, lbl);
+            });
 
             console.log(`[PCES][RoleLabel] provider label → ${lbl}`);
+        }
+
+        /**
+         * Make Medical Summary / Conclusion / Transcript textareas readonly for non-Doctor roles.
+         * Called from applyRoleVisibility() alongside applyRoleLabels().
+         */
+        function applyRoleEditability(roleStr) {
+            const roles       = _parseRoles(roleStr);
+            const isDoctor    = !_hasRole(roles, 'NURSE') && !_hasRole(roles, 'OFFICE_ADMIN') && roleStr !== '';
+            // When roleStr is empty (logout) treat as Doctor to restore defaults
+            const editable    = isDoctor || roleStr === '';
+
+            const textareaIds = [
+                'modal-summary', 'modal-conclusion', 'modal-transcription',
+                'conv-summary', 'conv-conclusion', 'conv-full-transcript'
+            ];
+            textareaIds.forEach(id => {
+                const ta = document.getElementById(id);
+                if (!ta) return;
+                if (editable) {
+                    ta.removeAttribute('readonly');
+                    ta.classList.remove('pces-readonly');
+                    // Restore "(Editable)" labels
+                    const lbl = ta.closest('.summary-section, .conclusion-section, .transcription-section');
+                    if (lbl) {
+                        const labelEl = lbl.querySelector('label');
+                        if (labelEl) labelEl.textContent = labelEl.textContent.replace('(Read-only)', '(Editable)');
+                    }
+                } else {
+                    ta.setAttribute('readonly', 'readonly');
+                    ta.classList.add('pces-readonly');
+                    // Change "(Editable)" → "(Read-only)"
+                    const section = ta.closest('.summary-section, .conclusion-section, .transcription-section');
+                    if (section) {
+                        const labelEl = section.querySelector('label');
+                        if (labelEl) labelEl.textContent = labelEl.textContent.replace('(Editable)', '(Read-only)');
+                    }
+                }
+            });
+            console.log(`[PCES][Editability] textareas → ${editable ? 'editable' : 'read-only'}`);
         }
 
         /**
@@ -6537,8 +6665,10 @@ ${data.conclusion}
                 // Don't touch s5 here — the SME gate in showLoggedInDoctor handles it
                 console.log('[PCES][Role] Default role — all sections visible');
             }
-            // Apply role-aware label text (Doctor ↔ Nurse)
+            // Apply role-aware label text (Doctor ↔ Nurse ↔ Admin Staff)
             applyRoleLabels(roleStr);
+            // Apply textarea editability (read-only for non-Doctor roles)
+            applyRoleEditability(roleStr);
         }
 
         function showLoggedInDoctor() {
