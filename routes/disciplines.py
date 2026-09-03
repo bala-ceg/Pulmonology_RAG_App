@@ -1215,8 +1215,14 @@ def get_patient_allergies(patient_id: str):
 @handle_route_errors
 def get_patient_ai_summary(patient_id: str):
     """Generate an AI clinical summary using a patient's FULL diagnosis history and allergies."""
+    import re as _re
     import time as _time
     from datetime import date as _date
+
+    # ICD-10-like code pattern (e.g. I10, R07.9, R07.89, E11.9) used to distinguish
+    # real coded diagnoses from free-text medication/dosage rows that share the same
+    # p_diagnosis table in this dataset (no dedicated p_medication data exists yet).
+    _ICD10_RE = _re.compile(r"^[A-Z][0-9]{2}(\.[0-9A-Z]{1,4})?$")
 
     # ── 1. Fetch ALL clinical data from pces_ehr_ccm ───────────────────────
     history_rows = []
@@ -1265,6 +1271,13 @@ def get_patient_ai_summary(patient_id: str):
 
     # ── 2. Build clinical prompt ───────────────────────────────────────────
     history_lines = []
+    active_conditions = []
+    medications = []
+    recent_encounters = []
+    _seen_conditions = set()
+    _seen_medications = set()
+    _seen_encounters = set()
+
     for code, description, doc_first, doc_last, enc_date in history_rows:
         try:
             d = enc_date if hasattr(enc_date, "strftime") else _date.fromisoformat(str(enc_date)[:10])
@@ -1274,7 +1287,47 @@ def get_patient_ai_summary(patient_id: str):
         doctor = f"{doc_first or ''} {doc_last or ''}".strip() or "Unknown physician"
         history_lines.append(f"- [{date_str}] {code}: {description} (Treating: Dr. {doctor})")
 
+        # ── Classify each diagnosis row as a real coded condition or a
+        # free-text medication/dosage entry (this dataset stores both in
+        # p_diagnosis since p_medication has no rows). Deterministic, no LLM.
+        code_clean = (code or "").strip()
+        if _ICD10_RE.match(code_clean):
+            if code_clean not in _seen_conditions and len(active_conditions) < 5:
+                _seen_conditions.add(code_clean)
+                active_conditions.append({
+                    "code": code_clean,
+                    "description": (description or "").strip(),
+                    "date": date_str,
+                })
+        else:
+            if code_clean and code_clean not in _seen_medications and len(medications) < 5:
+                _seen_medications.add(code_clean)
+                medications.append({
+                    "name": code_clean,
+                    "instructions": (description or "").strip(),
+                    "date": date_str,
+                })
+
+        enc_key = (date_str, doctor)
+        if enc_key not in _seen_encounters and len(recent_encounters) < 5:
+            _seen_encounters.add(enc_key)
+            recent_encounters.append({"date": date_str, "doctor": doctor})
+
     allergy_text = ", ".join(allergens) if allergens else "No known allergies"
+
+    # No lab-results table/data exists in the current schema — render an
+    # honest empty state on the frontend rather than fabricating values.
+    labs = []
+    labs_message = "No recent lab results recorded"
+
+    structured_sections = {
+        "active_conditions": active_conditions,
+        "medications": medications,
+        "recent_encounters": recent_encounters,
+        "allergies": allergens,
+        "labs": labs,
+        "labs_message": labs_message,
+    }
 
     prompt = (
         "You are a clinical decision-support assistant. "
@@ -1316,10 +1369,11 @@ def get_patient_ai_summary(patient_id: str):
             "model": model_name,
             "generation_time_ms": generation_time_ms,
             "encounter_count": len(history_lines),
+            **structured_sections,
         })
 
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
-        return jsonify({"summary": "", "error": f"LLM error: {exc}"}), 500
+        return jsonify({"summary": "", "error": f"LLM error: {exc}", **structured_sections}), 500
 
 

@@ -2681,6 +2681,64 @@
             padding: 8px 0;
         }
 
+        /* Structured "Patient Clinical Summary" card grid */
+        .clinical-summary-cards {
+            margin-bottom: 12px;
+        }
+        .clinical-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .clinical-summary-row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .summary-card {
+            border: 1px solid #dde3ea;
+            border-radius: 6px;
+            background: #f8fafc;
+            padding: 7px 9px 8px;
+        }
+        .summary-card-title {
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: #1a3a5c;
+            margin: 0 0 5px;
+            border-bottom: 1px solid #e1e7ee;
+            padding-bottom: 3px;
+        }
+        .summary-card-list {
+            margin: 0;
+            padding-left: 15px;
+            font-size: 11.5px;
+            line-height: 1.5;
+            color: #1a1a1a;
+        }
+        .summary-card-list li {
+            margin-bottom: 3px;
+        }
+        .summary-card-empty {
+            font-size: 11px;
+            font-style: italic;
+            color: #888;
+        }
+        /* Modal view uses wider 3-col grid */
+        .ai-summary-modal-body .clinical-summary-grid {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        .ai-summary-modal-body .summary-card-title {
+            font-size: 11.5px;
+        }
+        .ai-summary-modal-body .summary-card-list {
+            font-size: 12.5px;
+        }
+
         /* AI Summary Fullscreen Modal */
         #ai-summary-modal {
             z-index: 10000;
@@ -3566,6 +3624,71 @@
         /* ── AI Generated Patient Summary ─────────────────────────────── */
         let _aiSummaryAbortCtrl = null; // AbortController for in-flight fetch
 
+        function _escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function _renderSummaryCardList(items, mapFn) {
+            if (!items || !items.length) {
+                return '<p class="summary-card-empty">No data recorded</p>';
+            }
+            return `<ul class="summary-card-list">${items.map(mapFn).join('')}</ul>`;
+        }
+
+        function renderClinicalSummaryCards(data) {
+            const activeConditions = data.active_conditions || [];
+            const medications      = data.medications || [];
+            const recentEncounters = data.recent_encounters || [];
+            const allergies        = data.allergies || [];
+            const labs              = data.labs || [];
+            const labsMessage       = data.labs_message || 'No recent lab results recorded';
+
+            const conditionsHtml = _renderSummaryCardList(activeConditions,
+                c => `<li><strong>${_escapeHtml(c.code)}</strong> — ${_escapeHtml(c.description)} <span style="color:#888">(${_escapeHtml(c.date)})</span></li>`);
+
+            const labsHtml = labs.length
+                ? _renderSummaryCardList(labs, l => `<li>${_escapeHtml(l)}</li>`)
+                : `<p class="summary-card-empty">${_escapeHtml(labsMessage)}</p>`;
+
+            const encountersHtml = _renderSummaryCardList(recentEncounters,
+                e => `<li>${_escapeHtml(e.date)} — Dr. ${_escapeHtml(e.doctor)}</li>`);
+
+            const allergiesHtml = _renderSummaryCardList(allergies,
+                a => `<li>${_escapeHtml(a)}</li>`);
+
+            const medicationsHtml = _renderSummaryCardList(medications,
+                m => `<li><strong>${_escapeHtml(m.name)}</strong> — ${_escapeHtml(m.instructions)} <span style="color:#888">(${_escapeHtml(m.date)})</span></li>`);
+
+            return `
+                <div class="clinical-summary-cards">
+                    <div class="clinical-summary-grid">
+                        <div class="summary-card">
+                            <p class="summary-card-title">Active Conditions</p>
+                            ${conditionsHtml}
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-card-title">Recent Labs</p>
+                            ${labsHtml}
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-card-title">Recent Encounters</p>
+                            ${encountersHtml}
+                        </div>
+                    </div>
+                    <div class="clinical-summary-row-2">
+                        <div class="summary-card">
+                            <p class="summary-card-title">Allergies</p>
+                            ${allergiesHtml}
+                        </div>
+                        <div class="summary-card">
+                            <p class="summary-card-title">Medication</p>
+                            ${medicationsHtml}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
         async function loadPatientAiSummary(patientId) {
             const panel = document.getElementById('ai-summary-panel');
             const body  = document.getElementById('ai-summary-body');
@@ -3606,7 +3729,9 @@
                         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                         .replace(/\*([^*]+?)\*/g,   '<em>$1</em>');
                     const paras = data.summary.split(/\n{2,}/).filter(p => p.trim());
-                    body.innerHTML = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
+                    const cardsHtml = renderClinicalSummaryCards(data);
+                    const narrativeHtml = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
+                    body.innerHTML = cardsHtml + narrativeHtml;
                     body.classList.add('has-content');
                     console.log(
                         `[PCES][AISummary] ✅ model=${data.model || 'n/a'} | ` +
