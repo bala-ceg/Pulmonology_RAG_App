@@ -3,7 +3,19 @@ vector_dbs/
 KB/
 .env
 myenv/
+.venv/
 sft_models/
 .env.local
 logs/*.log
 session_logs/
+
+# Byte-compiled / cache files — never track, regenerated per-machine/version
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local runtime artifacts — machine-specific, not source
+*.log
+nohup.out
+local_sft.db
+hitl_queue/
