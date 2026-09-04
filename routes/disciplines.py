@@ -2208,6 +2208,58 @@ def get_patient_ai_summary(patient_id: str):
                 patient_id, exc,
             )
 
+    # ── Structure each medication entry into name / frequency / total days
+    # via the LLM. The source text only ever contains frequency wording
+    # (e.g. "3 times a day") — never an explicit day-count — so the LLM is
+    # instructed to report "Not specified" for duration rather than
+    # inventing one. Best-effort — falls back to the raw name/instructions
+    # if the LLM call or response parsing fails.
+    if medications:
+        try:
+            llm = current_app.config.get("LLM_INSTANCE")
+            if llm:
+                structure_prompt = (
+                    "You are a clinical assistant. For each medication entry below "
+                    "(raw name + free-text instructions), extract structured fields "
+                    "for a quick-glance patient summary card:\n"
+                    "- \"name\": the cleaned medicine name(s)\n"
+                    "- \"frequency\": a concise dosing frequency (e.g. \"Twice daily\", "
+                    "\"Every 6 hours\"), derived only from the given text\n"
+                    "- \"duration\": the total number of days of treatment ONLY if "
+                    "explicitly stated in the text (e.g. \"10 days\"); otherwise the "
+                    "literal string \"Not specified\" — never guess or invent a value\n\n"
+                    "Return ONLY a JSON array of objects with exactly these three keys, "
+                    "one per medication entry, in the exact same order as given, with no "
+                    "extra commentary or markdown.\n\n"
+                    "Medication entries:\n"
+                    + "\n".join(
+                        f"{i + 1}. Name: {m['name']} | Instructions: {m['instructions']}"
+                        for i, m in enumerate(medications)
+                    )
+                )
+                structure_response = llm.invoke(structure_prompt)
+                structure_text = (
+                    structure_response.content.strip()
+                    if hasattr(structure_response, "content")
+                    else str(structure_response).strip()
+                )
+                structure_text = _re.sub(
+                    r"^```(?:json)?|```$", "", structure_text, flags=_re.MULTILINE
+                ).strip()
+                structured_list = json.loads(structure_text)
+                if isinstance(structured_list, list) and len(structured_list) == len(medications):
+                    for med, structured in zip(medications, structured_list):
+                        if isinstance(structured, dict):
+                            if structured.get("name"):
+                                med["name"] = str(structured["name"]).strip()
+                            med["frequency"] = str(structured.get("frequency") or "Not specified").strip()
+                            med["duration"] = str(structured.get("duration") or "Not specified").strip()
+        except Exception as exc:
+            logger.warning(
+                "get_patient_ai_summary: structure medications failed for %s (%s)",
+                patient_id, exc,
+            )
+
     # No lab-results table/data exists in the current schema — render an
     # honest empty state on the frontend rather than fabricating values.
     labs = []
