@@ -2167,6 +2167,47 @@ def get_patient_ai_summary(patient_id: str):
 
     allergy_text = ", ".join(allergens) if allergens else "No known allergies"
 
+    # ── Condense each active condition to a single concise clinical sentence
+    # via the LLM (quick-glance summary card should not show raw/verbose
+    # diagnosis text). Best-effort — falls back to the raw description if the
+    # LLM call or response parsing fails.
+    if active_conditions:
+        try:
+            llm = current_app.config.get("LLM_INSTANCE")
+            if llm:
+                condense_prompt = (
+                    "You are a clinical assistant. For each diagnosis below, rewrite its "
+                    "description as ONE concise clinical sentence (no more than 20 words), "
+                    "suitable for a quick-glance patient summary card. Preserve the same "
+                    "medical meaning; do not add new information.\n\n"
+                    "Return ONLY a JSON array of strings, one per diagnosis, in the exact "
+                    "same order as given, with no extra commentary or markdown.\n\n"
+                    "Diagnoses:\n"
+                    + "\n".join(
+                        f"{i + 1}. [{c['code']}] {c['description']}"
+                        for i, c in enumerate(active_conditions)
+                    )
+                )
+                condense_response = llm.invoke(condense_prompt)
+                condense_text = (
+                    condense_response.content.strip()
+                    if hasattr(condense_response, "content")
+                    else str(condense_response).strip()
+                )
+                condense_text = _re.sub(
+                    r"^```(?:json)?|```$", "", condense_text, flags=_re.MULTILINE
+                ).strip()
+                concise_list = json.loads(condense_text)
+                if isinstance(concise_list, list) and len(concise_list) == len(active_conditions):
+                    for cond, concise in zip(active_conditions, concise_list):
+                        if isinstance(concise, str) and concise.strip():
+                            cond["description"] = concise.strip()
+        except Exception as exc:
+            logger.warning(
+                "get_patient_ai_summary: condense active_conditions failed for %s (%s)",
+                patient_id, exc,
+            )
+
     # No lab-results table/data exists in the current schema — render an
     # honest empty state on the frontend rather than fabricating values.
     labs = []
