@@ -28,7 +28,9 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from contextlib import contextmanager
+from datetime import date as date_cls, datetime, timedelta
 from typing import Generator
 
 import psycopg
@@ -835,6 +837,797 @@ def search_patients():
         return jsonify([])
 
 
+@disciplines_bp.route("/api/patients/first20", methods=["GET"])
+@handle_route_errors
+def get_first_20_patients():
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+    SELECT
+        pp.party_id,
+        pp.first_name,
+        pp.middle_name,
+        pp.last_name,
+        pp.date_of_birth,
+        pp.phone,
+        pp.email,
+        pa.address_id,
+        pa.line1,
+        pa.line2,
+        pa.city,
+        pa.state,
+        pa.postal_code
+    FROM p_party pp
+    LEFT JOIN p_address pa
+        ON pa.party_id = pp.party_id
+       AND pa.is_active = true
+    WHERE pp.party_type = 'PATIENT'
+      AND pp.is_active = true
+    ORDER BY pp.last_name, pp.first_name
+    LIMIT 20
+""")
+
+                rows = cursor.fetchall()
+
+        patients = []
+
+        for row in rows:
+            (
+                party_id,
+                first_name,
+                middle_name,
+                last_name,
+                dob,
+                phone,
+                email,
+                address_id,
+                address1,
+                address2,
+                city,
+                state,
+                postal_code
+            ) = row
+
+            full_name = " ".join(
+                x for x in
+                [first_name, middle_name, last_name]
+                if x
+            )
+
+            patients.append({
+                "patient_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "phone": phone or "",
+                "email": email or "",
+                "address_id": str(address_id) if address_id else "",
+                "address1": address1 or "",
+                "address2": address2 or "",
+                "city": city or "",
+                "state": state or "",
+                "zip": postal_code or ""
+            })
+
+        return jsonify(patients)
+
+    except Exception as exc:
+        logger.error("Unable to retrieve first 20 patients: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+@disciplines_bp.route("/api/doctors/first20", methods=["GET"])
+@handle_route_errors
+def get_first_20_doctors():
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                  SELECT
+                   pp.party_id,
+                   pp.first_name,
+                   pp.middle_name,
+                   pp.last_name,
+                   pp.date_of_birth,
+                   pp.phone,
+                   pp.email,
+                   pa.address_id,
+                   pa.line1,
+                   pa.line2,
+                   pa.city,
+                   pa.state,
+                   pa.postal_code
+                   FROM p_party pp
+                   LEFT JOIN p_address pa
+                  ON pa.party_id = pp.party_id
+                 AND pa.is_active = true
+                 WHERE pp.party_type = 'DOCTOR'
+                 AND pp.is_active = true
+                ORDER BY pp.last_name, pp.first_name
+                LIMIT 20;
+                """)
+
+                rows = cursor.fetchall()
+
+                doctors = []
+
+        for row in rows:
+            (
+                party_id,
+                first_name,
+                middle_name,
+                last_name,
+                dob,
+                phone,
+                email,
+                address_id,
+                address1,
+                address2,
+                city,
+                state,
+                postal_code
+            ) = row
+
+            full_name = " ".join(
+                x for x in
+                [first_name, middle_name, last_name]
+                if x
+            )
+
+            doctors.append({
+                "doctor_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "phone": phone or "",
+                "email": email or "",
+                "address_id": str(address_id) if address_id else "",
+                "address1": address1 or "",
+                "address2": address2 or "",
+                "city": city or "",
+                "state": state or "",
+                "zip": postal_code or ""
+            })
+
+        return jsonify(doctors)
+
+    except Exception as exc:
+        logger.error("Unable to retrieve first 20 doctors: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+# ============================================================
+# Patient -> Doctor relationship
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/doctors",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_patient_doctors(patient_id: str):
+    """
+    Return doctors associated with the selected patient
+    through p_encounter.
+    """
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        D.party_id AS provider_id,
+                        D.first_name,
+                        D.middle_name,
+                        D.last_name,
+                        E.encounter_type,
+                        E.encounter_date
+                    FROM p_encounter E
+                    JOIN p_party P
+                        ON E.patient_id = P.party_id
+                    JOIN p_party D
+                        ON E.provider_id = D.party_id
+                    WHERE P.party_id = %s
+                    ORDER BY E.encounter_date DESC
+                    """,
+                    (patient_id,)
+                )
+
+                rows = cursor.fetchall()
+
+        doctors = []
+
+        for row in rows:
+            (
+                provider_id,
+                first_name,
+                middle_name,
+                last_name,
+                encounter_type,
+                encounter_date
+            ) = row
+
+            full_name = " ".join(
+                x for x in
+                [first_name, middle_name, last_name]
+                if x
+            )
+
+            doctors.append({
+                "doctor_id": str(provider_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "encounter_type": encounter_type or "",
+                "encounter_dt":
+                    str(encounter_date)
+                    if encounter_date
+                    else ""
+            })
+
+        return jsonify(doctors)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve doctors for patient %s: %s",
+            patient_id,
+            exc
+        )
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# Doctor -> Patient relationship
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/doctors/<doctor_id>/patients",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_doctor_patients(doctor_id: str):
+    """
+    Return distinct patients associated with the selected
+    doctor through p_encounter.
+    """
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        P.party_id AS patient_id,
+                        P.first_name,
+                        P.middle_name,
+                        P.last_name,
+                        P.date_of_birth,
+                        P.phone,
+                        P.email
+                    FROM p_encounter E
+                    JOIN p_party D
+                        ON E.provider_id = D.party_id
+                    JOIN p_party P
+                        ON E.patient_id = P.party_id
+                    WHERE D.party_id = %s
+                    ORDER BY
+                        P.last_name,
+                        P.first_name
+                    LIMIT 20
+                    """,
+                    (doctor_id,)
+                )
+
+                rows = cursor.fetchall()
+
+        patients = []
+
+        for row in rows:
+            (
+                patient_id,
+                first_name,
+                middle_name,
+                last_name,
+                dob,
+                phone,
+                email
+            ) = row
+
+            full_name = " ".join(
+                x for x in
+                [first_name, middle_name, last_name]
+                if x
+            )
+
+            patients.append({
+                "patient_id": str(patient_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "phone": phone or "",
+                "email": email or ""
+            })
+
+        return jsonify(patients)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve patients for doctor %s: %s",
+            doctor_id,
+            exc
+        )
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+# ============================================================
+# Doctor's Schedule
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/doctors/<doctor_id>/schedule",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_doctor_schedule(doctor_id: str):
+    """
+    Return today's scheduled appointments for the selected doctor.
+    """
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+
+                cursor.execute(
+                    """
+                    SELECT
+                        PS.patient_id,
+                        PP.first_name,
+                        PP.middle_name,
+                        PP.last_name,
+                        PP.date_of_birth,
+                        PP.gender,
+                        PS.appointment_time
+                    FROM p_schedule PS
+                    JOIN p_party PP
+                        ON PS.patient_id = PP.party_id
+                    WHERE PS.provider_id = %s
+                      AND PS.appointment_date = CURRENT_DATE
+                      AND PS.status = 'SCHEDULED'
+                    ORDER BY PS.appointment_time
+                    """,
+                    (doctor_id,)
+                )
+
+                rows = cursor.fetchall()
+
+        schedule = []
+
+        for row in rows:
+            (
+                patient_id,
+                first_name,
+                middle_name,
+                last_name,
+                dob,
+                gender,
+                appointment_time
+            ) = row
+
+            full_name = " ".join(
+                value
+                for value in [
+                    first_name,
+                    middle_name,
+                    last_name
+                ]
+                if value
+            )
+
+            schedule.append({
+                "patient_id": str(patient_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "gender": gender or "",
+                "appointment_time":
+                    str(appointment_time)
+                    if appointment_time
+                    else ""
+            })
+
+        return jsonify(schedule)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve schedule for doctor %s: %s",
+            doctor_id,
+            exc
+        )
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+# ============================================================
+# Doctor Schedule by Date - Patient Scheduling Stage A
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/doctors/<doctor_id>/schedule-by-date",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_doctor_schedule_by_date(doctor_id: str):
+    """Return active p_schedule rows for one doctor on one date."""
+    appointment_date = (request.args.get("date") or "").strip()
+
+    if not appointment_date:
+        return jsonify({"error": "date is required"}), 400
+
+    try:
+        # Validate YYYY-MM-DD before sending the value to PostgreSQL.
+        parsed_date = date_cls.fromisoformat(appointment_date)
+    except ValueError:
+        return jsonify({
+            "error": "date must be in YYYY-MM-DD format"
+        }), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        s.schedule_id,
+                        s.appointment_date,
+                        s.appointment_time,
+                        s.patient_id,
+                        CONCAT_WS(
+                            ' ',
+                            p.first_name,
+                            p.middle_name,
+                            p.last_name
+                        ) AS patient_name,
+                        s.status
+                    FROM ehr_ccm_schema.p_schedule s
+                    LEFT JOIN ehr_ccm_schema.p_party p
+                        ON p.party_id = s.patient_id
+                    WHERE s.provider_id = %s
+                      AND s.appointment_date = %s
+                      AND s.is_active = TRUE
+                    ORDER BY s.appointment_time
+                    """,
+                    (doctor_id, parsed_date)
+                )
+
+                rows = cursor.fetchall()
+
+        # Stage B (temporary availability model):
+        # Build a full 30-minute workday and mark gaps as available.
+        # These hours can later be replaced by doctor-specific availability.
+        WORK_DAY_START = "09:00"
+        WORK_DAY_END = "18:00"
+        SLOT_MINUTES = 30
+
+        booked_slots = {}
+
+        for row in rows:
+            (
+                schedule_id,
+                schedule_date,
+                appointment_time,
+                patient_id,
+                patient_name,
+                status
+            ) = row
+
+            if not appointment_time:
+                continue
+
+            time_key = appointment_time.strftime("%H:%M")
+
+            booked_slots[time_key] = {
+                "schedule_id": str(schedule_id),
+                "appointment_date": (
+                    schedule_date.isoformat()
+                    if schedule_date
+                    else appointment_date
+                ),
+                "appointment_time": time_key,
+                "patient_id": (
+                    str(patient_id)
+                    if patient_id
+                    else ""
+                ),
+                "patient_name": patient_name or "",
+                "status": status or "",
+                "available": False
+            }
+
+        schedule = []
+        current_slot = datetime.strptime(WORK_DAY_START, "%H:%M")
+        final_slot = datetime.strptime(WORK_DAY_END, "%H:%M")
+
+        while current_slot <= final_slot:
+            time_key = current_slot.strftime("%H:%M")
+
+            if time_key in booked_slots:
+                schedule.append(booked_slots[time_key])
+            else:
+                schedule.append({
+                    "schedule_id": "",
+                    "appointment_date": appointment_date,
+                    "appointment_time": time_key,
+                    "patient_id": "",
+                    "patient_name": "Spot Available",
+                    "status": "AVAILABLE",
+                    "available": True
+                })
+
+            current_slot += timedelta(minutes=SLOT_MINUTES)
+
+        return jsonify(schedule)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve schedule for doctor %s on %s: %s",
+            doctor_id,
+            appointment_date,
+            exc
+        )
+        return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Patient / Doctor CRUD routes used by the Patient/Doctor data panel
+# ---------------------------------------------------------------------------
+
+
+
+def _entity_payload() -> dict:
+    """Normalize the Patient/Doctor form payload from index.html."""
+    data = request.get_json(silent=True) or {}
+    return {
+        "address_id": (data.get("address_id") or "").strip() or None,
+        "first_name": (data.get("first_name") or "").strip(),
+        "middle_name": (data.get("middle_name") or "").strip(),
+        "last_name": (data.get("last_name") or "").strip(),
+        "dob": (data.get("dob") or "").strip() or None,
+        "phone": (data.get("phone") or "").strip(),
+        "email": (data.get("email") or "").strip(),
+        "address1": (data.get("address1") or "").strip(),
+        "address2": (data.get("address2") or "").strip(),
+        # Existing code in this module proves line1/city/state/postal_code.
+        # No line2 column is assumed until the DB schema confirms one.
+        "city": (data.get("city") or "").strip(),
+        "state": (data.get("state") or "").strip(),
+        "zip": (data.get("zip") or "").strip(),
+    }
+
+
+def _validate_entity_payload(data: dict):
+    if not data["first_name"] or not data["last_name"]:
+        return jsonify({
+            "success": False,
+            "error": "First Name and Last Name are required."
+        }), 400
+    return None
+
+
+def _upsert_party_address(cursor, party_id: str, data: dict) -> None:
+    address_id = data.get("address_id")
+
+    # Existing address: update exact row
+    if address_id:
+        cursor.execute(
+            """
+            UPDATE p_address
+            SET line1 = %s,
+                line2 = %s,
+                city = %s,
+                state = %s,
+                postal_code = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE address_id = %s
+            """,
+            (
+                data["address1"],
+                data["address2"],
+                data["city"],
+                data["state"],
+                data["zip"],
+                address_id
+            ),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                f"Address {address_id} was not found for party {party_id}"
+            )
+
+        return
+
+    # No address_id means this is genuinely a new address
+    new_address_id = str(uuid.uuid4())
+
+    cursor.execute(
+        """
+        INSERT INTO p_address (
+            address_id,
+            party_id,
+            line1,
+            line2,
+            city,
+            state,
+            postal_code,
+            country,
+            is_active,
+            created_at,
+            updated_at,
+            version_no
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s,
+            %s,
+            true,
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
+            1
+        )
+        """,
+        (
+            new_address_id,
+            party_id,
+            data["address1"],
+            data["address2"],
+            data["city"],
+            data["state"],
+            data["zip"],
+            "USA",
+        ),
+    )
+def _create_party(party_type: str):
+    data = _entity_payload()
+    validation_error = _validate_entity_payload(data)
+    if validation_error:
+        return validation_error
+
+    party_id = str(uuid.uuid4())
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO p_party (
+                        party_id,
+                        party_type,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        date_of_birth,
+                        phone,
+                        email,
+                        is_active
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true)
+                    """,
+                    (
+                        party_id,
+                        party_type,
+                        data["first_name"],
+                        data["middle_name"] or None,
+                        data["last_name"],
+                        data["dob"],
+                        data["phone"] or None,
+                        data["email"] or None,
+                    ),
+                )
+
+                _upsert_party_address(cursor, party_id, data)
+
+        logger.info("Created %s party_id=%s", party_type, party_id)
+        return jsonify({
+            "success": True,
+            "message": f"{party_type.title()} created successfully.",
+            "party_id": party_id,
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Unable to create %s: %s", party_type, exc)
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 500
+
+
+def _update_party(party_id: str, party_type: str):
+    data = _entity_payload()
+    validation_error = _validate_entity_payload(data)
+    if validation_error:
+        return validation_error
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE p_party
+                    SET first_name = %s,
+                        middle_name = %s,
+                        last_name = %s,
+                        date_of_birth = %s,
+                        phone = %s,
+                        email = %s
+                    WHERE party_id = %s
+                    """,
+                    (
+                        data["first_name"],
+                        data["middle_name"] or None,
+                        data["last_name"],
+                        data["dob"],
+                        data["phone"] or None,
+                        data["email"] or None,
+                        party_id
+                    ),
+                )
+
+                if cursor.rowcount == 0:
+                    return jsonify({
+                        "success": False,
+                        "error": f"{party_type.title()} record not found."
+                    }), 404
+
+                _upsert_party_address(cursor, party_id, data)
+
+        logger.info("Updated %s party_id=%s", party_type, party_id)
+        return jsonify({
+            "success": True,
+            "message": f"{party_type.title()} updated successfully.",
+            "party_id": party_id,
+        })
+
+    except Exception as exc:
+        logger.exception("Unable to update %s %s: %s", party_type, party_id, exc)
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 500
+
+
+@disciplines_bp.route("/api/patients", methods=["POST"])
+@handle_route_errors
+def create_patient():
+    return _create_party("PATIENT")
+
+
+@disciplines_bp.route("/api/patients/<party_id>", methods=["PUT"])
+@handle_route_errors
+def update_patient(party_id: str):
+    return _update_party(party_id, "PATIENT")
+
+
+@disciplines_bp.route("/api/doctors", methods=["POST"])
+@handle_route_errors
+def create_doctor():
+    return _create_party("DOCTOR")
+
+
+@disciplines_bp.route("/api/doctors/<party_id>", methods=["PUT"])
+@handle_route_errors
+def update_doctor(party_id: str):
+    return _update_party(party_id, "DOCTOR")
+
+
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
@@ -965,6 +1758,65 @@ def search_patients_advanced():
     except Exception as exc:
         logger.warning("search_patients_advanced[local]: DB unavailable — %s", exc)
         return jsonify([])
+
+
+
+# ============================================================
+# Patient Scheduling - Hospital picker
+# ============================================================
+
+@disciplines_bp.route("/api/hospitals/first20", methods=["GET"])
+@handle_route_errors
+def get_first_20_hospitals():
+    """Return active ORGANIZATION parties for the Scheduling hospital picker.
+
+    In the deployed EHR model, hospitals/health-care organizations are stored
+    in ehr_ccm_schema.p_party with party_type = 'ORGANIZATION'.  The party_id
+    is the identifier retained by the Scheduling UI and later maps to
+    p_schedule.hospital_id.
+    """
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        party_id,
+                        name,
+                        hospital_code,
+                        hospital_location
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_type = 'ORGANIZATION'
+                      AND is_active = TRUE
+                    ORDER BY name
+                    LIMIT 20
+                    """
+                )
+                rows = cursor.fetchall()
+
+        hospitals = []
+
+        for (
+            party_id,
+            name,
+            hospital_code,
+            hospital_location,
+        ) in rows:
+            hospitals.append({
+                "hospital_id": str(party_id),
+                "hospital_name": name or "",
+                "hospital_code": hospital_code or "",
+                "location": hospital_location or "",
+            })
+
+        return jsonify(hospitals)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve hospitals for Scheduling: %s",
+            exc
+        )
+        return jsonify({"error": str(exc)}), 500
 
 
 @disciplines_bp.route("/api/hospitals/search", methods=["GET"])

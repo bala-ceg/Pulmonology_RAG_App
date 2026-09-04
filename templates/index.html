@@ -2739,6 +2739,413 @@
             font-size: 12.5px;
         }
 
+
+        /* ==== Patient / Doctor Data admin feature (ported) ==== */
+/* Patient / Doctor data menu — match the other sidebar cards */
+.entity-data-tabs-box {
+    min-height: auto;
+    margin: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.entity-data-tabs-box .entity-data-tab {
+    width: 110px;
+    min-height: 31px;
+    margin: 0 auto;
+    padding: 3px 10px;
+    background: #a3c2f2;
+    border: 1px solid #183b64;
+    border-radius: 5px;
+    color: #111;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 13px;
+    text-align: center;
+    cursor: pointer;
+    display: block;
+}
+
+.entity-data-tabs-box .entity-data-tab:hover {
+    background: #8fb4e8;
+}
+
+.entity-data-tabs-box .entity-data-tab.active {
+    background: #6fa5e8;
+}
+
+.entity-record-row {
+    cursor: pointer;
+}
+
+.entity-record-row:hover td {
+    background: #eef4fc;
+}
+
+/* Patient Scheduling - Milestone 1 */
+#scheduling-patient-body tr {
+    cursor: pointer;
+}
+
+#scheduling-patient-body tr:hover td {
+    background: #eef4fc;
+}
+
+#scheduling-patient-body tr.selected td {
+    background: #d9e8fb;
+    font-weight: 600;
+}
+
+.scheduling-helper-text {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: #555;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+}
+
+
+/* Patient Scheduling - Milestone 2 */
+.scheduling-select-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.scheduling-select-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.scheduling-select-btn {
+    flex-shrink: 0;
+    margin: 0;
+    padding: 6px 10px;
+    border: 1px solid #183b64;
+    border-radius: 5px;
+    background: #a3c2f2;
+    color: #111;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.scheduling-select-btn:hover {
+    background: #8fb4e8;
+}
+
+.scheduling-selected-id {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #666;
+    word-break: break-all;
+}
+
+.scheduling-picker-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    background: rgba(0, 0, 0, 0.55);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.scheduling-picker-overlay.show {
+    display: flex;
+}
+
+.scheduling-picker-modal {
+    width: min(760px, 94vw);
+    max-height: 78vh;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.scheduling-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: #eef4fc;
+    border-bottom: 1px solid #c9d8ec;
+}
+
+.scheduling-picker-header h3 {
+    margin: 0;
+    color: #1a3a5c;
+    font-size: 17px;
+}
+
+.scheduling-picker-close {
+    margin: 0;
+    padding: 2px 8px;
+    background: transparent;
+    border: none;
+    font-size: 22px;
+    color: #555;
+    cursor: pointer;
+}
+
+.scheduling-picker-body {
+    padding: 12px 16px 16px;
+    overflow: auto;
+}
+
+.scheduling-picker-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.scheduling-picker-table th,
+.scheduling-picker-table td {
+    border: 1px solid #d9dfe8;
+    padding: 8px 10px;
+    font-size: 12px;
+    text-align: left;
+}
+
+.scheduling-picker-table th {
+    position: sticky;
+    top: 0;
+    background: #f4f7fb;
+    z-index: 1;
+}
+
+.scheduling-picker-table tbody tr {
+    cursor: pointer;
+}
+
+.scheduling-picker-table tbody tr:hover td {
+    background: #eef4fc;
+}
+
+
+/* Patient Scheduling - Stage A: Doctor Scheduling Popup */
+.doctor-scheduling-summary {
+    display: grid;
+    grid-template-columns: 110px minmax(180px, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.doctor-scheduling-summary label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #222;
+}
+
+.doctor-scheduling-summary input {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid #b8c4d3;
+    border-radius: 4px;
+    background: #fff;
+    color: #222;
+    font-size: 12px;
+}
+
+.doctor-scheduling-summary input[readonly] {
+    background: #f7f8fa;
+}
+
+.doctor-scheduling-empty {
+    text-align: center;
+    padding: 18px !important;
+    color: #666;
+}
+
+.doctor-scheduling-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 16px 14px;
+    border-top: 1px solid #d9dfe8;
+    background: #fafbfc;
+}
+
+.doctor-scheduling-footer button {
+    margin: 0;
+}
+
+/* Patient Scheduling - Stage B: visually mark open 30-minute slots. */
+#doctor-scheduling-modal-body tr.available-schedule-slot td {
+    background: #dff0d8;
+    font-weight: 600;
+}
+
+#doctor-scheduling-modal-body tr.available-schedule-slot td:last-child {
+    color: #2e6b2e;
+}
+
+/* =====================================================
+   PATIENT / DOCTOR DATA PANEL
+   ===================================================== */
+
+.entity-data-panel {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #111;
+    overflow: hidden;
+}
+
+/* Top list */
+.entity-list-area {
+    flex: 1;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 2px solid #111;
+}
+
+.entity-list-title {
+    padding: 7px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    border-bottom: 1px solid #111;
+}
+
+.entity-table-wrapper {
+    flex: 1;
+    min-height: 0;
+
+    /* horizontal + vertical scrolling */
+    overflow: auto;
+}
+
+.entity-table {
+    width: 100%;
+    min-width: 950px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.entity-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #a3c2f2;
+    border: 1px solid #555;
+    padding: 6px;
+    white-space: nowrap;
+}
+
+.entity-table td {
+    border: 1px solid #777;
+    padding: 6px 8px;
+    white-space: nowrap;
+}
+
+.entity-table tbody tr {
+    cursor: pointer;
+}
+
+.entity-table tbody tr:hover {
+    background: #eef5ff;
+}
+
+.entity-table tbody tr.selected {
+    background: #d7e7fb;
+}
+
+
+/* Detail section */
+.entity-detail-area {
+    flex: 0 0 190px;
+    padding: 8px 20px;
+    overflow: auto;
+}
+
+.entity-detail-title {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.entity-details-grid {
+    display: flex;
+    gap: 24px;
+    min-width: 850px;
+}
+
+.entity-detail-column {
+    min-width: 250px;
+}
+
+.entity-field {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    margin-bottom: 3px;
+}
+
+.entity-field label {
+    border: 1px solid #111;
+    padding: 5px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.entity-field input {
+    border: 1px solid #111;
+    padding: 5px 8px;
+    background: #fff;
+    color: #111;
+    font-size: 12px;
+}
+.entity-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.entity-action-left {
+    display: flex;
+    gap: 10px;
+}
+
+.entity-action-btn {
+    min-width: 110px;
+    padding: 6px 18px;
+    border: 2px solid #333;
+    border-radius: 0;
+    background: #a3c2f2;
+    color: #111;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.entity-action-btn:hover {
+    background: #8ab1eb;
+}
+
+.entity-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.entity-field input:not([readonly]) {
+    background: #fffbea;
+    border-color: #5a87c5;
+}
+
         /* AI Summary Fullscreen Modal */
         #ai-summary-modal {
             z-index: 10000;
@@ -3181,6 +3588,61 @@
             </div>
             </li>
             </ul>
+
+            <!-- Patient / Doctor Data Menu (ported admin feature) -->
+            <div class="sidebar-section-box entity-data-tabs-box">
+                <div class="sidebar-section-label">6. Patient / Doctor Data</div>
+
+                <button
+                    id="patient-data-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadEntityDataset('patient'))">
+                    Patients
+                </button>
+
+                <button
+                    id="doctor-data-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadEntityDataset('doctor'))">
+                    Doctor
+                </button>
+
+                <button
+                    id="patient-doctor-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadRelationshipMode('patient-doctor'))">
+                    Patient - Doctor
+                </button>
+
+                <button
+                    id="doctor-patient-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadRelationshipMode('doctor-patient'))">
+                    Doctor - Patient
+                </button>
+
+                <button
+                    id="doctor-schedule-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadDoctorSchedule())">
+                    My Schedule
+                </button>
+
+                <button
+                    id="patient-scheduling-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="requireAuth(() => loadSchedulingPanel())">
+                    Scheduling
+                </button>
+
+                <button
+                    id="back-to-chat-tab"
+                    class="section-btn entity-data-tab"
+                    onclick="backToChat()">
+                    💬 Back to Chat
+                </button>
+            </div>
+
             </div><!-- /.sidebar-scroll-area -->
 
             <!-- ChatYodha — pinned to the bottom of the sidebar -->
@@ -3280,6 +3742,546 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ==== Patient / Doctor Data admin feature panels (ported) ==== -->
+<!-- =====================================================
+     PATIENT / DOCTOR DATA SCREEN
+     ===================================================== -->
+<div id="entity-data-panel" class="entity-data-panel">
+
+    <!-- TOP: Patient / Doctor records -->
+    <div class="entity-list-area">
+
+        <div id="entity-list-title" class="entity-list-title">
+            Records
+        </div>
+
+        <div class="entity-table-wrapper">
+
+            <table class="entity-table">
+
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th id="entity-name-header">Name</th>
+                        <th>DOB</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Address ID</th>
+                        <th>Address 1</th>
+                        <th>Address 2</th>
+                        <th>City</th>
+                        <th>State</th>
+                        <th>Zip</th>
+                    </tr>
+                </thead>
+
+                <tbody id="entity-list-body"></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================================
+     DOCTOR SCHEDULE SCREEN
+     ===================================================== -->
+
+<div
+    id="doctor-schedule-panel"
+    class="entity-data-panel">
+
+    <div class="entity-list-area">
+
+        <div class="entity-list-title">
+            My Schedule - Today
+        </div>
+
+        <div class="entity-table-wrapper">
+
+            <table class="entity-table">
+
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Patient Name</th>
+                        <th>Date of Birth</th>
+                        <th>Gender</th>
+                        <th>Appointment Time</th>
+                    </tr>
+                </thead>
+
+                <tbody id="doctor-schedule-body">
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+    <!-- BOTTOM: selected record details -->
+    <div 
+    id="entity-detail-area"
+    class="entity-detail-area">
+<!-- Insert / Update / Save controls -->
+    <div class="entity-action-bar">
+
+        <div class="entity-action-left">
+            <button
+                id="entity-insert-btn"
+                class="entity-action-btn"
+                onclick="startEntityInsert()">
+                Insert
+            </button>
+
+            <button
+                id="entity-update-btn"
+                class="entity-action-btn"
+                onclick="startEntityUpdate()">
+                Update
+            </button>
+        </div>
+
+        <button
+            id="entity-save-btn"
+            class="entity-action-btn"
+            onclick="saveEntityRecord()">
+            Save
+        </button>
+
+    </div>
+
+    <div id="entity-detail-title"
+         class="entity-detail-title">
+        Select a record above to view details
+    </div>
+
+        <div class="entity-details-grid">
+
+            <!-- Name -->
+            <div class="entity-detail-column">
+
+                <div class="entity-field">
+                    <label>First Name</label>
+                    <input id="entity-first-name" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>Middle</label>
+                    <input id="entity-middle-name" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>Last Name</label>
+                    <input id="entity-last-name" readonly>
+                </div>
+
+            </div>
+
+
+            <!-- Address -->
+            <div class="entity-detail-column">
+
+                <div class="entity-field">
+                    <label>Address 1</label>
+                    <input id="entity-address1" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>Address 2</label>
+                    <input id="entity-address2" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>City</label>
+                    <input id="entity-city" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>State</label>
+                    <input id="entity-state" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>Zip</label>
+                    <input id="entity-zip" readonly>
+                </div>
+
+            </div>
+
+
+            <!-- Contact -->
+            <div class="entity-detail-column">
+
+                <div class="entity-field">
+                    <label>Phone</label>
+                    <input id="entity-phone" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>Email</label>
+                    <input id="entity-email" readonly>
+                </div>
+
+                <div class="entity-field">
+                    <label>DOB</label>
+                    <input id="entity-dob" readonly>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+    <!-- =====================================================
+         PATIENT-DOCTOR / DOCTOR-PATIENT RELATIONSHIP RESULTS
+         ===================================================== -->
+
+    <div
+        id="relationship-result-area"
+        class="entity-detail-area"
+        style="display:none;">
+
+        <div
+            id="relationship-result-title"
+            class="entity-detail-title">
+            Select a record above
+        </div>
+
+        <div class="entity-table-wrapper">
+
+            <table class="entity-table">
+
+                <thead id="relationship-result-head">
+                </thead>
+
+                <tbody id="relationship-result-body">
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- =====================================================
+     PATIENT SCHEDULING SCREEN - MILESTONE 1
+     ===================================================== -->
+<div
+    id="patient-scheduling-panel"
+    class="entity-data-panel"
+    style="display:none;">
+
+    <!-- TOP: Patient List Applet -->
+    <div class="entity-list-area">
+
+        <div class="entity-list-title">
+            Patient Scheduling
+        </div>
+
+        <div class="scheduling-helper-text">
+            Select a patient to create scheduling details
+        </div>
+
+        <div class="entity-table-wrapper">
+            <table class="entity-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Patient Name</th>
+                        <th>DOB</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody id="scheduling-patient-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- BOTTOM: Scheduling Detail Applet -->
+    <div class="entity-detail-area">
+
+        <div class="entity-detail-title">
+            Scheduling Details
+        </div>
+
+        <div class="entity-details-grid">
+
+            <div class="entity-detail-column">
+                <div class="entity-field">
+                    <label>Patient</label>
+                    <input
+                        id="scheduling-patient-name"
+                        type="text"
+                        readonly
+                        placeholder="Select a patient above">
+                </div>
+            </div>
+
+            <div class="entity-detail-column">
+                <div class="entity-field">
+                    <label>Doctor</label>
+
+                    <div class="scheduling-select-row">
+                        <input
+                            id="scheduling-doctor-name"
+                            type="text"
+                            readonly
+                            placeholder="Not selected">
+
+                        <button
+                            type="button"
+                            class="scheduling-select-btn"
+                            onclick="openSchedulingDoctorModal()">
+                            Select Doctor
+                        </button>
+                    </div>
+
+                    <input
+                        id="scheduling-doctor-id"
+                        type="hidden">
+
+                    <div
+                        id="scheduling-doctor-id-display"
+                        class="scheduling-selected-id">
+                    </div>
+                </div>
+
+                <div class="entity-field">
+                    <label>Hospital</label>
+
+                    <div class="scheduling-select-row">
+                        <input
+                            id="scheduling-hospital-name"
+                            type="text"
+                            readonly
+                            placeholder="Not selected">
+
+                        <button
+                            type="button"
+                            class="scheduling-select-btn"
+                            onclick="openSchedulingHospitalModal()">
+                            Select Hospital
+                        </button>
+                    </div>
+
+                    <input
+                        id="scheduling-hospital-id"
+                        type="hidden">
+
+                    <div
+                        id="scheduling-hospital-id-display"
+                        class="scheduling-selected-id">
+                    </div>
+                </div>
+            </div>
+
+            <div class="entity-detail-column">
+                <div class="entity-field">
+                    <label>Appointment Date</label>
+                    <input
+                        id="scheduling-date"
+                        type="date">
+                </div>
+
+                <div class="entity-field">
+                    <label>Appointment Time</label>
+                    <input
+                        id="scheduling-time"
+                        type="time">
+                </div>
+
+                <div class="entity-field">
+                    <label>Status</label>
+                    <input
+                        id="scheduling-status"
+                        type="text"
+                        value="SCHEDULED"
+                        readonly>
+                </div>
+
+
+                <div class="entity-field">
+                    <label>Doctor Schedule</label>
+                    <button
+                        type="button"
+                        class="scheduling-select-btn"
+                        onclick="openDoctorSchedulingModal()">
+                        Scheduling
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- =====================================================
+     PATIENT SCHEDULING PICKERS - MILESTONE 2
+     ===================================================== -->
+
+<div
+    id="scheduling-doctor-modal"
+    class="scheduling-picker-overlay"
+    onclick="handleSchedulingModalBackdrop(event, 'doctor')">
+
+    <div
+        class="scheduling-picker-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scheduling-doctor-modal-title">
+
+        <div class="scheduling-picker-header">
+            <h3 id="scheduling-doctor-modal-title">
+                Select Doctor
+            </h3>
+
+            <button
+                type="button"
+                class="scheduling-picker-close"
+                onclick="closeSchedulingDoctorModal()"
+                aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="scheduling-picker-body">
+            <table class="scheduling-picker-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Doctor Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+
+                <tbody id="scheduling-doctor-modal-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+<div
+    id="scheduling-hospital-modal"
+    class="scheduling-picker-overlay"
+    onclick="handleSchedulingModalBackdrop(event, 'hospital')">
+
+    <div
+        class="scheduling-picker-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scheduling-hospital-modal-title">
+
+        <div class="scheduling-picker-header">
+            <h3 id="scheduling-hospital-modal-title">
+                Select Hospital
+            </h3>
+
+            <button
+                type="button"
+                class="scheduling-picker-close"
+                onclick="closeSchedulingHospitalModal()"
+                aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="scheduling-picker-body">
+            <table class="scheduling-picker-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Hospital Name</th>
+                        <th>Hospital Code</th>
+                        <th>Location</th>
+                    </tr>
+                </thead>
+
+                <tbody id="scheduling-hospital-modal-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+<!-- =====================================================
+     DOCTOR SCHEDULING POPUP - STAGE A
+     Shows booked p_schedule rows for selected doctor/date
+     ===================================================== -->
+<div
+    id="doctor-scheduling-modal"
+    class="scheduling-picker-overlay"
+    onclick="handleSchedulingModalBackdrop(event, 'schedule')">
+
+    <div
+        class="scheduling-picker-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="doctor-scheduling-modal-title">
+
+        <div class="scheduling-picker-header">
+            <h3 id="doctor-scheduling-modal-title">
+                Doctor Scheduling
+            </h3>
+
+            <button
+                type="button"
+                class="scheduling-picker-close"
+                onclick="closeDoctorSchedulingModal()"
+                aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="scheduling-picker-body">
+
+            <div class="doctor-scheduling-summary">
+                <label for="doctor-scheduling-name">Doctor</label>
+                <input
+                    id="doctor-scheduling-name"
+                    type="text"
+                    readonly>
+
+                <label for="doctor-scheduling-date">Select Date</label>
+                <input
+                    id="doctor-scheduling-date"
+                    type="date"
+                    onchange="loadDoctorScheduleByDate()">
+            </div>
+
+            <table class="scheduling-picker-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Patient Name</th>
+                    </tr>
+                </thead>
+
+                <tbody id="doctor-scheduling-modal-body"></tbody>
+            </table>
+        </div>
+
+        <div class="doctor-scheduling-footer">
+            <button
+                type="button"
+                class="scheduling-select-btn"
+                onclick="closeDoctorSchedulingModal()">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
             <section class="medical-history-panel" aria-label="Medical History">
                 <table class="medical-history-table">
                     <colgroup>
@@ -3620,6 +4622,2327 @@
                 el.textContent = 'No known allergies';
             }
         }
+
+
+        /* ==== Patient / Doctor Data admin feature JS (ported) ==== */
+        function setActiveDataTab(type) {
+
+    const patientBtn =
+        document.getElementById('patient-data-tab');
+
+    const doctorBtn =
+        document.getElementById('doctor-data-tab');
+
+    if (patientBtn) {
+        patientBtn.classList.toggle(
+            'active',
+            type === 'patient'
+        );
+    }
+
+    if (doctorBtn) {
+        doctorBtn.classList.toggle(
+            'active',
+            type === 'doctor'
+        );
+    }
+}
+
+let currentEntityType = null;
+let currentEntityMode = 'view';
+let currentEntityRecord = null;
+let currentRelationshipMode = null;
+
+// Patient Scheduling state
+let selectedSchedulingPatientId = null;
+let selectedSchedulingPatientName = '';
+
+let selectedSchedulingProviderId = null;
+let selectedSchedulingProviderName = '';
+
+let selectedSchedulingHospitalId = null;
+let selectedSchedulingHospitalName = '';
+
+async function loadRelationshipMode(mode) {
+
+    const schedulePanel =
+    document.getElementById(
+        'doctor-schedule-panel'
+    );
+
+if (schedulePanel) {
+    schedulePanel.style.display = 'none';
+}
+
+    const patientSchedulingPanel =
+        document.getElementById('patient-scheduling-panel');
+
+    if (patientSchedulingPanel) {
+        patientSchedulingPanel.style.display = 'none';
+    }
+
+    currentRelationshipMode = mode;
+    currentEntityMode = 'view';
+    currentEntityRecord = null;
+
+    const detailArea =
+        document.getElementById('entity-detail-area');
+
+    const relationshipArea =
+        document.getElementById(
+            'relationship-result-area'
+        );
+
+    if (detailArea) {
+        detailArea.style.display = 'none';
+    }
+
+    if (relationshipArea) {
+        relationshipArea.style.display = '';
+    }
+
+    if (mode === 'patient-doctor') {
+
+        // Upper list must be Patient list
+        await loadEntityDatasetForRelationship(
+            'patient'
+        );
+
+        const resultTitle =
+            document.getElementById(
+                'relationship-result-title'
+            );
+
+        if (resultTitle) {
+            resultTitle.textContent =
+                'Select a Patient to view Doctors';
+        }
+
+    } else if (mode === 'doctor-patient') {
+
+        // Upper list must be Doctor list
+        await loadEntityDatasetForRelationship(
+            'doctor'
+        );
+
+        const resultTitle =
+            document.getElementById(
+                'relationship-result-title'
+            );
+
+        if (resultTitle) {
+            resultTitle.textContent =
+                'Select a Doctor to view Patients';
+        }
+    }
+}
+async function loadEntityDatasetForRelationship(type) {
+
+    currentEntityType = type;
+
+    const chatMessages =
+        document.getElementById('chat-messages');
+
+    const panel =
+        document.getElementById('entity-data-panel');
+
+    const tbody =
+        document.getElementById('entity-list-body');
+
+    const title =
+        document.getElementById('entity-list-title');
+
+    const nameHeader =
+        document.getElementById('entity-name-header');
+
+    if (chatMessages) {
+        chatMessages.style.display = 'none';
+    }
+    // Also hide our AI-summary panel (sibling of #chat-messages inside .chat-ai-row)
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) {
+        chatAiRow.style.display = 'none';
+    }
+
+    panel.style.display = 'flex';
+
+    if (type === 'patient') {
+
+        title.textContent = 'List of Patients';
+        nameHeader.textContent = 'Patient Name';
+
+    } else {
+
+        title.textContent = 'List of Doctors';
+        nameHeader.textContent = 'Doctor Name';
+    }
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="11"
+                style="text-align:center;padding:20px;">
+                Loading records...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const url =
+            type === 'patient'
+                ? '/api/patients/first20'
+                : '/api/doctors/first20';
+
+        const response =
+            await fetch(url);
+
+        const records =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                records.error ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        renderRelationshipSourceRecords(records);
+
+    } catch (error) {
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11"
+                    style="
+                        text-align:center;
+                        color:red;
+                    ">
+                    ${escapeEntityHtml(
+                        error.message
+                    )}
+                </td>
+            </tr>
+        `;
+    }
+}
+function renderRelationshipSourceRecords(records) {
+
+    const tbody =
+        document.getElementById(
+            'entity-list-body'
+        );
+
+    tbody.innerHTML = '';
+
+    if (!records.length) {
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11"
+                    style="text-align:center;">
+                    No records found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    records.forEach((record, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td style="text-align:center">
+                ${index + 1}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.full_name || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.dob || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.phone || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.email || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.address_id || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.address1 || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.address2 || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.city || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.state || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.zip || '—'
+                )}
+            </td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => {
+
+                document
+                    .querySelectorAll(
+                        '#entity-list-body tr'
+                    )
+                    .forEach(r =>
+                        r.classList.remove(
+                            'selected'
+                        )
+                    );
+
+                row.classList.add(
+                    'selected'
+                );
+
+                currentEntityRecord =
+                    record;
+
+                loadRelationshipResults(
+                    record
+                );
+            }
+        );
+
+        tbody.appendChild(row);
+    });
+}
+async function loadRelationshipResults(record) {
+
+    const title =
+        document.getElementById(
+            'relationship-result-title'
+        );
+
+    const head =
+        document.getElementById(
+            'relationship-result-head'
+        );
+
+    const body =
+        document.getElementById(
+            'relationship-result-body'
+        );
+
+    let url;
+
+    if (
+        currentRelationshipMode ===
+        'patient-doctor'
+    ) {
+
+        const patientId =
+            record.patient_id ||
+            record.party_id;
+
+        if (!patientId) {
+            return;
+        }
+
+        url =
+            `/api/patients/${
+                encodeURIComponent(patientId)
+            }/doctors`;
+
+        title.textContent =
+            `Doctors for ${
+                record.full_name || 'Patient'
+            }`;
+
+    } else if (
+        currentRelationshipMode ===
+        'doctor-patient'
+    ) {
+
+        const doctorId =
+            record.doctor_id ||
+            record.party_id;
+
+        if (!doctorId) {
+            return;
+        }
+
+        url =
+            `/api/doctors/${
+                encodeURIComponent(doctorId)
+            }/patients`;
+
+        title.textContent =
+            `Patients for ${
+                record.full_name || 'Doctor'
+            }`;
+
+    } else {
+        return;
+    }
+
+    body.innerHTML = `
+        <tr>
+            <td style="text-align:center;">
+                Loading...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const response =
+            await fetch(url);
+
+        const records =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                records.error ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        renderRelationshipResults(
+            records
+        );
+
+    } catch (error) {
+
+        body.innerHTML = `
+            <tr>
+                <td style="
+                    text-align:center;
+                    color:red;
+                ">
+                    ${escapeEntityHtml(
+                        error.message
+                    )}
+                </td>
+            </tr>
+        `;
+    }
+}
+function renderRelationshipResults(records) {
+
+    const head =
+        document.getElementById(
+            'relationship-result-head'
+        );
+
+    const body =
+        document.getElementById(
+            'relationship-result-body'
+        );
+
+    body.innerHTML = '';
+
+    if (
+        currentRelationshipMode ===
+        'patient-doctor'
+    ) {
+
+        head.innerHTML = `
+            <tr>
+                <th>S No</th>
+                <th>Doctor Name</th>
+                <th>Encounter Type</th>
+                <th>Encounter Date</th>
+            </tr>
+        `;
+
+        if (!records.length) {
+            body.innerHTML = `
+                <tr>
+                    <td colspan="4"
+                        style="text-align:center;">
+                        No doctors found for this patient.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        records.forEach(
+            (record, index) => {
+
+                const row =
+                    document.createElement('tr');
+
+                row.innerHTML = `
+                    <td>
+                        ${index + 1}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.full_name || '—'
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.encounter_type ||
+                            '—'
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.encounter_dt ||
+                            '—'
+                        )}
+                    </td>
+                `;
+
+                body.appendChild(row);
+            }
+        );
+
+    } else {
+
+        head.innerHTML = `
+            <tr>
+                <th>S No</th>
+                <th>Patient Name</th>
+                <th>DOB</th>
+                <th>Phone</th>
+                <th>Email</th>
+            </tr>
+        `;
+
+        if (!records.length) {
+            body.innerHTML = `
+                <tr>
+                    <td colspan="5"
+                        style="text-align:center;">
+                        No patients found for this doctor.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        records.forEach(
+            (record, index) => {
+
+                const row =
+                    document.createElement('tr');
+
+                row.innerHTML = `
+                    <td>
+                        ${index + 1}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.full_name || '—'
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.dob || '—'
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.phone || '—'
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeEntityHtml(
+                            record.email || '—'
+                        )}
+                    </td>
+                `;
+
+                body.appendChild(row);
+            }
+        );
+    }
+}
+async function loadEntityDataset(type) {
+    const schedulePanel =
+        document.getElementById(
+            'doctor-schedule-panel'
+        );
+
+    if (schedulePanel) {
+        schedulePanel.style.display = 'none';
+    }
+
+    const patientSchedulingPanel =
+        document.getElementById('patient-scheduling-panel');
+
+    if (patientSchedulingPanel) {
+        patientSchedulingPanel.style.display = 'none';
+    }
+
+    currentEntityType = type;
+    currentRelationshipMode = null;
+
+const detailArea =
+    document.getElementById('entity-detail-area');
+
+const relationshipArea =
+    document.getElementById('relationship-result-area');
+
+if (detailArea) {
+    detailArea.style.display = '';
+}
+
+if (relationshipArea) {
+    relationshipArea.style.display = 'none';
+}
+    const chatMessages =
+        document.getElementById('chat-messages');
+
+    const panel =
+        document.getElementById('entity-data-panel');
+
+    const tbody =
+        document.getElementById('entity-list-body');
+
+    const title =
+        document.getElementById('entity-list-title');
+
+    const nameHeader =
+        document.getElementById('entity-name-header');
+
+
+    console.log('[EntityData] Loading:', type);
+
+
+    if (!panel || !tbody) {
+        console.error(
+            '[EntityData] Required HTML elements not found'
+        );
+        return;
+    }
+
+
+    // Hide normal AI response area
+    if (chatMessages) {
+        chatMessages.style.display = 'none';
+    }
+    // Also hide our AI-summary panel (sibling of #chat-messages inside .chat-ai-row)
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) {
+        chatAiRow.style.display = 'none';
+    }
+
+
+    // Show Patient / Doctor panel
+    panel.style.display = 'flex';
+
+
+    setActiveDataTab(type);
+
+
+    if (type === 'patient') {
+
+        title.textContent = 'List of Patients';
+        nameHeader.textContent = 'Patient Name';
+
+    } else {
+
+        title.textContent = 'List of Doctors';
+        nameHeader.textContent = 'Doctor Name';
+    }
+
+
+    clearEntityDetails();
+
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="6"
+                style="text-align:center;padding:20px;">
+                Loading records...
+            </td>
+        </tr>
+    `;
+
+
+    try {
+
+        const url =
+            type === 'patient'
+                ? '/api/patients/first20'
+                : '/api/doctors/first20';
+
+
+        console.log(
+            '[EntityData] Calling:',
+            url
+        );
+
+
+        const response =
+            await fetch(url);
+
+
+        console.log(
+            '[EntityData] HTTP status:',
+            response.status
+        );
+
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status}`
+            );
+        }
+
+
+        const records =
+            await response.json();
+
+
+        console.log(
+            '[EntityData] Records:',
+            records
+        );
+
+
+        if (!Array.isArray(records)) {
+            throw new Error(
+                records.error ||
+                'Unexpected response from server'
+            );
+        }
+
+
+        renderEntityRecords(records);
+
+
+    } catch (error) {
+
+        console.error(
+            '[EntityData] Failed:',
+            error
+        );
+
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6"
+                    style="
+                        text-align:center;
+                        padding:20px;
+                        color:red;
+                    ">
+                    Unable to load records:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderEntityRecords(records) {
+
+    const tbody =
+        document.getElementById(
+            'entity-list-body'
+        );
+
+
+    tbody.innerHTML = '';
+
+
+    if (!records.length) {
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6"
+                    style="text-align:center;padding:20px;">
+                    No records found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+
+    records.forEach((record, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td style="text-align:center">
+                ${index + 1}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.full_name || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.dob || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.phone || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.email || '—'
+                )}
+            </td>
+
+            <td>
+    ${escapeEntityHtml(
+        record.address_id || '—'
+    )}
+</td>
+
+<td>
+    ${escapeEntityHtml(
+        record.address1 || '—'
+    )}
+</td>
+
+<td>
+    ${escapeEntityHtml(
+        record.address2 || '—'
+    )}
+</td>
+
+<td>
+    ${escapeEntityHtml(
+        record.city || '—'
+    )}
+</td>
+
+<td>
+    ${escapeEntityHtml(
+        record.state || '—'
+    )}
+</td>
+
+<td>
+    ${escapeEntityHtml(
+        record.zip || '—'
+    )}
+</td>
+        `;
+
+
+        row.addEventListener(
+            'click',
+            () => {
+
+                document
+                    .querySelectorAll(
+                        '#entity-list-body tr'
+                    )
+                    .forEach(r =>
+                        r.classList.remove(
+                            'selected'
+                        )
+                    );
+
+
+                row.classList.add(
+                    'selected'
+                );
+
+
+                populateEntityDetails(record);
+            }
+        );
+
+
+        tbody.appendChild(row);
+    });
+   // Automatically select first record
+    if (records.length > 0) {
+
+        const firstRow =
+            tbody.querySelector('tr');
+
+        if (firstRow) {
+            firstRow.classList.add('selected');
+        }
+
+        populateEntityDetails(records[0]);
+    }
+}
+
+// ============================================================
+// Patient Scheduling - Milestone 1
+// ============================================================
+
+async function loadSchedulingPanel() {
+
+    const chatMessages =
+        document.getElementById('chat-messages');
+
+    const entityPanel =
+        document.getElementById('entity-data-panel');
+
+    const doctorSchedulePanel =
+        document.getElementById('doctor-schedule-panel');
+
+    const schedulingPanel =
+        document.getElementById('patient-scheduling-panel');
+
+    const body =
+        document.getElementById('scheduling-patient-body');
+
+    if (!schedulingPanel || !body) {
+        console.error('[Scheduling] Required HTML elements not found');
+        return;
+    }
+
+    // Hide other main application panels.
+    if (chatMessages) {
+        chatMessages.style.display = 'none';
+    }
+    // Also hide our AI-summary panel (sibling of #chat-messages inside .chat-ai-row)
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) {
+        chatAiRow.style.display = 'none';
+    }
+
+    if (entityPanel) {
+        entityPanel.style.display = 'none';
+    }
+
+    if (doctorSchedulePanel) {
+        doctorSchedulePanel.style.display = 'none';
+    }
+
+    // Show the Scheduling screen.
+    schedulingPanel.style.display = 'flex';
+
+    // Start a fresh appointment draft whenever Scheduling is opened.
+    resetSchedulingSelections();
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="5" style="text-align:center;padding:20px;">
+                Loading patients...
+            </td>
+        </tr>
+    `;
+
+    try {
+        // Reuse the existing patient API; no new backend route is required
+        // for Milestone 1.
+        const response =
+            await fetch('/api/patients/first20');
+
+        const patients =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                patients.error || `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(patients)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        renderSchedulingPatients(patients);
+
+    } catch (error) {
+        console.error(
+            '[Scheduling] Unable to load patients:',
+            error
+        );
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="5"
+                    style="text-align:center;color:red;padding:20px;">
+                    Unable to load patients:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function renderSchedulingPatients(patients) {
+
+    const body =
+        document.getElementById('scheduling-patient-body');
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!patients || patients.length === 0) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align:center;padding:20px;">
+                    No patients found.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    patients.forEach((patient, index) => {
+        const row = document.createElement('tr');
+
+        row.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(patient.full_name || '—')}</td>
+            <td>${escapeEntityHtml(patient.dob || '—')}</td>
+            <td>${escapeEntityHtml(patient.phone || '—')}</td>
+            <td>${escapeEntityHtml(patient.email || '—')}</td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => selectSchedulingPatient(patient, row)
+        );
+
+        body.appendChild(row);
+    });
+}
+
+function selectSchedulingPatient(patient, selectedRow) {
+
+    document
+        .querySelectorAll('#scheduling-patient-body tr')
+        .forEach(row => row.classList.remove('selected'));
+
+    selectedRow.classList.add('selected');
+
+    // Store the selected patient's p_party.party_id for later use
+    // when the schedule INSERT is implemented.
+    selectedSchedulingPatientId =
+        patient.patient_id || null;
+
+    selectedSchedulingPatientName =
+        patient.full_name || '';
+
+    const patientNameInput =
+        document.getElementById('scheduling-patient-name');
+
+    if (patientNameInput) {
+        patientNameInput.value =
+            selectedSchedulingPatientName;
+    }
+
+    console.log(
+        '[Scheduling] Patient selected:',
+        {
+            patient_id: selectedSchedulingPatientId,
+            patient_name: selectedSchedulingPatientName
+        }
+    );
+}
+
+
+// ============================================================
+// Patient Scheduling - Milestone 2
+// Select Doctor + Select Hospital
+// ============================================================
+
+function resetSchedulingSelections() {
+
+    selectedSchedulingProviderId = null;
+    selectedSchedulingProviderName = '';
+
+    selectedSchedulingHospitalId = null;
+    selectedSchedulingHospitalName = '';
+
+    const doctorName =
+        document.getElementById('scheduling-doctor-name');
+
+    const doctorId =
+        document.getElementById('scheduling-doctor-id');
+
+    const doctorIdDisplay =
+        document.getElementById('scheduling-doctor-id-display');
+
+    const hospitalName =
+        document.getElementById('scheduling-hospital-name');
+
+    const hospitalId =
+        document.getElementById('scheduling-hospital-id');
+
+    const hospitalIdDisplay =
+        document.getElementById('scheduling-hospital-id-display');
+
+    if (doctorName) doctorName.value = '';
+    if (doctorId) doctorId.value = '';
+    if (doctorIdDisplay) doctorIdDisplay.textContent = '';
+
+    if (hospitalName) hospitalName.value = '';
+    if (hospitalId) hospitalId.value = '';
+    if (hospitalIdDisplay) hospitalIdDisplay.textContent = '';
+}
+
+
+async function openSchedulingDoctorModal() {
+
+    const modal =
+        document.getElementById('scheduling-doctor-modal');
+
+    const body =
+        document.getElementById('scheduling-doctor-modal-body');
+
+    if (!modal || !body) return;
+
+    modal.classList.add('show');
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="4" style="text-align:center;padding:18px;">
+                Loading doctors...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        // Reuse the existing doctor list endpoint.
+        const response =
+            await fetch('/api/doctors/first20');
+
+        const doctors =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                doctors.error || `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(doctors)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        renderSchedulingDoctorModal(doctors);
+
+    } catch (error) {
+
+        console.error(
+            '[Scheduling] Unable to load doctors:',
+            error
+        );
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4"
+                    style="text-align:center;color:red;padding:18px;">
+                    Unable to load doctors:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderSchedulingDoctorModal(doctors) {
+
+    const body =
+        document.getElementById('scheduling-doctor-modal-body');
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!doctors.length) {
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center;padding:18px;">
+                    No doctors found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    doctors.forEach((doctor, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeEntityHtml(doctor.full_name || '—')}</td>
+            <td>${escapeEntityHtml(doctor.phone || '—')}</td>
+            <td>${escapeEntityHtml(doctor.email || '—')}</td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => selectSchedulingDoctor(doctor)
+        );
+
+        body.appendChild(row);
+    });
+}
+
+
+function selectSchedulingDoctor(doctor) {
+
+    selectedSchedulingProviderId =
+        doctor.doctor_id || null;
+
+    selectedSchedulingProviderName =
+        doctor.full_name || '';
+
+    const nameInput =
+        document.getElementById('scheduling-doctor-name');
+
+    const idInput =
+        document.getElementById('scheduling-doctor-id');
+
+    const idDisplay =
+        document.getElementById('scheduling-doctor-id-display');
+
+    if (nameInput) {
+        nameInput.value =
+            selectedSchedulingProviderName;
+    }
+
+    if (idInput) {
+        idInput.value =
+            selectedSchedulingProviderId || '';
+    }
+
+    if (idDisplay) {
+        idDisplay.textContent =
+            selectedSchedulingProviderId
+                ? `Doctor Party ID: ${selectedSchedulingProviderId}`
+                : '';
+    }
+
+    console.log(
+        '[Scheduling] Doctor selected:',
+        {
+            provider_id: selectedSchedulingProviderId,
+            provider_name: selectedSchedulingProviderName
+        }
+    );
+
+    closeSchedulingDoctorModal();
+}
+
+
+function closeSchedulingDoctorModal() {
+
+    const modal =
+        document.getElementById('scheduling-doctor-modal');
+
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+
+async function openSchedulingHospitalModal() {
+
+    const modal =
+        document.getElementById('scheduling-hospital-modal');
+
+    const body =
+        document.getElementById('scheduling-hospital-modal-body');
+
+    if (!modal || !body) return;
+
+    modal.classList.add('show');
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="4" style="text-align:center;padding:18px;">
+                Loading hospitals...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const response =
+            await fetch('/api/hospitals/first20');
+
+        const hospitals =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                hospitals.error || `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(hospitals)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        renderSchedulingHospitalModal(hospitals);
+
+    } catch (error) {
+
+        console.error(
+            '[Scheduling] Unable to load hospitals:',
+            error
+        );
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4"
+                    style="text-align:center;color:red;padding:18px;">
+                    Unable to load hospitals:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderSchedulingHospitalModal(hospitals) {
+
+    const body =
+        document.getElementById('scheduling-hospital-modal-body');
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!hospitals.length) {
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center;padding:18px;">
+                    No hospitals found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    hospitals.forEach((hospital, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeEntityHtml(hospital.hospital_name || '—')}</td>
+            <td>${escapeEntityHtml(hospital.hospital_code || '—')}</td>
+            <td>${escapeEntityHtml(hospital.location || '—')}</td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => selectSchedulingHospital(hospital)
+        );
+
+        body.appendChild(row);
+    });
+}
+
+
+function selectSchedulingHospital(hospital) {
+
+    selectedSchedulingHospitalId =
+        hospital.hospital_id || null;
+
+    selectedSchedulingHospitalName =
+        hospital.hospital_name || '';
+
+    const nameInput =
+        document.getElementById('scheduling-hospital-name');
+
+    const idInput =
+        document.getElementById('scheduling-hospital-id');
+
+    const idDisplay =
+        document.getElementById('scheduling-hospital-id-display');
+
+    if (nameInput) {
+        nameInput.value =
+            selectedSchedulingHospitalName;
+    }
+
+    if (idInput) {
+        idInput.value =
+            selectedSchedulingHospitalId || '';
+    }
+
+    if (idDisplay) {
+        idDisplay.textContent =
+            selectedSchedulingHospitalId
+                ? `Hospital ID: ${selectedSchedulingHospitalId}`
+                : '';
+    }
+
+    console.log(
+        '[Scheduling] Hospital selected:',
+        {
+            hospital_id: selectedSchedulingHospitalId,
+            hospital_name: selectedSchedulingHospitalName,
+            hospital_code: hospital.hospital_code || '',
+            hospital_location: hospital.location || '' 
+        }
+    );
+
+    closeSchedulingHospitalModal();
+}
+
+
+function closeSchedulingHospitalModal() {
+
+    const modal =
+        document.getElementById('scheduling-hospital-modal');
+
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+
+function handleSchedulingModalBackdrop(event, type) {
+
+    if (event.target !== event.currentTarget) {
+        return;
+    }
+
+    if (type === 'doctor') {
+        closeSchedulingDoctorModal();
+    } else if (type === 'hospital') {
+        closeSchedulingHospitalModal();
+    } else if (type === 'schedule') {
+        closeDoctorSchedulingModal();
+    }
+}
+
+
+
+// ============================================================
+// Patient Scheduling - Stage A
+// Doctor schedule popup by selected doctor + selected date
+// ============================================================
+
+function getLocalTodayISO() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+
+async function openDoctorSchedulingModal() {
+
+    if (!selectedSchedulingProviderId) {
+        alert('Please select a doctor first.');
+        return;
+    }
+
+    const modal =
+        document.getElementById('doctor-scheduling-modal');
+
+    const doctorNameInput =
+        document.getElementById('doctor-scheduling-name');
+
+    const modalDateInput =
+        document.getElementById('doctor-scheduling-date');
+
+    const appointmentDateInput =
+        document.getElementById('scheduling-date');
+
+    if (!modal || !doctorNameInput || !modalDateInput) {
+        console.error('[Scheduling] Doctor schedule modal elements not found');
+        return;
+    }
+
+    doctorNameInput.value =
+        selectedSchedulingProviderName || '';
+
+    const selectedDate =
+        appointmentDateInput && appointmentDateInput.value
+            ? appointmentDateInput.value
+            : getLocalTodayISO();
+
+    modalDateInput.value = selectedDate;
+    modal.classList.add('show');
+
+    await loadDoctorScheduleByDate();
+}
+
+
+function closeDoctorSchedulingModal() {
+    const modal =
+        document.getElementById('doctor-scheduling-modal');
+
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+
+async function loadDoctorScheduleByDate() {
+
+    const body =
+        document.getElementById('doctor-scheduling-modal-body');
+
+    const dateInput =
+        document.getElementById('doctor-scheduling-date');
+
+    if (!body || !dateInput) return;
+
+    if (!selectedSchedulingProviderId) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" class="doctor-scheduling-empty">
+                    Please select a doctor first.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const selectedDate = dateInput.value;
+
+    if (!selectedDate) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" class="doctor-scheduling-empty">
+                    Please select a date.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="4" class="doctor-scheduling-empty">
+                Loading schedule...
+            </td>
+        </tr>
+    `;
+
+    try {
+        const url =
+            `/api/doctors/${encodeURIComponent(selectedSchedulingProviderId)}` +
+            `/schedule-by-date?date=${encodeURIComponent(selectedDate)}`;
+
+        console.log('[Scheduling] Loading doctor schedule:', url);
+
+        const response = await fetch(url);
+        const records = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                records.error || `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(records)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        renderDoctorScheduleByDate(records);
+
+    } catch (error) {
+        console.error(
+            '[Scheduling] Unable to load doctor schedule:',
+            error
+        );
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4"
+                    style="text-align:center;color:red;padding:18px;">
+                    Unable to load schedule:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderDoctorScheduleByDate(records) {
+
+    const body =
+        document.getElementById('doctor-scheduling-modal-body');
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!records.length) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" class="doctor-scheduling-empty">
+                    No scheduled appointments found for this doctor on the selected date.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    records.forEach((record, index) => {
+        const row = document.createElement('tr');
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeEntityHtml(formatDoctorScheduleDate(record.appointment_date))}</td>
+            <td>${escapeEntityHtml(formatDoctorScheduleTime(record.appointment_time))}</td>
+            <td>${escapeEntityHtml(record.patient_name || '—')}</td>
+        `;
+
+        // Stage B: available slots are display-only for now.
+        // Selection/update behavior will be added in a later stage.
+        if (record.available === true) {
+            row.classList.add('available-schedule-slot');
+        }
+
+        body.appendChild(row);
+    });
+}
+
+
+function formatDoctorScheduleDate(value) {
+    if (!value) return '—';
+
+    const parts = String(value).slice(0, 10).split('-');
+
+    if (parts.length !== 3) {
+        return String(value);
+    }
+
+    const [year, month, day] = parts;
+    return `${Number(month)}/${Number(day)}/${year}`;
+}
+
+
+function formatDoctorScheduleTime(value) {
+    if (!value) return '—';
+
+    const parts = String(value).split(':');
+
+    if (parts.length < 2) {
+        return String(value);
+    }
+
+    let hour = Number(parts[0]);
+    const minute = parts[1];
+
+    if (!Number.isFinite(hour)) {
+        return String(value);
+    }
+
+    const period = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+
+    return `${hour}:${minute} ${period}`;
+}
+
+
+document.addEventListener(
+    'keydown',
+    event => {
+
+        if (event.key === 'Escape') {
+            closeSchedulingDoctorModal();
+            closeSchedulingHospitalModal();
+            closeDoctorSchedulingModal();
+        }
+    }
+);
+
+
+async function loadDoctorSchedule() {
+
+    const patientSchedulingPanel =
+        document.getElementById('patient-scheduling-panel');
+
+    if (patientSchedulingPanel) {
+        patientSchedulingPanel.style.display = 'none';
+    }
+
+    const doctorId =
+        sessionStorage.getItem('pces_doctor_id');
+
+    if (!doctorId) {
+        alert(
+            'Doctor ID was not found. Please login again.'
+        );
+        return;
+    }
+
+    const chatMessages =
+        document.getElementById('chat-messages');
+
+    const entityPanel =
+        document.getElementById('entity-data-panel');
+
+    const schedulePanel =
+        document.getElementById(
+            'doctor-schedule-panel'
+        );
+
+    const body =
+        document.getElementById(
+            'doctor-schedule-body'
+        );
+
+    // Hide normal chat
+    if (chatMessages) {
+        chatMessages.style.display = 'none';
+    }
+    // Also hide our AI-summary panel (sibling of #chat-messages inside .chat-ai-row)
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) {
+        chatAiRow.style.display = 'none';
+    }
+
+    // Hide Patient / Doctor panel
+    if (entityPanel) {
+        entityPanel.style.display = 'none';
+    }
+
+    // Show Schedule panel
+    if (schedulePanel) {
+        schedulePanel.style.display = 'flex';
+    }
+
+    body.innerHTML = `
+        <tr>
+            <td
+                colspan="5"
+                style="text-align:center;padding:20px;">
+                Loading today's schedule...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const response = await fetch(
+            `/api/doctors/${
+                encodeURIComponent(doctorId)
+            }/schedule`
+        );
+
+        const records =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                records.error ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        renderDoctorSchedule(records);
+
+    } catch (error) {
+
+        body.innerHTML = `
+            <tr>
+                <td
+                    colspan="5"
+                    style="
+                        text-align:center;
+                        color:red;
+                        padding:20px;
+                    ">
+                    ${escapeEntityHtml(
+                        error.message
+                    )}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function renderDoctorSchedule(records) {
+
+    const body =
+        document.getElementById(
+            'doctor-schedule-body'
+        );
+
+    body.innerHTML = '';
+
+    if (!records || records.length === 0) {
+
+        body.innerHTML = `
+            <tr>
+                <td
+                    colspan="5"
+                    style="
+                        text-align:center;
+                        padding:20px;
+                    ">
+                    No scheduled appointments for today.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    records.forEach((record, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td style="text-align:center;">
+                ${index + 1}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.full_name || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.dob || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.gender || '—'
+                )}
+            </td>
+
+            <td>
+                ${escapeEntityHtml(
+                    record.appointment_time || '—'
+                )}
+            </td>
+        `;
+
+        body.appendChild(row);
+    });
+}
+
+function populateEntityDetails(record) {
+    currentEntityRecord = record;
+    currentEntityMode = 'view';
+    setEntityFieldsEditable(false);
+
+    setEntityValue(
+        'entity-first-name',
+        record.first_name
+    );
+
+    setEntityValue(
+        'entity-middle-name',
+        record.middle_name
+    );
+
+    setEntityValue(
+        'entity-last-name',
+        record.last_name
+    );
+
+    setEntityValue(
+        'entity-address1',
+        record.address1
+    );
+
+    setEntityValue(
+        'entity-address2',
+        record.address2
+    );
+
+    setEntityValue(
+        'entity-city',
+        record.city
+    );
+
+    setEntityValue(
+        'entity-state',
+        record.state
+    );
+
+    setEntityValue(
+        'entity-zip',
+        record.zip
+    );
+
+    setEntityValue(
+        'entity-phone',
+        record.phone
+    );
+
+    setEntityValue(
+        'entity-email',
+        record.email
+    );
+
+    setEntityValue(
+        'entity-dob',
+        record.dob
+    );
+
+
+    const title =
+        document.getElementById(
+            'entity-detail-title'
+        );
+
+
+    if (title) {
+
+        const label =
+            currentEntityType === 'patient'
+                ? 'Patient'
+                : 'Doctor';
+
+
+        title.textContent =
+            `${label} Details`;
+    }
+}
+function startEntityInsert() {
+
+    currentEntityMode = 'insert';
+    currentEntityRecord = null;
+
+    clearEntityDetails();
+
+    setEntityFieldsEditable(true);
+
+    const title =
+        document.getElementById(
+            'entity-detail-title'
+        );
+
+    if (title) {
+        title.textContent =
+            currentEntityType === 'patient'
+                ? 'Insert New Patient'
+                : 'Insert New Doctor';
+    }
+
+    const firstName =
+        document.getElementById(
+            'entity-first-name'
+        );
+
+    if (firstName) {
+        firstName.focus();
+    }
+}
+
+function startEntityUpdate() {
+
+    if (!currentEntityRecord) {
+
+        alert(
+            'Please select a record to update.'
+        );
+
+        return;
+    }
+
+    currentEntityMode = 'update';
+
+    setEntityFieldsEditable(true);
+
+    const title =
+        document.getElementById(
+            'entity-detail-title'
+        );
+
+    if (title) {
+
+        const label =
+            currentEntityType === 'patient'
+                ? 'Patient'
+                : 'Doctor';
+
+        title.textContent =
+            `Update ${label}: ${
+                currentEntityRecord.full_name || ''
+            }`;
+    }
+}
+function setEntityFieldsEditable(editable) {
+
+    const ids = [
+        'entity-first-name',
+        'entity-middle-name',
+        'entity-last-name',
+        'entity-address1',
+        'entity-address2',
+        'entity-city',
+        'entity-state',
+        'entity-zip',
+        'entity-phone',
+        'entity-email',
+        'entity-dob'
+    ];
+
+    ids.forEach(id => {
+
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+            element.readOnly = !editable;
+        }
+    });
+}
+
+function setEntityValue(id, value) {
+
+    const element =
+        document.getElementById(id);
+
+    if (element) {
+        element.value = value || '';
+    }
+}
+function getEntityFormData() {
+
+    return {
+        address_id:
+         currentEntityRecord && currentEntityRecord.address_id
+        ? currentEntityRecord.address_id
+        : null,
+
+        first_name:
+            document.getElementById(
+                'entity-first-name'
+            ).value.trim(),
+
+        middle_name:
+            document.getElementById(
+                'entity-middle-name'
+            ).value.trim(),
+
+        last_name:
+            document.getElementById(
+                'entity-last-name'
+            ).value.trim(),
+
+        address1:
+            document.getElementById(
+                'entity-address1'
+            ).value.trim(),
+
+        address2:
+            document.getElementById(
+                'entity-address2'
+            ).value.trim(),
+
+        city:
+            document.getElementById(
+                'entity-city'
+            ).value.trim(),
+
+        state:
+            document.getElementById(
+                'entity-state'
+            ).value.trim(),
+
+        zip:
+            document.getElementById(
+                'entity-zip'
+            ).value.trim(),
+
+        phone:
+            document.getElementById(
+                'entity-phone'
+            ).value.trim(),
+
+        email:
+            document.getElementById(
+                'entity-email'
+            ).value.trim(),
+
+        dob:
+            document.getElementById(
+                'entity-dob'
+            ).value.trim()
+    };
+}
+async function saveEntityRecord() {
+
+    if (
+        currentEntityMode !== 'insert' &&
+        currentEntityMode !== 'update'
+    ) {
+
+        alert(
+            'Click Insert or Update before saving.'
+        );
+
+        return;
+    }
+
+
+    const payload =
+        getEntityFormData();
+
+
+    if (
+        !payload.first_name ||
+        !payload.last_name
+    ) {
+
+        alert(
+            'First Name and Last Name are required.'
+        );
+
+        return;
+    }
+
+
+    try {
+
+        let url;
+        let method;
+
+
+        if (currentEntityMode === 'insert') {
+
+            url =
+                currentEntityType === 'patient'
+                    ? '/api/patients'
+                    : '/api/doctors';
+
+            method = 'POST';
+
+        } else {
+
+            const recordId =
+                currentEntityRecord.patient_id ||
+                currentEntityRecord.doctor_id ||
+                currentEntityRecord.party_id;
+
+
+            if (!recordId) {
+
+                throw new Error(
+                    'No record ID found for update.'
+                );
+            }
+
+
+            url =
+                currentEntityType === 'patient'
+                    ? `/api/patients/${encodeURIComponent(recordId)}`
+                    : `/api/doctors/${encodeURIComponent(recordId)}`;
+
+            method = 'PUT';
+        }
+
+
+        console.log(
+            '[EntitySave]',
+            method,
+            url,
+            payload
+        );
+
+
+        const response =
+            await fetch(url, {
+
+                method: method,
+
+                headers: {
+                    'Content-Type':
+                        'application/json'
+                },
+
+                body:
+                    JSON.stringify(payload)
+            });
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                data.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+
+        alert(
+            currentEntityMode === 'insert'
+                ? 'Record inserted successfully.'
+                : 'Record updated successfully.'
+        );
+
+
+        currentEntityMode = 'view';
+
+        setEntityFieldsEditable(false);
+
+
+        // Reload list from database
+        await loadEntityDataset(
+            currentEntityType
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            '[EntitySave] Failed:',
+            error
+        );
+
+
+        alert(
+            `Unable to save record: ${error.message}`
+        );
+    }
+}
+function clearEntityDetails() {
+
+    const ids = [
+        'entity-first-name',
+        'entity-middle-name',
+        'entity-last-name',
+        'entity-address1',
+        'entity-address2',
+        'entity-city',
+        'entity-state',
+        'entity-zip',
+        'entity-phone',
+        'entity-email',
+        'entity-dob'
+    ];
+
+
+    ids.forEach(id => {
+
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+            element.value = '';
+        }
+    });
+
+
+    const title =
+        document.getElementById(
+            'entity-detail-title'
+        );
+
+
+    if (title) {
+    title.textContent =
+        currentEntityType === 'patient'
+            ? 'Patient Details'
+            : 'Doctor Details';
+}
+}
+
+
+function escapeEntityHtml(value) {
+
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Restore the normal chat / AI-summary / medical-history view and hide all
+// Patient/Doctor Data admin panels. Added so the ported admin feature has a
+// way back to chat (the source files didn't provide one).
+function backToChat() {
+    ['entity-data-panel', 'doctor-schedule-panel', 'patient-scheduling-panel'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    const chatMessages = document.getElementById('chat-messages');
+    if (chatMessages) chatMessages.style.display = '';
+
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) chatAiRow.style.display = '';
+
+    ['patient-data-tab', 'doctor-data-tab', 'patient-doctor-tab',
+     'doctor-patient-tab', 'doctor-schedule-tab', 'patient-scheduling-tab'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+
+    currentEntityType = null;
+    currentRelationshipMode = null;
+}
 
         /* ── AI Generated Patient Summary ─────────────────────────────── */
         let _aiSummaryAbortCtrl = null; // AbortController for in-flight fetch
