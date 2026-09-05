@@ -593,7 +593,7 @@ def login():
                 with _ehr_conn() as ehr_conn:
                     with ehr_conn.cursor() as ehr_cur:
                         ehr_cur.execute(
-                            "SELECT party_id FROM public.p_party WHERE party_type = 'DOCTOR' AND LOWER(email) = LOWER(%s) LIMIT 1",
+                            "SELECT party_id FROM p_party WHERE party_type = 'DOCTOR' AND LOWER(email) = LOWER(%s) LIMIT 1",
                             (email,),
                         )
                         party_row = ehr_cur.fetchone()
