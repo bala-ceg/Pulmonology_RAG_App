@@ -2988,6 +2988,51 @@
     color: #2e6b2e;
 }
 
+/* Available doctor schedule rows can be selected to populate
+   Appointment Date / Appointment Time in Scheduling Details. */
+#doctor-scheduling-modal-body tr.selectable-schedule-slot {
+    cursor: pointer;
+}
+
+#doctor-scheduling-modal-body tr.selectable-schedule-slot:hover td {
+    background: #cde8c6;
+}
+
+#doctor-scheduling-modal-body tr.selectable-schedule-slot:focus {
+    outline: 2px solid #4f7fbf;
+    outline-offset: -2px;
+}
+
+/* Patient Scheduling - Insert / Save appointment actions */
+.scheduling-save-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.scheduling-save-actions button {
+    min-width: 120px;
+    margin: 0;
+}
+
+.scheduling-save-btn {
+    background: #deeaf5;
+    border: 1px solid #183b64;
+    color: #111;
+}
+
+.scheduling-cancel-btn {
+    background: #f1f1f1;
+    border: 1px solid #777;
+    color: #222;
+}
+
+.scheduling-save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* =====================================================
    PATIENT / DOCTOR DATA PANEL
    ===================================================== */
@@ -4108,6 +4153,24 @@
                         class="scheduling-select-btn"
                         onclick="openDoctorSchedulingModal()">
                         Scheduling
+                    </button>
+                </div>
+
+                <!-- Patient Scheduling - Insert / Save Appointment -->
+                <div class="scheduling-save-actions">
+                    <button
+                        id="scheduling-save-btn"
+                        type="button"
+                        class="scheduling-save-btn"
+                        onclick="saveSchedulingAppointment()">
+                        Save Schedule
+                    </button>
+
+                    <button
+                        type="button"
+                        class="scheduling-cancel-btn"
+                        onclick="clearSchedulingDraft()">
+                        Cancel
                     </button>
                 </div>
             </div>
@@ -5727,6 +5790,133 @@ function resetSchedulingSelections() {
 }
 
 
+function clearSchedulingDraft() {
+
+    const dateInput =
+        document.getElementById('scheduling-date');
+
+    const timeInput =
+        document.getElementById('scheduling-time');
+
+    if (dateInput) dateInput.value = '';
+    if (timeInput) timeInput.value = '';
+
+    resetSchedulingSelections();
+}
+
+
+async function saveSchedulingAppointment() {
+
+    const dateInput =
+        document.getElementById('scheduling-date');
+
+    const timeInput =
+        document.getElementById('scheduling-time');
+
+    const statusInput =
+        document.getElementById('scheduling-status');
+
+    const saveButton =
+        document.getElementById('scheduling-save-btn');
+
+    const appointmentDate =
+        dateInput ? dateInput.value : '';
+
+    const appointmentTime =
+        timeInput ? timeInput.value : '';
+
+    const status =
+        statusInput && statusInput.value
+            ? statusInput.value
+            : 'SCHEDULED';
+
+    if (!selectedSchedulingPatientId) {
+        alert('Please select a patient.');
+        return;
+    }
+
+    if (!selectedSchedulingProviderId) {
+        alert('Please select a doctor.');
+        return;
+    }
+
+    if (!selectedSchedulingHospitalId) {
+        alert('Please select a hospital.');
+        return;
+    }
+
+    if (!appointmentDate) {
+        alert('Please select an appointment date.');
+        return;
+    }
+
+    if (!appointmentTime) {
+        alert('Please select an appointment time.');
+        return;
+    }
+
+    const payload = {
+        patient_id: selectedSchedulingPatientId,
+        provider_id: selectedSchedulingProviderId,
+        hospital_id: selectedSchedulingHospitalId,
+        appointment_date: appointmentDate,
+        appointment_time: appointmentTime,
+        status: status,
+        created_by:
+            sessionStorage.getItem('pces_doctor_name') ||
+            'PCES_UI'
+    };
+
+    console.log('[Scheduling] Saving appointment:', payload);
+
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+    }
+
+    try {
+        const response = await fetch('/api/schedules', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                result.error ||
+                result.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        alert(
+            `Appointment scheduled successfully.\nSchedule ID: ${result.schedule_id}`
+        );
+
+        // Clear the draft after a successful insert to avoid accidental repeats.
+        clearSchedulingDraft();
+
+    } catch (error) {
+        console.error(
+            '[Scheduling] Unable to save appointment:',
+            error
+        );
+
+        alert(`Unable to save appointment: ${error.message}`);
+
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Schedule';
+        }
+    }
+}
+
+
 async function openSchedulingDoctorModal() {
 
     const modal =
@@ -6245,14 +6435,85 @@ function renderDoctorScheduleByDate(records) {
             <td>${escapeEntityHtml(record.patient_name || '—')}</td>
         `;
 
-        // Stage B: available slots are display-only for now.
-        // Selection/update behavior will be added in a later stage.
+        // Only open / green slots are selectable.
         if (record.available === true) {
-            row.classList.add('available-schedule-slot');
+            row.classList.add(
+                'available-schedule-slot',
+                'selectable-schedule-slot'
+            );
+
+            // Make the row keyboard-accessible as well as clickable.
+            row.tabIndex = 0;
+            row.setAttribute(
+                'aria-label',
+                `Select available appointment ${formatDoctorScheduleDate(record.appointment_date)} at ${formatDoctorScheduleTime(record.appointment_time)}`
+            );
+
+            row.addEventListener('click', () => {
+                selectDoctorScheduleSlot(record);
+            });
+
+            row.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectDoctorScheduleSlot(record);
+                }
+            });
         }
 
         body.appendChild(row);
     });
+}
+
+
+function selectDoctorScheduleSlot(record) {
+
+    if (!record || record.available !== true) {
+        return;
+    }
+
+    const appointmentDateInput =
+        document.getElementById('scheduling-date');
+
+    const appointmentTimeInput =
+        document.getElementById('scheduling-time');
+
+    if (!appointmentDateInput || !appointmentTimeInput) {
+        console.error(
+            '[Scheduling] Appointment date/time fields not found'
+        );
+        return;
+    }
+
+    // Date input expects YYYY-MM-DD.
+    const selectedDate =
+        String(record.appointment_date || '').slice(0, 10);
+
+    // Time input expects HH:MM; API values may contain seconds.
+    const selectedTime =
+        String(record.appointment_time || '').slice(0, 5);
+
+    if (!selectedDate || !selectedTime) {
+        console.error(
+            '[Scheduling] Available slot is missing date/time:',
+            record
+        );
+        return;
+    }
+
+    appointmentDateInput.value = selectedDate;
+    appointmentTimeInput.value = selectedTime;
+
+    console.log(
+        '[Scheduling] Available slot selected:',
+        {
+            appointment_date: selectedDate,
+            appointment_time: selectedTime
+        }
+    );
+
+    // Selection is complete; return the user to Scheduling Details.
+    closeDoctorSchedulingModal();
 }
 
 

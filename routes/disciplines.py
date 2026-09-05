@@ -1258,6 +1258,173 @@ def get_doctor_schedule(doctor_id: str):
         }), 500
 
 # ============================================================
+# Patient Scheduling - Create / Insert Appointment
+# ============================================================
+
+@disciplines_bp.route("/api/schedules", methods=["POST"])
+@handle_route_errors
+def create_schedule():
+    """Create one scheduled appointment in ehr_ccm_schema.p_schedule.
+
+    Expected JSON:
+      patient_id, provider_id, hospital_id, appointment_date,
+      appointment_time, optional status, optional created_by.
+    """
+    data = request.get_json(silent=True) or {}
+
+    patient_id = (data.get("patient_id") or "").strip()
+    provider_id = (data.get("provider_id") or "").strip()
+    hospital_id = (data.get("hospital_id") or "").strip()
+    appointment_date = (data.get("appointment_date") or "").strip()
+    appointment_time = (data.get("appointment_time") or "").strip()
+    created_by = (data.get("created_by") or "PCES_UI").strip() or "PCES_UI"
+
+    # Scheduling is currently creating only active SCHEDULED rows.
+    status = "SCHEDULED"
+
+    required = {
+        "patient_id": patient_id,
+        "provider_id": provider_id,
+        "hospital_id": hospital_id,
+        "appointment_date": appointment_date,
+        "appointment_time": appointment_time,
+    }
+
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        return jsonify({
+            "error": f"Missing required field(s): {', '.join(missing)}"
+        }), 400
+
+    # Validate UUIDs before they reach PostgreSQL.
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+        provider_uuid = uuid.UUID(provider_id)
+        hospital_uuid = uuid.UUID(hospital_id)
+    except ValueError:
+        return jsonify({
+            "error": "patient_id, provider_id and hospital_id must be valid UUIDs"
+        }), 400
+
+    try:
+        parsed_date = date_cls.fromisoformat(appointment_date)
+    except ValueError:
+        return jsonify({
+            "error": "appointment_date must be in YYYY-MM-DD format"
+        }), 400
+
+    try:
+        parsed_time = datetime.strptime(appointment_time, "%H:%M").time()
+    except ValueError:
+        return jsonify({
+            "error": "appointment_time must be in HH:MM format"
+        }), 400
+
+    new_schedule_id = uuid.uuid4()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+
+                # Validate the three selected party IDs and their expected roles.
+                party_checks = [
+                    (patient_uuid, "PATIENT", "patient_id"),
+                    (provider_uuid, "DOCTOR", "provider_id"),
+                    (hospital_uuid, "ORGANIZATION", "hospital_id"),
+                ]
+
+                for party_uuid, party_type, field_name in party_checks:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM ehr_ccm_schema.p_party
+                        WHERE party_id = %s
+                          AND party_type = %s
+                          AND is_active = TRUE
+                        LIMIT 1
+                        """,
+                        (party_uuid, party_type),
+                    )
+                    if cursor.fetchone() is None:
+                        return jsonify({
+                            "error": (
+                                f"Invalid {field_name}: active {party_type} "
+                                "record was not found"
+                            )
+                        }), 400
+
+                # Re-check availability at save time. This prevents an obviously
+                # stale UI slot from being inserted as a second active booking.
+                cursor.execute(
+                    """
+                    SELECT schedule_id
+                    FROM ehr_ccm_schema.p_schedule
+                    WHERE provider_id = %s
+                      AND appointment_date = %s
+                      AND appointment_time = %s
+                      AND is_active = TRUE
+                      AND status = 'SCHEDULED'
+                    LIMIT 1
+                    """,
+                    (provider_uuid, parsed_date, parsed_time),
+                )
+
+                existing = cursor.fetchone()
+                if existing:
+                    return jsonify({
+                        "error": "This appointment slot is already booked.",
+                        "schedule_id": str(existing[0]),
+                    }), 409
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_schedule (
+                        schedule_id,
+                        hospital_id,
+                        patient_id,
+                        provider_id,
+                        appointment_date,
+                        appointment_time,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        NOW(), %s, TRUE, 1
+                    )
+                    RETURNING schedule_id
+                    """,
+                    (
+                        new_schedule_id,
+                        hospital_uuid,
+                        patient_uuid,
+                        provider_uuid,
+                        parsed_date,
+                        parsed_time,
+                        status,
+                        created_by[:100],
+                    ),
+                )
+
+                inserted = cursor.fetchone()
+
+        return jsonify({
+            "success": True,
+            "schedule_id": str(inserted[0] if inserted else new_schedule_id),
+            "message": "Appointment scheduled successfully.",
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Unable to create schedule: %s", exc)
+        return jsonify({
+            "error": "Unable to create appointment schedule"
+        }), 500
+
+
+# ============================================================
 # Doctor Schedule by Date - Patient Scheduling Stage A
 # ============================================================
 
