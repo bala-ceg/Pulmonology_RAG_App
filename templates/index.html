@@ -10239,12 +10239,13 @@ ${data.conclusion}
                 showLoggedInDoctor();
                 _updateSendBtn();  // re-evaluate: doctor now logged in
                 setTimeout(() => {
+                    // Capture the pending action BEFORE closing the modal —
+                    // closePcesLoginModal() also clears _pendingAction, so
+                    // grabbing it first ensures the button's queued action
+                    // (e.g. opening the Scheduling panel) actually runs.
+                    const fn = _pendingAction;
                     closePcesLoginModal();
-                    if (_pendingAction) {
-                        const fn = _pendingAction;
-                        _pendingAction = null;
-                        fn();
-                    }
+                    if (fn) fn();
                 }, 600);
             } catch (err) {
                 msg.className = 'login-msg error';
