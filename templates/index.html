@@ -4334,6 +4334,12 @@
         <div class="scheduling-picker-body">
 
             <div class="doctor-scheduling-summary">
+                <label for="doctor-scheduling-patient-name">Patient</label>
+                <input
+                    id="doctor-scheduling-patient-name"
+                    type="text"
+                    readonly>
+
                 <label for="doctor-scheduling-name">Doctor</label>
                 <input
                     id="doctor-scheduling-name"
@@ -6316,6 +6322,9 @@ async function openDoctorSchedulingModal() {
     const modal =
         document.getElementById('doctor-scheduling-modal');
 
+    const patientNameInput =
+        document.getElementById('doctor-scheduling-patient-name');
+
     const doctorNameInput =
         document.getElementById('doctor-scheduling-name');
 
@@ -6328,6 +6337,11 @@ async function openDoctorSchedulingModal() {
     if (!modal || !doctorNameInput || !modalDateInput) {
         console.error('[Scheduling] Doctor schedule modal elements not found');
         return;
+    }
+
+    if (patientNameInput) {
+        patientNameInput.value =
+            selectedSchedulingPatientName || '';
     }
 
     doctorNameInput.value =
