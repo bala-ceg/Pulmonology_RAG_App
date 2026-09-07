@@ -2728,9 +2728,19 @@
             font-style: italic;
             color: #888;
         }
-        /* Modal view uses wider 3-col grid */
-        .ai-summary-modal-body .clinical-summary-grid {
-            grid-template-columns: 1fr 1fr 1fr;
+        /* Modal view: all 5 summary cards in a single row. The two wrapper
+           divs (clinical-summary-grid / clinical-summary-row-2) are set to
+           display:contents so their child .summary-card elements become
+           direct grid items of clinical-summary-cards — no HTML/JS changes
+           needed, and the sidebar mini-panel layout is unaffected. */
+        .ai-summary-modal-body .clinical-summary-cards {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+        .ai-summary-modal-body .clinical-summary-grid,
+        .ai-summary-modal-body .clinical-summary-row-2 {
+            display: contents;
         }
         .ai-summary-modal-body .summary-card-title {
             font-size: 11.5px;
@@ -3242,6 +3252,26 @@
             line-height: 1.65;
             color: #1a1a1a;
         }
+        .ai-summary-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 12px 20px;
+            border-top: 1px solid #dde3ea;
+            flex-shrink: 0;
+        }
+        .ai-summary-modal-footer-close {
+            padding: 7px 22px;
+            border: 1px solid #183b64;
+            border-radius: 5px;
+            background: #deeaf5;
+            color: #111;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .ai-summary-modal-footer-close:hover {
+            background: #8fb4e8;
+        }
         /* Hint cursor on summary body to signal double-clickable */
         #ai-summary-body.has-content {
             cursor: zoom-in;
@@ -3475,6 +3505,9 @@
                 <button class="ai-summary-modal-close" onclick="closeAiSummaryModal()" title="Close">✕</button>
             </div>
             <div class="ai-summary-modal-body" id="ai-summary-modal-body"></div>
+            <div class="ai-summary-modal-footer">
+                <button class="ai-summary-modal-footer-close" onclick="closeAiSummaryModal()">Close</button>
+            </div>
         </div>
     </div>
 
@@ -7207,9 +7240,10 @@ function backToChat() {
 function syncEhrAiToggleLabel() {
     const btn = document.getElementById('ehr-ai-toggle-btn');
     if (!btn) return;
-    const chatAiRow = document.querySelector('.chat-ai-row');
-    const inEhrMode = chatAiRow && chatAiRow.style.display === 'none';
-    btn.textContent = inEhrMode ? '💬 Back to Chat' : 'EHR / AI';
+    // Always show "EHR / AI" regardless of mode — the button still toggles
+    // between chat and EHR/AI views on click, it just never relabels itself
+    // to "Back to Chat".
+    btn.textContent = 'EHR / AI';
 }
 
 // Toggle between the chat/AI-summary view and the EHR (Patient/Doctor Data)
@@ -7289,11 +7323,11 @@ function toggleEhrAi() {
                     </div>
                     <div class="clinical-summary-row-2">
                         <div class="summary-card">
-                            <p class="summary-card-title">Recent Encounters</p>
+                            <p class="summary-card-title">Hospital Encounters</p>
                             ${encountersHtml}
                         </div>
                         <div class="summary-card">
-                            <p class="summary-card-title">Recent Labs</p>
+                            <p class="summary-card-title">Lab Encounters</p>
                             ${labsHtml}
                         </div>
                     </div>
@@ -7342,7 +7376,8 @@ function toggleEhrAi() {
                     const paras = data.summary.split(/\n{2,}/).filter(p => p.trim());
                     const cardsHtml = renderClinicalSummaryCards(data);
                     const narrativeHtml = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
-                    body.innerHTML = cardsHtml + narrativeHtml;
+                    const summaryLabelHtml = '<p style="margin:14px 0 6px"><strong>Summary:</strong></p>';
+                    body.innerHTML = cardsHtml + summaryLabelHtml + narrativeHtml;
                     body.classList.add('has-content');
                     console.log(
                         `[PCES][AISummary] ✅ model=${data.model || 'n/a'} | ` +
