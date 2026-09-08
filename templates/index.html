@@ -3142,6 +3142,15 @@
     min-width: 250px;
 }
 
+/* Appointment Date/Time are populated only from the Doctor Scheduling modal. */
+#patient-scheduling-panel #scheduling-date[readonly],
+#patient-scheduling-panel #scheduling-time[readonly] {
+    pointer-events: none;
+    background-color: #f3f4f6;
+    color: #222;
+    cursor: default;
+}
+
 .entity-field {
     display: grid;
     grid-template-columns: 100px 1fr;
@@ -4159,14 +4168,20 @@
                     <label>Appointment Date</label>
                     <input
                         id="scheduling-date"
-                        type="date">
+                        type="date"
+                        readonly
+                        aria-readonly="true"
+                        tabindex="-1">
                 </div>
 
                 <div class="entity-field">
                     <label>Appointment Time</label>
                     <input
                         id="scheduling-time"
-                        type="time">
+                        type="time"
+                        readonly
+                        aria-readonly="true"
+                        tabindex="-1">
                 </div>
 
                 <div class="entity-field">
