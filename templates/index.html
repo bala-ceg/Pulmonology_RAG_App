@@ -3683,42 +3683,42 @@
                 <button
                     id="patient-data-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadEntityDataset('patient'); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('patient-data-tab'); loadEntityDataset('patient'); syncEhrAiToggleLabel(); })">
                     Patients
                 </button>
 
                 <button
                     id="doctor-data-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadEntityDataset('doctor'); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('doctor-data-tab'); loadEntityDataset('doctor'); syncEhrAiToggleLabel(); })">
                     Doctor
                 </button>
 
                 <button
                     id="patient-doctor-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadRelationshipMode('patient-doctor'); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('patient-doctor-tab'); loadRelationshipMode('patient-doctor'); syncEhrAiToggleLabel(); })">
                     Patient - Doctor
                 </button>
 
                 <button
                     id="doctor-patient-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadRelationshipMode('doctor-patient'); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('doctor-patient-tab'); loadRelationshipMode('doctor-patient'); syncEhrAiToggleLabel(); })">
                     Doctor - Patient
                 </button>
 
                 <button
                     id="doctor-schedule-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadDoctorSchedule(); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('doctor-schedule-tab'); loadDoctorSchedule(); syncEhrAiToggleLabel(); })">
                     My Schedule
                 </button>
 
                 <button
                     id="patient-scheduling-tab"
                     class="section-btn entity-data-tab"
-                    onclick="requireAuth(() => { loadSchedulingPanel(); syncEhrAiToggleLabel(); })">
+                    onclick="requireAuth(() => { setActiveEntityDataTab('patient-scheduling-tab'); loadSchedulingPanel(); syncEhrAiToggleLabel(); })">
                     Scheduling
                 </button>
             </div>
@@ -4736,28 +4736,16 @@
 
 
         /* ==== Patient / Doctor Data admin feature JS (ported) ==== */
-        function setActiveDataTab(type) {
-
-    const patientBtn =
-        document.getElementById('patient-data-tab');
-
-    const doctorBtn =
-        document.getElementById('doctor-data-tab');
-
-    if (patientBtn) {
-        patientBtn.classList.toggle(
-            'active',
-            type === 'patient'
-        );
-    }
-
-    if (doctorBtn) {
-        doctorBtn.classList.toggle(
-            'active',
-            type === 'doctor'
-        );
-    }
-}
+        // Highlights exactly one of the "6. Patient / Doctor Data" sidebar
+        // tab buttons (Patients / Doctor / Patient-Doctor / Doctor-Patient /
+        // My Schedule / Scheduling) at a time.
+        function setActiveEntityDataTab(activeTabId) {
+            document
+                .querySelectorAll('.entity-data-tabs-box .entity-data-tab')
+                .forEach(btn => {
+                    btn.classList.toggle('active', btn.id === activeTabId);
+                });
+        }
 
 let currentEntityType = null;
 let currentEntityMode = 'view';
@@ -5388,7 +5376,7 @@ if (relationshipArea) {
     panel.style.display = 'flex';
 
 
-    setActiveDataTab(type);
+    setActiveEntityDataTab(type === 'patient' ? 'patient-data-tab' : 'doctor-data-tab');
 
 
     if (type === 'patient') {
@@ -7597,6 +7585,7 @@ function toggleEhrAi() {
                 document.getElementById('psm-auth-error').style.display = 'none';
                 document.getElementById('psm-results-body').innerHTML = '';
                 loadAffiliatedSources();
+                loadInitialPatients();
                 setTimeout(() => { const f = document.getElementById('psm-first'); if (f) f.focus(); }, 100);
             }
         }
@@ -7660,6 +7649,58 @@ function toggleEhrAi() {
             // Clear any previous auth error when source changes
             const authErr = document.getElementById('psm-auth-error');
             if (authErr) authErr.style.display = 'none';
+        }
+
+        // Auto-populate the Patient Search modal with the first 20 patients
+        // as soon as it opens, so the doctor sees a ready list instead of a
+        // blank table before typing a search query.
+        async function loadInitialPatients() {
+            const tbody = document.getElementById('psm-results-body');
+            const table = document.getElementById('psm-results-table');
+            const noMsg = document.getElementById('psm-no-results-msg');
+
+            try {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#90a4ae;padding:16px;">Loading patients…</td></tr>';
+                table.style.display = 'table';
+
+                const response = await fetch('/api/patients/first20');
+                if (!response.ok) {
+                    throw new Error(`HTTP error: ${response.status}`);
+                }
+
+                const patients = await response.json();
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(patients) || patients.length === 0) {
+                    table.style.display = 'none';
+                    if (noMsg) {
+                        noMsg.style.display = 'block';
+                        noMsg.textContent = 'No patients found.';
+                    }
+                    return;
+                }
+
+                patients.forEach(p => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${p.full_name || '—'}</td>
+                        <td>${p.dob || p.date_of_birth || '—'}</td>
+                        <td>${p.city || '—'}</td>
+                        <td>${p.state || '—'}</td>
+                        <td>${p.zip || '—'}</td>`;
+                    tr.style.cursor = 'pointer';
+                    tr.addEventListener('click', () => selectPatientFromModal(p));
+                    tbody.appendChild(tr);
+                });
+
+                if (noMsg) {
+                    noMsg.style.display = 'none';
+                }
+            } catch (error) {
+                console.warn('[PSM] loadInitialPatients failed:', error);
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#c62828;padding:16px;">Unable to load patients. Please try again.</td></tr>';
+                table.style.display = 'table';
+            }
         }
 
         async function runPatientSearch() {
