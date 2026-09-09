@@ -3157,26 +3157,32 @@
 #patient-scheduling-panel .scheduling-details-layout {
     display: grid;
     grid-template-columns:
-        minmax(200px, 1fr)
-        minmax(260px, 1.2fr)
-        minmax(200px, 1fr)
-        minmax(150px, 0.7fr);
-    gap: 22px;
+        minmax(390px, 1.45fr)
+        minmax(285px, 1fr)
+        minmax(180px, 0.48fr);
+    gap: 14px;
     align-items: start;
     min-width: 0;
     width: 100%;
 }
 
+#patient-scheduling-panel .scheduling-details-column .entity-field {
+    margin-bottom: 6px;
+}
+
 #patient-scheduling-panel .scheduling-action-column {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 #patient-scheduling-panel .scheduling-action-card {
+    width: 100%;
+    max-width: 190px;
     border: 1px solid #c9d8ec;
     background: #f7f9fc;
-    padding: 10px;
+    padding: 8px;
     border-radius: 5px;
     text-align: center;
     margin-bottom: 12px;
@@ -3186,7 +3192,28 @@
     font-size: 12px;
     font-weight: 700;
     color: #1a3a5c;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+}
+
+#patient-scheduling-panel .scheduling-main-action-btn {
+    width: 100%;
+    min-height: 36px;
+    margin: 0;
+}
+
+#patient-scheduling-panel .scheduling-save-actions-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    width: 100%;
+}
+
+#patient-scheduling-panel .scheduling-save-actions-compact button {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    margin: 0;
 }
 
 #patient-scheduling-panel .scheduling-action-column .scheduling-select-btn {
@@ -4164,6 +4191,7 @@
 
         <div class="scheduling-details-layout">
 
+            <!-- Column 1: Patient / Doctor / Hospital -->
             <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Patient</label>
@@ -4173,9 +4201,7 @@
                         readonly
                         placeholder="Select a patient above">
                 </div>
-            </div>
 
-            <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Doctor</label>
 
@@ -4233,6 +4259,7 @@
                 </div>
             </div>
 
+            <!-- Column 2: Date / Time / Status -->
             <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Appointment Date</label>
@@ -4264,34 +4291,35 @@
                 </div>
             </div>
 
-            <!-- Doctor Schedule action + Save/Cancel — own column, next to Appointment Date -->
+            <!-- Column 3: Doctor schedule + appointment actions -->
             <div class="scheduling-action-column">
                 <div class="scheduling-action-card">
                     <div class="scheduling-action-title">Doctor Schedule</div>
+
                     <button
                         type="button"
-                        class="scheduling-select-btn"
+                        class="scheduling-select-btn scheduling-main-action-btn"
                         onclick="openDoctorSchedulingModal()">
                         Scheduling
                     </button>
-                </div>
 
-                <!-- Patient Scheduling - Insert / Save Appointment -->
-                <div class="scheduling-save-actions">
-                    <button
-                        id="scheduling-save-btn"
-                        type="button"
-                        class="scheduling-save-btn"
-                        onclick="saveSchedulingAppointment()">
-                        Save Schedule
-                    </button>
+                    <!-- Patient Scheduling - Insert / Save Appointment -->
+                    <div class="scheduling-save-actions scheduling-save-actions-compact">
+                        <button
+                            id="scheduling-save-btn"
+                            type="button"
+                            class="scheduling-save-btn"
+                            onclick="saveSchedulingAppointment()">
+                            Save Schedule
+                        </button>
 
-                    <button
-                        type="button"
-                        class="scheduling-cancel-btn"
-                        onclick="clearSchedulingDraft()">
-                        Cancel
-                    </button>
+                        <button
+                            type="button"
+                            class="scheduling-cancel-btn"
+                            onclick="clearSchedulingDraft()">
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
 
