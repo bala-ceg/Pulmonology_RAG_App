@@ -2681,21 +2681,13 @@
             padding: 8px 0;
         }
 
-        /* Structured "Patient Clinical Summary" card grid */
+        /* Structured "Patient Clinical Summary" card grid (3 boxes:
+           Active Conditions | Medication+Allergies | Hospital+Lab Encounters) */
         .clinical-summary-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
             margin-bottom: 12px;
-        }
-        .clinical-summary-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-        .clinical-summary-row-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 10px;
         }
         .summary-card {
             border: 1px solid #dde3ea;
@@ -2713,6 +2705,14 @@
             border-bottom: 1px solid #e1e7ee;
             padding-bottom: 3px;
         }
+        .summary-card-subtitle {
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: #1a3a5c;
+            margin: 8px 0 5px;
+        }
         .summary-card-list {
             margin: 0;
             padding-left: 15px;
@@ -2728,21 +2728,18 @@
             font-style: italic;
             color: #888;
         }
-        /* Modal view: all 5 summary cards in a single row. The two wrapper
-           divs (clinical-summary-grid / clinical-summary-row-2) are set to
-           display:contents so their child .summary-card elements become
-           direct grid items of clinical-summary-cards — no HTML/JS changes
-           needed, and the sidebar mini-panel layout is unaffected. */
+        /* Modal view: 3 boxes side-by-side at a 60% / 20% / 20% width ratio
+           (Active Conditions | Medication+Allergies | Hospital+Lab
+           Encounters) — no HTML/JS changes needed beyond the render
+           function producing 3 cards instead of 5; the sidebar mini-panel
+           keeps the default single-column stacked layout above. */
         .ai-summary-modal-body .clinical-summary-cards {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: 3fr 1fr 1fr;
             gap: 8px;
         }
-        .ai-summary-modal-body .clinical-summary-grid,
-        .ai-summary-modal-body .clinical-summary-row-2 {
-            display: contents;
-        }
-        .ai-summary-modal-body .summary-card-title {
+        .ai-summary-modal-body .summary-card-title,
+        .ai-summary-modal-body .summary-card-subtitle {
             font-size: 11.5px;
         }
         .ai-summary-modal-body .summary-card-list {
@@ -7389,29 +7386,21 @@ function toggleEhrAi() {
 
             return `
                 <div class="clinical-summary-cards">
-                    <div class="clinical-summary-grid">
-                        <div class="summary-card">
-                            <p class="summary-card-title">Active Conditions</p>
-                            ${conditionsHtml}
-                        </div>
-                        <div class="summary-card">
-                            <p class="summary-card-title">Medication</p>
-                            ${medicationsHtml}
-                        </div>
-                        <div class="summary-card">
-                            <p class="summary-card-title">Allergies</p>
-                            ${allergiesHtml}
-                        </div>
+                    <div class="summary-card">
+                        <p class="summary-card-title">Active Conditions (60%)</p>
+                        ${conditionsHtml}
                     </div>
-                    <div class="clinical-summary-row-2">
-                        <div class="summary-card">
-                            <p class="summary-card-title">Hospital Encounters</p>
-                            ${encountersHtml}
-                        </div>
-                        <div class="summary-card">
-                            <p class="summary-card-title">Lab Encounters</p>
-                            ${labsHtml}
-                        </div>
+                    <div class="summary-card">
+                        <p class="summary-card-title">Medication (20%)</p>
+                        ${medicationsHtml}
+                        <p class="summary-card-subtitle">Allergies:</p>
+                        ${allergiesHtml}
+                    </div>
+                    <div class="summary-card">
+                        <p class="summary-card-title">Hospital Encounters (20%)</p>
+                        ${encountersHtml}
+                        <p class="summary-card-subtitle">Lab Encounters</p>
+                        ${labsHtml}
                     </div>
                 </div>`;
         }
@@ -7458,8 +7447,17 @@ function toggleEhrAi() {
                     const paras = data.summary.split(/\n{2,}/).filter(p => p.trim());
                     const cardsHtml = renderClinicalSummaryCards(data);
                     const narrativeHtml = paras.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
-                    const summaryLabelHtml = '<p style="margin:14px 0 6px"><strong>Summary:</strong></p>';
-                    body.innerHTML = cardsHtml + summaryLabelHtml + narrativeHtml;
+                    const summaryLabelHtml = '<p style="margin:14px 0 6px"><strong>Summary (as per AI):</strong></p>';
+
+                    let conclusionHtml = '';
+                    if (data.conclusion) {
+                        const conclusionParas = data.conclusion.split(/\n{2,}/).filter(p => p.trim());
+                        const conclusionLabelHtml = '<p style="margin:14px 0 6px"><strong>Conclusion (as per AI):</strong></p>';
+                        conclusionHtml = conclusionLabelHtml +
+                            conclusionParas.map(p => `<p style="margin:0 0 9px">${mdToHtml(p.trim())}</p>`).join('');
+                    }
+
+                    body.innerHTML = cardsHtml + summaryLabelHtml + narrativeHtml + conclusionHtml;
                     body.classList.add('has-content');
                     console.log(
                         `[PCES][AISummary] ✅ model=${data.model || 'n/a'} | ` +

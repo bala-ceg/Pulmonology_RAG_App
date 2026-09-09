@@ -2444,15 +2444,19 @@ def get_patient_ai_summary(patient_id: str):
     prompt = (
         "You are a clinical decision-support assistant. "
         "Given the following complete patient encounter history and known allergies, "
-        "write a concise AI-generated clinical summary in no more than 500 words covering:\n"
+        "produce a response in EXACTLY this format (two clearly labeled sections):\n\n"
+        "SUMMARY:\n"
+        "<a concise AI-generated clinical summary in no more than 500 words covering:\n"
         "1. Clinical presentation and key diagnoses\n"
         "2. Treatment considerations and risk factors\n"
-        "3. Allergy implications for management\n\n"
+        "3. Allergy implications for management>\n\n"
+        "CONCLUSION:\n"
+        "<a brief clinical conclusion / overall assessment in no more than 100 words>\n\n"
         f"Patient Encounter History ({len(history_lines)} records, most recent first):\n"
         + "\n".join(history_lines)
         + f"\n\nKnown Allergies: {allergy_text}\n\n"
-        "Write the summary in a professional clinical tone suitable for a treating physician. "
-        "Keep the total response under 500 words."
+        "Write both sections in a professional clinical tone suitable for a treating physician. "
+        "Do not omit the SUMMARY: or CONCLUSION: labels."
     )
 
     # ── 3. Invoke LLM with timing ──────────────────────────────────────────
@@ -2466,17 +2470,30 @@ def get_patient_ai_summary(patient_id: str):
         response = llm.invoke(prompt)
         generation_time_ms = round((_time.time() - t_start) * 1000)
 
-        summary = (
+        raw_text = (
             response.content.strip()
             if hasattr(response, "content")
             else str(response).strip()
         )
+
+        # Split the model's "SUMMARY: ... CONCLUSION: ..." response into two
+        # separate fields for the frontend. Falls back gracefully to putting
+        # everything in `summary` if the model didn't follow the format.
+        summary_text = raw_text
+        conclusion_text = ""
+        split_match = _re.search(r"CONCLUSION:\s*", raw_text, flags=_re.IGNORECASE)
+        if split_match:
+            summary_text = raw_text[: split_match.start()].strip()
+            conclusion_text = raw_text[split_match.end():].strip()
+        summary_text = _re.sub(r"^SUMMARY:\s*", "", summary_text, flags=_re.IGNORECASE).strip()
+
         logger.info(
             "get_patient_ai_summary: patient=%s model=%s encounters=%d time=%dms chars=%d",
-            patient_id, model_name, len(history_lines), generation_time_ms, len(summary),
+            patient_id, model_name, len(history_lines), generation_time_ms, len(summary_text),
         )
         return jsonify({
-            "summary": summary,
+            "summary": summary_text,
+            "conclusion": conclusion_text,
             "db_available": True,
             "model": model_name,
             "generation_time_ms": generation_time_ms,
@@ -2486,6 +2503,6 @@ def get_patient_ai_summary(patient_id: str):
 
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
-        return jsonify({"summary": "", "error": f"LLM error: {exc}", **structured_sections}), 500
+        return jsonify({"summary": "", "conclusion": "", "error": f"LLM error: {exc}", **structured_sections}), 500
 
 
