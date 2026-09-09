@@ -3151,6 +3151,76 @@
     cursor: default;
 }
 
+/* Patient Scheduling panel — dedicated grid so "Doctor Schedule" /
+   "Scheduling" / "Save Schedule" / "Cancel" sit in their own column
+   next to Appointment Date, instead of stacking vertically below it. */
+#patient-scheduling-panel .scheduling-details-layout {
+    display: grid;
+    grid-template-columns:
+        minmax(200px, 1fr)
+        minmax(260px, 1.2fr)
+        minmax(200px, 1fr)
+        minmax(150px, 0.7fr);
+    gap: 22px;
+    align-items: start;
+    min-width: 0;
+    width: 100%;
+}
+
+#patient-scheduling-panel .scheduling-action-column {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+#patient-scheduling-panel .scheduling-action-card {
+    border: 1px solid #c9d8ec;
+    background: #f7f9fc;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+#patient-scheduling-panel .scheduling-action-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a3a5c;
+    margin-bottom: 8px;
+}
+
+#patient-scheduling-panel .scheduling-action-column .scheduling-select-btn {
+    width: 100%;
+    min-height: 34px;
+}
+
+#patient-scheduling-panel .scheduling-action-column .scheduling-save-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 0;
+}
+
+@media (max-width: 1150px) {
+    #patient-scheduling-panel .scheduling-details-layout {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    #patient-scheduling-panel .scheduling-action-column {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 760px) {
+    #patient-scheduling-panel .scheduling-details-layout {
+        grid-template-columns: 1fr;
+    }
+
+    #patient-scheduling-panel .scheduling-action-column {
+        grid-column: auto;
+    }
+}
+
 .entity-field {
     display: grid;
     grid-template-columns: 100px 1fr;
@@ -4092,9 +4162,9 @@
             Scheduling Details
         </div>
 
-        <div class="entity-details-grid">
+        <div class="scheduling-details-layout">
 
-            <div class="entity-detail-column">
+            <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Patient</label>
                     <input
@@ -4105,7 +4175,7 @@
                 </div>
             </div>
 
-            <div class="entity-detail-column">
+            <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Doctor</label>
 
@@ -4163,7 +4233,7 @@
                 </div>
             </div>
 
-            <div class="entity-detail-column">
+            <div class="scheduling-details-column">
                 <div class="entity-field">
                     <label>Appointment Date</label>
                     <input
@@ -4192,10 +4262,12 @@
                         value="SCHEDULED"
                         readonly>
                 </div>
+            </div>
 
-
-                <div class="entity-field">
-                    <label>Doctor Schedule</label>
+            <!-- Doctor Schedule action + Save/Cancel — own column, next to Appointment Date -->
+            <div class="scheduling-action-column">
+                <div class="scheduling-action-card">
+                    <div class="scheduling-action-title">Doctor Schedule</div>
                     <button
                         type="button"
                         class="scheduling-select-btn"
