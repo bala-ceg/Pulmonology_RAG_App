@@ -3339,17 +3339,6 @@
             font-size: 17px;
             color: #1a3a5c;
         }
-        .ai-summary-modal-close {
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #555;
-            padding: 2px 6px;
-            border-radius: 4px;
-            line-height: 1;
-        }
-        .ai-summary-modal-close:hover { background: #f0f0f0; }
         .ai-summary-modal-body {
             flex: 1 1 auto;
             overflow-y: auto;
@@ -3357,26 +3346,6 @@
             font-size: 13.5px;
             line-height: 1.65;
             color: #1a1a1a;
-        }
-        .ai-summary-modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            padding: 12px 20px;
-            border-top: 1px solid #dde3ea;
-            flex-shrink: 0;
-        }
-        .ai-summary-modal-footer-close {
-            padding: 7px 22px;
-            border: 1px solid #183b64;
-            border-radius: 5px;
-            background: #deeaf5;
-            color: #111;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .ai-summary-modal-footer-close:hover {
-            background: #8fb4e8;
         }
         /* Hint cursor on summary body to signal double-clickable */
         #ai-summary-body.has-content {
@@ -3608,12 +3577,8 @@
         <div class="ai-summary-modal-content">
             <div class="ai-summary-modal-header">
                 <h2>AI Generated Patient Summary</h2>
-                <button class="ai-summary-modal-close" onclick="closeAiSummaryModal()" title="Close">✕</button>
             </div>
             <div class="ai-summary-modal-body" id="ai-summary-modal-body"></div>
-            <div class="ai-summary-modal-footer">
-                <button class="ai-summary-modal-footer-close" onclick="closeAiSummaryModal()">Close</button>
-            </div>
         </div>
     </div>
 
