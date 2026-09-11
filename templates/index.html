@@ -2728,14 +2728,14 @@
             font-style: italic;
             color: #888;
         }
-        /* Modal view: 3 boxes side-by-side at a 60% / 20% / 20% width ratio
+        /* Modal view: 3 boxes side-by-side at a 50% / 30% / 20% width ratio
            (Active Conditions | Medication+Allergies | Hospital+Lab
            Encounters) — no HTML/JS changes needed beyond the render
            function producing 3 cards instead of 5; the sidebar mini-panel
            keeps the default single-column stacked layout above. */
         .ai-summary-modal-body .clinical-summary-cards {
             display: grid;
-            grid-template-columns: 3fr 1fr 1fr;
+            grid-template-columns: 5fr 3fr 2fr;
             gap: 8px;
         }
         .ai-summary-modal-body .summary-card-title,
@@ -3924,45 +3924,6 @@
 
     </div>
 
-    <!-- =====================================================
-     DOCTOR SCHEDULE SCREEN
-     ===================================================== -->
-
-<div
-    id="doctor-schedule-panel"
-    class="entity-data-panel">
-
-    <div class="entity-list-area">
-
-        <div class="entity-list-title">
-            My Schedule - Today
-        </div>
-
-        <div class="entity-table-wrapper">
-
-            <table class="entity-table">
-
-                <thead>
-                    <tr>
-                        <th>S No</th>
-                        <th>Patient Name</th>
-                        <th>Date of Birth</th>
-                        <th>Gender</th>
-                        <th>Appointment Time</th>
-                    </tr>
-                </thead>
-
-                <tbody id="doctor-schedule-body">
-                </tbody>
-
-            </table>
-
-        </div>
-
-    </div>
-
-</div>
-
     <!-- BOTTOM: selected record details -->
     <div 
     id="entity-detail-area"
@@ -4107,6 +4068,49 @@
         </div>
 
     </div>
+</div>
+
+<!-- =====================================================
+     DOCTOR SCHEDULE SCREEN
+     (moved to be a sibling of entity-data-panel, not nested
+     inside it — previously nesting meant entityPanel's
+     display:none also hid this panel, so "My Schedule -
+     Today" could never actually render)
+     ===================================================== -->
+<div
+    id="doctor-schedule-panel"
+    class="entity-data-panel"
+    style="display:none;">
+
+    <div class="entity-list-area">
+
+        <div class="entity-list-title">
+            My Schedule - Today
+        </div>
+
+        <div class="entity-table-wrapper">
+
+            <table class="entity-table">
+
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Patient Name</th>
+                        <th>Date of Birth</th>
+                        <th>Gender</th>
+                        <th>Appointment Time</th>
+                    </tr>
+                </thead>
+
+                <tbody id="doctor-schedule-body">
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
 </div>
 
 <!-- =====================================================
@@ -7387,11 +7391,11 @@ function toggleEhrAi() {
             return `
                 <div class="clinical-summary-cards">
                     <div class="summary-card">
-                        <p class="summary-card-title">Active Conditions (60%)</p>
+                        <p class="summary-card-title">Active Conditions (50%)</p>
                         ${conditionsHtml}
                     </div>
                     <div class="summary-card">
-                        <p class="summary-card-title">Medication (20%)</p>
+                        <p class="summary-card-title">Medication (30%)</p>
                         ${medicationsHtml}
                         <p class="summary-card-subtitle">Allergies:</p>
                         ${allergiesHtml}

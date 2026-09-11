@@ -799,6 +799,27 @@ def handle_query():
     except Exception as _adhoc_init_exc:
         logger.debug("AdHoc context injection skipped: %s", _adhoc_init_exc)
 
+    # ── Build Patient Context (age/sex/ethnicity/medications/allergies) ─────
+    # Printed to console for every query with a patient selected, and folded
+    # into the patient-problem context so the LLM actually receives it.
+    if _patient_id:
+        try:
+            from services.patient_context_service import (
+                build_patient_context as _build_patient_ctx,
+                format_patient_context_block as _format_patient_ctx,
+            )
+            _patient_ctx_data = _build_patient_ctx(_patient_id)
+            _patient_ctx_block = _format_patient_ctx(_patient_ctx_data)
+            if _patient_ctx_block:
+                logger.info("[PCES][QueryContext] %s", _patient_ctx_block)
+                patient_problem = (
+                    f"{patient_problem}\n\n{_patient_ctx_block}"
+                    if patient_problem
+                    else _patient_ctx_block
+                )
+        except Exception as _patient_ctx_exc:
+            logger.warning("[PCES][QueryContext] build failed for patient=%s (%s)", _patient_id, _patient_ctx_exc)
+
     scope_guard = _get_scope_guard()
     guard_disclaimer = ""
     if scope_guard is not None:
