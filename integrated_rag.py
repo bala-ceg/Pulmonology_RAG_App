@@ -514,6 +514,17 @@ class IntegratedMedicalRAG:
                             for name in planned_tools
                             if name in parallel_results
                         ]
+                        # Debug: print the exact "prompt </s> candidate" context
+                        # window fed into the reward model for EACH tool, so a
+                        # flat/uniform score (e.g. every tool = 0.500) can be
+                        # diagnosed from the logs alone — a degenerate/untrained
+                        # reward model (zero coefficients) returns 0.5 for any
+                        # input, which looks identical to "nothing was scored".
+                        for c in candidates:
+                            logger.info(
+                                "[PCES][RerankContext] source=%s prompt=%r candidate_len=%d candidate=%r",
+                                c["source"], question, len(c["text"]), c["text"],
+                            )
                         ranked = _rerank_candidates(question, candidates)
                         if ranked and ranked[0].get("_score") is not None:
                             merge_order = [r["source"] for r in ranked]
@@ -524,6 +535,16 @@ class IntegratedMedicalRAG:
                                 "Tool-merge reranked: %s",
                                 ", ".join(f"{n}={rerank_scores[n]:.3f}" for n in merge_order),
                             )
+                            if len(set(rerank_scores.values())) <= 1:
+                                logger.warning(
+                                    "Tool-merge reranking produced identical scores for all "
+                                    "tools (%.3f) — the loaded reward_model.joblib likely has "
+                                    "zero/degenerate coefficients (undertrained or trained on "
+                                    "a single-class dataset). Re-run train_reward_sbert.py with "
+                                    "more balanced rlhf_interactions ratings to fix this; until "
+                                    "then the merge falls back to planner order in effect.",
+                                    next(iter(rerank_scores.values())),
+                                )
                     except Exception as _rerank_exc:
                         logger.warning("Tool-merge reranking failed — using planned order (%s)", _rerank_exc)
 
