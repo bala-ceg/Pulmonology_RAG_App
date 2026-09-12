@@ -183,7 +183,10 @@ class IntegratedMedicalRAG:
         @tool
         def internal_vectordb_with_context(query: str) -> str:
             """Search uploaded PDFs and URLs in the internal knowledge base for user-specific content."""
-            return Internal_VectorDB(query, None, self.rag_manager)
+            # Internal_VectorDB is itself @tool-decorated (a StructuredTool),
+            # so it must be unwrapped via `.func(...)` rather than called
+            # directly, which raises "'StructuredTool' object is not callable".
+            return Internal_VectorDB.func(query, None, self.rag_manager)
         
         # Set tool metadata to match original
         internal_vectordb_with_context.name = Internal_VectorDB.name
@@ -331,7 +334,13 @@ class IntegratedMedicalRAG:
             return ""
         try:
             if tool_name == 'Internal_VectorDB':
-                result = Internal_VectorDB(question, session_id, self.rag_manager)
+                # Internal_VectorDB is decorated with @tool, making it a
+                # LangChain StructuredTool object rather than a plain
+                # function — calling it directly raises "'StructuredTool'
+                # object is not callable". Unwrap via `.func(...)` like every
+                # other tool below, passing the extra session_id/rag_manager
+                # args this particular tool needs.
+                result = Internal_VectorDB.func(question, session_id, self.rag_manager)
             else:
                 result = tool_fn.func(question)
             # Sanitize secrets BEFORE any further processing or LLM calls
