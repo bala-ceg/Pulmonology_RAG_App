@@ -30,6 +30,17 @@ from utils.error_handlers import get_logger
 
 logger = get_logger(__name__)
 
+# Reranker is optional — the reward model may not be trained yet
+# (reward_model.joblib missing) or sentence-transformers may not be
+# installed. In either case we degrade gracefully to the existing
+# planned-tool-order merge behaviour.
+try:
+    from rlhf_reranker import rerank_candidates as _rerank_candidates, is_model_ready as _reranker_ready
+except Exception as _rlhf_reranker_import_exc:  # pragma: no cover - defensive
+    _rerank_candidates = None
+    _reranker_ready = lambda: False  # noqa: E731
+    logger.warning("rlhf_reranker unavailable — tool-merge reranking disabled (%s)", _rlhf_reranker_import_exc)
+
 
 # ---------------------------------------------------------------------------
 # Citation extraction helper
@@ -476,6 +487,7 @@ class IntegratedMedicalRAG:
         try:
             tools_used: List[str] = []
             raw_content: str = ""
+            rerank_scores: Dict[str, float] = {}
 
             # ── Phase 0: LLM tool planner ────────────────────────────────────
             planned_tools = self._plan_tools(question, adhoc_rag_ready=adhoc_rag_ready)
@@ -487,9 +499,37 @@ class IntegratedMedicalRAG:
             )
 
             if parallel_results:
-                # Merge results in planned order so Pinecone always leads
+                # ── Phase 1.5: rerank tool results after merge ───────────────
+                # Order defaults to the planner's order (Pinecone leads), but
+                # when the trained reward model is available we re-score each
+                # tool's raw text against the question and reorder so the
+                # highest-quality source leads instead — this also decides
+                # `primary_tool`/citation ordering downstream since those are
+                # derived from `tools_used[0]` / merge order.
+                merge_order = list(planned_tools)
+                if _rerank_candidates is not None and _reranker_ready():
+                    try:
+                        candidates = [
+                            {"text": parallel_results[name], "source": name}
+                            for name in planned_tools
+                            if name in parallel_results
+                        ]
+                        ranked = _rerank_candidates(question, candidates)
+                        if ranked and ranked[0].get("_score") is not None:
+                            merge_order = [r["source"] for r in ranked]
+                            rerank_scores = {
+                                r["source"]: r["_score"] for r in ranked
+                            }
+                            logger.info(
+                                "Tool-merge reranked: %s",
+                                ", ".join(f"{n}={rerank_scores[n]:.3f}" for n in merge_order),
+                            )
+                    except Exception as _rerank_exc:
+                        logger.warning("Tool-merge reranking failed — using planned order (%s)", _rerank_exc)
+
+                # Merge results in (possibly reranked) order
                 parts = []
-                for name in planned_tools:
+                for name in merge_order:
                     if name in parallel_results:
                         label = _TOOL_SOURCE_LABELS.get(name, name)
                         parts.append(f"[{label}]\n{parallel_results[name]}")
@@ -588,6 +628,7 @@ class IntegratedMedicalRAG:
                     'reasoning': f'LLM planned: {", ".join(planned_tools)} → executed: {", ".join(tools_used)}',
                     'planned_tools': planned_tools,
                     'ranked_tools': self._ALL_SELECTABLE_TOOLS,
+                    'rerank_scores': rerank_scores,
                 },
                 'explanation': f"Answer sourced from: {', '.join(tools_used)}",
                 'tools_used': tools_used,

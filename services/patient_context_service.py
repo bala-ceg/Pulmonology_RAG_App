@@ -7,7 +7,8 @@ known medications, allergies) that is:
   2. Appended to the context passed into the LLM/RAG pipeline.
 
 Data sources (all read-only, `pces_ehr_ccm` via ``Config.PG_TOOL_*``):
-  - p_party      → date_of_birth, gender  (age is computed, sex = gender)
+  - p_party      → date_of_birth, gender, ethnicity (age is computed, sex =
+                   gender, ethnicity is read directly from the column)
   - p_diagnosis  → non-ICD10-coded rows are free-text medication entries in
                    this dataset (there is no dedicated p_medication table —
                    same deterministic classification used by
@@ -16,8 +17,8 @@ Data sources (all read-only, `pces_ehr_ccm` via ``Config.PG_TOOL_*``):
                    needed here)
   - p_allergy    → allergen list
 
-Ethnicity is not present anywhere in the current schema, so it is always
-reported as "Unknown" rather than guessed or fabricated.
+If ethnicity is NULL/blank for a given patient row, "Unknown" is reported
+rather than guessed or fabricated.
 
 If the patient has no medication rows on record (or the DB is unreachable),
 a fixed fallback list is used so the context is never empty. This fallback
@@ -94,6 +95,7 @@ def build_patient_context(patient_id: str | None) -> dict[str, Any]:
 
     age: int | None = None
     sex: str = "Unknown"
+    ethnicity: str = "Unknown"
     medications: list[str] = []
     allergies: list[str] = []
     db_available = True
@@ -102,15 +104,16 @@ def build_patient_context(patient_id: str | None) -> dict[str, Any]:
         with _ehr_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT date_of_birth, gender FROM p_party "
+                    "SELECT date_of_birth, gender, ethnicity FROM p_party "
                     "WHERE party_id = %s AND party_type = 'PATIENT' LIMIT 1",
                     (patient_id,),
                 )
                 row = cur.fetchone()
                 if row:
-                    dob, gender = row
+                    dob, gender, party_ethnicity = row
                     age = _compute_age(dob)
                     sex = (gender or "Unknown").strip() or "Unknown"
+                    ethnicity = (party_ethnicity or "Unknown").strip() or "Unknown"
 
                 # Medications: free-text (non-ICD10-code) rows from p_diagnosis,
                 # grouped per encounter date (most recent first), deduplicated
@@ -165,9 +168,9 @@ def build_patient_context(patient_id: str | None) -> dict[str, Any]:
         "patient_id": patient_id,
         "age": age,
         "sex": sex,
-        # No ethnicity/race column exists anywhere in the current schema —
-        # always reported as "Unknown" rather than guessed or fabricated.
-        "ethnicity": "Unknown",
+        # Read from p_party.ethnicity; falls back to "Unknown" if NULL/blank
+        # or if the DB was unreachable (see except block above).
+        "ethnicity": ethnicity,
         "medications": medications,
         "used_fallback_medications": used_fallback_medications,
         "allergies": allergies,
