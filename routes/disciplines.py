@@ -1264,11 +1264,15 @@ def get_doctor_schedule(doctor_id: str):
 @disciplines_bp.route("/api/schedules", methods=["POST"])
 @handle_route_errors
 def create_schedule():
-    """Create one scheduled appointment in ehr_ccm_schema.p_schedule.
+    """Create one appointment in p_schedule and its planned encounter in p_encounter.
 
     Expected JSON:
       patient_id, provider_id, hospital_id, appointment_date,
-      appointment_time, optional status, optional created_by.
+      appointment_time, visit_type, optional notes, optional status,
+      optional created_by.
+
+    The p_schedule and p_encounter inserts run in the same database
+    transaction so they either both succeed or both roll back.
     """
     data = request.get_json(silent=True) or {}
 
@@ -1277,6 +1281,8 @@ def create_schedule():
     hospital_id = (data.get("hospital_id") or "").strip()
     appointment_date = (data.get("appointment_date") or "").strip()
     appointment_time = (data.get("appointment_time") or "").strip()
+    visit_type = (data.get("visit_type") or "").strip()
+    notes = (data.get("notes") or "").strip()
     created_by = (data.get("created_by") or "PCES_UI").strip() or "PCES_UI"
 
     # Scheduling is currently creating only active SCHEDULED rows.
@@ -1288,6 +1294,7 @@ def create_schedule():
         "hospital_id": hospital_id,
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
+        "visit_type": visit_type,
     }
 
     missing = [name for name, value in required.items() if not value]
@@ -1321,6 +1328,7 @@ def create_schedule():
         }), 400
 
     new_schedule_id = uuid.uuid4()
+    new_encounter_id = uuid.uuid4()
 
     try:
         with _ehr_conn() as conn:
@@ -1411,16 +1419,54 @@ def create_schedule():
 
                 inserted = cursor.fetchone()
 
+                # Create the corresponding planned encounter using the same
+                # patient / provider / hospital and appointment date.
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_encounter (
+                        encounter_id,
+                        patient_id,
+                        provider_id,
+                        hospital_id,
+                        encounter_type,
+                        notes,
+                        encounter_date,
+                        created_by
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING encounter_id
+                    """,
+                    (
+                        new_encounter_id,
+                        patient_uuid,
+                        provider_uuid,
+                        hospital_uuid,
+                        visit_type[:100],
+                        notes[:500] or None,
+                        parsed_date,
+                        created_by[:100],
+                    ),
+                )
+
+                encounter_inserted = cursor.fetchone()
+
         return jsonify({
             "success": True,
             "schedule_id": str(inserted[0] if inserted else new_schedule_id),
-            "message": "Appointment scheduled successfully.",
+            "encounter_id": str(
+                encounter_inserted[0]
+                if encounter_inserted
+                else new_encounter_id
+            ),
+            "message": "Appointment and encounter created successfully.",
         }), 201
 
     except Exception as exc:
-        logger.exception("Unable to create schedule: %s", exc)
+        logger.exception("Unable to create schedule / encounter: %s", exc)
         return jsonify({
-            "error": "Unable to create appointment schedule"
+            "error": "Unable to create appointment schedule and encounter"
         }), 500
 
 
