@@ -1194,8 +1194,8 @@ def get_doctor_schedule(doctor_id: str):
                         PP.date_of_birth,
                         PP.gender,
                         PS.appointment_time
-                    FROM p_schedule PS
-                    JOIN p_party PP
+                    FROM ehr_ccm_schema.p_schedule PS
+                    JOIN ehr_ccm_schema.p_party PP
                         ON PS.patient_id = PP.party_id
                     WHERE PS.provider_id = %s
                       AND PS.appointment_date = CURRENT_DATE
@@ -1256,6 +1256,74 @@ def get_doctor_schedule(doctor_id: str):
         return jsonify({
             "error": str(exc)
         }), 500
+
+
+# ============================================================
+# My Schedule - Bottom Applet (Patient Diagnosis History)
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/diagnosis-history",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_my_schedule_patient_diagnosis_history(patient_id: str):
+    """
+    Return the latest four diagnosis-linked encounters for a selected patient.
+
+    Start from p_diagnosis as required, join to p_encounter through encounter_id,
+    then use p_encounter for patient_id, encounter_date, and notes. DISTINCT
+    prevents duplicate encounter rows when one encounter has multiple diagnoses.
+    """
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        return jsonify({"error": "Invalid patient_id"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        PE.encounter_id,
+                        PE.encounter_date AS appointment_date,
+                        PE.notes
+                    FROM ehr_ccm_schema.p_diagnosis PD
+                    JOIN ehr_ccm_schema.p_encounter PE
+                        ON PD.encounter_id = PE.encounter_id
+                    WHERE PE.patient_id = %s
+                    ORDER BY PE.encounter_date DESC
+                    LIMIT 4
+                    """,
+                    (patient_uuid,)
+                )
+
+                rows = cursor.fetchall()
+
+        history = []
+
+        for encounter_id, appointment_date, notes in rows:
+            history.append({
+                "encounter_id": str(encounter_id),
+                "appointment_date": (
+                    appointment_date.strftime("%Y-%m-%d")
+                    if appointment_date
+                    else ""
+                ),
+                "notes": notes or ""
+            })
+
+        return jsonify(history)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve diagnosis history for patient %s: %s",
+            patient_id,
+            exc
+        )
+        return jsonify({"error": str(exc)}), 500
+
 
 # ============================================================
 # Patient Scheduling - Create / Insert Appointment
