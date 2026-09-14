@@ -1194,8 +1194,8 @@ def get_doctor_schedule(doctor_id: str):
                         PP.date_of_birth,
                         PP.gender,
                         PS.appointment_time
-                    FROM p_schedule PS
-                    JOIN p_party PP
+                    FROM ehr_ccm_schema.p_schedule PS
+                    JOIN ehr_ccm_schema.p_party PP
                         ON PS.patient_id = PP.party_id
                     WHERE PS.provider_id = %s
                       AND PS.appointment_date = CURRENT_DATE
@@ -1257,6 +1257,74 @@ def get_doctor_schedule(doctor_id: str):
             "error": str(exc)
         }), 500
 
+
+# ============================================================
+# My Schedule - Bottom Applet (Patient Diagnosis History)
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/diagnosis-history",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_my_schedule_patient_diagnosis_history(patient_id: str):
+    """
+    Return the latest four diagnosis-linked encounters for a selected patient.
+
+    Start from p_diagnosis as required, join to p_encounter through encounter_id,
+    then use p_encounter for patient_id, encounter_date, and notes. DISTINCT
+    prevents duplicate encounter rows when one encounter has multiple diagnoses.
+    """
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        return jsonify({"error": "Invalid patient_id"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        PE.encounter_id,
+                        PE.encounter_date AS appointment_date,
+                        PE.notes
+                    FROM ehr_ccm_schema.p_diagnosis PD
+                    JOIN ehr_ccm_schema.p_encounter PE
+                        ON PD.encounter_id = PE.encounter_id
+                    WHERE PE.patient_id = %s
+                    ORDER BY PE.encounter_date DESC
+                    LIMIT 4
+                    """,
+                    (patient_uuid,)
+                )
+
+                rows = cursor.fetchall()
+
+        history = []
+
+        for encounter_id, appointment_date, notes in rows:
+            history.append({
+                "encounter_id": str(encounter_id),
+                "appointment_date": (
+                    appointment_date.strftime("%Y-%m-%d")
+                    if appointment_date
+                    else ""
+                ),
+                "notes": notes or ""
+            })
+
+        return jsonify(history)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve diagnosis history for patient %s: %s",
+            patient_id,
+            exc
+        )
+        return jsonify({"error": str(exc)}), 500
+
+
 # ============================================================
 # Patient Scheduling - Create / Insert Appointment
 # ============================================================
@@ -1264,11 +1332,15 @@ def get_doctor_schedule(doctor_id: str):
 @disciplines_bp.route("/api/schedules", methods=["POST"])
 @handle_route_errors
 def create_schedule():
-    """Create one scheduled appointment in ehr_ccm_schema.p_schedule.
+    """Create one appointment in p_schedule and its planned encounter in p_encounter.
 
     Expected JSON:
       patient_id, provider_id, hospital_id, appointment_date,
-      appointment_time, optional status, optional created_by.
+      appointment_time, visit_type, optional notes, optional status,
+      optional created_by.
+
+    The p_schedule and p_encounter inserts run in the same database
+    transaction so they either both succeed or both roll back.
     """
     data = request.get_json(silent=True) or {}
 
@@ -1277,6 +1349,8 @@ def create_schedule():
     hospital_id = (data.get("hospital_id") or "").strip()
     appointment_date = (data.get("appointment_date") or "").strip()
     appointment_time = (data.get("appointment_time") or "").strip()
+    visit_type = (data.get("visit_type") or "").strip()
+    notes = (data.get("notes") or "").strip()
     created_by = (data.get("created_by") or "PCES_UI").strip() or "PCES_UI"
 
     # Scheduling is currently creating only active SCHEDULED rows.
@@ -1288,6 +1362,7 @@ def create_schedule():
         "hospital_id": hospital_id,
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
+        "visit_type": visit_type,
     }
 
     missing = [name for name, value in required.items() if not value]
@@ -1321,6 +1396,7 @@ def create_schedule():
         }), 400
 
     new_schedule_id = uuid.uuid4()
+    new_encounter_id = uuid.uuid4()
 
     try:
         with _ehr_conn() as conn:
@@ -1411,16 +1487,54 @@ def create_schedule():
 
                 inserted = cursor.fetchone()
 
+                # Create the corresponding planned encounter using the same
+                # patient / provider / hospital and appointment date.
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_encounter (
+                        encounter_id,
+                        patient_id,
+                        provider_id,
+                        hospital_id,
+                        encounter_type,
+                        notes,
+                        encounter_date,
+                        created_by
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING encounter_id
+                    """,
+                    (
+                        new_encounter_id,
+                        patient_uuid,
+                        provider_uuid,
+                        hospital_uuid,
+                        visit_type[:100],
+                        notes[:500] or None,
+                        parsed_date,
+                        created_by[:100],
+                    ),
+                )
+
+                encounter_inserted = cursor.fetchone()
+
         return jsonify({
             "success": True,
             "schedule_id": str(inserted[0] if inserted else new_schedule_id),
-            "message": "Appointment scheduled successfully.",
+            "encounter_id": str(
+                encounter_inserted[0]
+                if encounter_inserted
+                else new_encounter_id
+            ),
+            "message": "Appointment and encounter created successfully.",
         }), 201
 
     except Exception as exc:
-        logger.exception("Unable to create schedule: %s", exc)
+        logger.exception("Unable to create schedule / encounter: %s", exc)
         return jsonify({
-            "error": "Unable to create appointment schedule"
+            "error": "Unable to create appointment schedule and encounter"
         }), 500
 
 
