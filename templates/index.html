@@ -2314,23 +2314,18 @@
             border-top: 1px solid #111;
         }
 
-        /* Rectangular box around the EHR/AI button only — matches the same
-           bordered/rounded look as the numbered section boxes above, but
-           compact since it holds a single button (no label). */
+        /* Rectangular box around the EHR/AI + Chat Services buttons — matches
+           the same bordered/rounded look as the numbered section boxes
+           above, sized to hold both buttons stacked together. */
         .ehr-ai-box {
             border: 1px solid #111;
             border-radius: 13px;
             padding: 8px;
             margin-bottom: 10px;
             background: #fff;
-        }
-
-        /* Divider between the EHR/AI box and the (unboxed) Chat Services
-           button below it. */
-        .sidebar-divider {
-            border: none;
-            border-top: 1px solid #111;
-            margin: 0 0 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .sidebar .yodha-chat-btn {
@@ -4035,10 +4030,9 @@
             <!-- ChatYodha — pinned to the bottom of the sidebar -->
             <div class="sidebar-bottom">
                 <div class="ehr-ai-box">
-                    <button id="ehr-ai-toggle-btn" class="yodha-chat-btn" onclick="toggleEhrAi()">EHR / AI</button>
+                    <button id="ehr-ai-toggle-btn" class="section-btn" onclick="toggleEhrAi()">EHR / AI</button>
+                    <button class="section-btn" onclick="openChatYodha()">Chat Services</button>
                 </div>
-                <hr class="sidebar-divider">
-                <button class="yodha-chat-btn" onclick="openChatYodha()">Chat Services</button>
             </div>
         </div><!-- /.sidebar -->
 
