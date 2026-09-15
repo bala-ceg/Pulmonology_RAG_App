@@ -2297,6 +2297,13 @@
 
         .sidebar-scroll-area {
             overflow: auto;
+            /* Only take up the height its content actually needs, instead of
+               flex-growing to fill 100% of the sidebar (the base rule sets
+               flex: 1) — that previously left a large empty gap between
+               section 6 and the pinned EHR/AI + Chat Services buttons.
+               flex-shrink stays enabled so it still scrolls internally on
+               short viewports where content doesn't fit. */
+            flex: 0 1 auto;
         }
 
         .sidebar-bottom {
@@ -2305,6 +2312,25 @@
             margin-top: 8px;
             padding: 8px 0 0;
             border-top: 1px solid #111;
+        }
+
+        /* Rectangular box around the EHR/AI button only — matches the same
+           bordered/rounded look as the numbered section boxes above, but
+           compact since it holds a single button (no label). */
+        .ehr-ai-box {
+            border: 1px solid #111;
+            border-radius: 13px;
+            padding: 8px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        /* Divider between the EHR/AI box and the (unboxed) Chat Services
+           button below it. */
+        .sidebar-divider {
+            border: none;
+            border-top: 1px solid #111;
+            margin: 0 0 10px;
         }
 
         .sidebar .yodha-chat-btn {
@@ -3786,7 +3812,10 @@
 
             <!-- ChatYodha — pinned to the bottom of the sidebar -->
             <div class="sidebar-bottom">
-                <button id="ehr-ai-toggle-btn" class="yodha-chat-btn" style="margin-bottom: 10px;" onclick="toggleEhrAi()">EHR / AI</button>
+                <div class="ehr-ai-box">
+                    <button id="ehr-ai-toggle-btn" class="yodha-chat-btn" onclick="toggleEhrAi()">EHR / AI</button>
+                </div>
+                <hr class="sidebar-divider">
                 <button class="yodha-chat-btn" onclick="openChatYodha()">Chat Services</button>
             </div>
         </div><!-- /.sidebar -->
