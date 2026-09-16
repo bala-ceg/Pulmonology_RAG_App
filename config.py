@@ -96,6 +96,13 @@ class Config:
     # ------------------------------------------------------------------
     MAX_CONTEXT_CHUNKS: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "10"))
     CONTEXT_RETRIEVAL_TIMEOUT: int = int(os.getenv("CONTEXT_RETRIEVAL_TIMEOUT", "15"))
+    # Hard cap (characters, a token-count proxy) on the total merged tool
+    # context sent to the LLM in integrated_rag.py's multi-tool query path —
+    # Doc 04 "Build Context" Step 8 ("Control Token Size / Never send
+    # unlimited context to LLM"). Tool blocks are appended in reranked/
+    # planned priority order until this budget is reached; the rest are
+    # dropped rather than sent.
+    MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "12000"))
     # Keywords that trigger external API calls in BuildContextService
     EXTERNAL_API_KEYWORDS: list[str] = [
         "rare", "unknown", "latest", "research", "clinical trial",

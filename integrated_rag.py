@@ -557,16 +557,54 @@ class IntegratedMedicalRAG:
                     except Exception as _rerank_exc:
                         logger.warning("Tool-merge reranking failed — using planned order (%s)", _rerank_exc)
 
-                # Merge results in (possibly reranked) order
-                parts = []
-                for name in merge_order:
-                    if name in parallel_results:
+                # Merge results in (possibly reranked) order, capped to
+                # Config.MAX_CONTEXT_CHARS (Doc 04 "Build Context" Step 8 —
+                # Control Token Size). Blocks are appended in priority order
+                # until the running total would exceed the budget; remaining
+                # lower-priority tools are dropped rather than sent to the
+                # LLM. Defensive: any error here falls back to the previous
+                # unbounded behavior so a query never breaks because of it.
+                _SEP = "\n\n---\n\n"
+                try:
+                    _max_chars = Config.MAX_CONTEXT_CHARS
+                    parts = []
+                    dropped_tools = []
+                    running_len = 0
+                    for name in merge_order:
+                        if name not in parallel_results:
+                            continue
                         label = _TOOL_SOURCE_LABELS.get(name, name)
-                        parts.append(f"[{label}]\n{parallel_results[name]}")
+                        block = f"[{label}]\n{parallel_results[name]}"
+                        added_len = len(block) + (len(_SEP) if parts else 0)
+                        if parts and running_len + added_len > _max_chars:
+                            dropped_tools.append(name)
+                            continue
+                        parts.append(block)
                         tools_used.append(name)
-                raw_content = "\n\n---\n\n".join(parts)
-                logger.info("Multi-tool: merged %d/%d planned tools (%d chars)",
-                            len(parallel_results), len(planned_tools), len(raw_content))
+                        running_len += added_len
+                    raw_content = _SEP.join(parts)
+                    if dropped_tools:
+                        logger.info(
+                            "Multi-tool: merged %d/%d planned tools (%d chars, capped at %d) — "
+                            "dropped due to context cap: %s",
+                            len(tools_used), len(planned_tools), len(raw_content),
+                            _max_chars, dropped_tools,
+                        )
+                    else:
+                        logger.info("Multi-tool: merged %d/%d planned tools (%d chars)",
+                                    len(parallel_results), len(planned_tools), len(raw_content))
+                except Exception as _cap_exc:
+                    logger.warning("Context-size cap failed (%s) — falling back to unbounded merge", _cap_exc)
+                    parts = []
+                    tools_used = []
+                    for name in merge_order:
+                        if name in parallel_results:
+                            label = _TOOL_SOURCE_LABELS.get(name, name)
+                            parts.append(f"[{label}]\n{parallel_results[name]}")
+                            tools_used.append(name)
+                    raw_content = _SEP.join(parts)
+                    logger.info("Multi-tool: merged %d/%d planned tools (%d chars)",
+                                len(parallel_results), len(planned_tools), len(raw_content))
 
             # ── Phase 2: fallback when ALL planned tools returned empty ──────
             if not raw_content:
