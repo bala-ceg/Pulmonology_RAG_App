@@ -49,7 +49,7 @@ def demo_enhanced_postgresql_output():
     print("\n🛠️ 3. ENHANCED TOOL ROUTING INFO:")
     print("-" * 40)
     tool_info = """<span style="color: #495057;">Confidence:</span> <span style="color: #000; font-weight: bold;">high</span><br>
-<span style="color: #495057;">Tools Used:</span> PostgreSQL_Diagnosis_Search<br>
+<span style="color: #495057;">Tools Used:</span> SQL_Diagnosis_Search<br>
 <span style="color: #495057;">Reasoning:</span> Query contains database-specific keywords; PostgreSQL selected for diagnosis data retrieval<br>
 <span style="color: #495057;">Results Found:</span> 30 diagnosis records"""
     print(tool_info.replace('<br>', '\n').replace('<span style="color: #495057;">', '').replace('</span>', '').replace('<span style="color: #000; font-weight: bold;">', '').replace('</span>', ''))

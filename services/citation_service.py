@@ -42,7 +42,8 @@ SOURCE_LABELS: dict[str, str] = {
     "Pinecone_KB_Search":          "Organisation Knowledge Base",
     "Internal_VectorDB":           "Doctor's Knowledge Base",
     "AdHocRAG_Search":             "Uploaded Patient Document",
-    "PostgreSQL_Diagnosis_Search": "Patient Medical Record (EHR)",
+    "SQL_Diagnosis_Search": "Patient Medical Record (EHR)",
+    "Abnormal_Vitals_Search":      "Abnormal Vitals (EHR)",
     "ArXiv_Search":                "Clinical Research (arXiv)",
     "Tavily_Search":               "Web Research",
     "Wikipedia_Search":            "Medical Reference (Wikipedia)",
@@ -81,7 +82,7 @@ SOURCE_RELIABILITY: dict[str, int] = {
 _DEFAULT_RELIABILITY = 60
 
 # Maximum number of source documents to include in structured citations
-_MAX_CITATIONS = 5
+_MAX_CITATIONS = 3
 
 
 # ---------------------------------------------------------------------------
