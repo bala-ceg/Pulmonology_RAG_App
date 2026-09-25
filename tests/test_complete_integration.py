@@ -21,13 +21,13 @@ def test_complete_integration():
     
     try:
         from integrated_rag import IntegratedMedicalRAG
-        from tools import PostgreSQL_Diagnosis_Search
+        from tools import SQL_Diagnosis_Search
         
         # Test 1: Direct PostgreSQL tool function
         print("\n1️⃣  TESTING DIRECT POSTGRESQL TOOL")
         print("-" * 40)
         
-        direct_result = PostgreSQL_Diagnosis_Search("What diagnoses are available?")
+        direct_result = SQL_Diagnosis_Search("What diagnoses are available?")
         print(f"✅ Direct tool call successful")
         print(f"   Result length: {len(str(direct_result))} characters")
         print(f"   Contains diagnosis data: {'Diagnosis' in str(direct_result)}")
@@ -42,7 +42,7 @@ def test_complete_integration():
         # List tools to verify PostgreSQL is included
         tool_names = [getattr(tool, 'name', getattr(tool, '__name__', str(type(tool).__name__))) for tool in system.tools]
         print(f"   Available tools: {', '.join(tool_names)}")
-        print(f"   PostgreSQL tool included: {'PostgreSQL_Diagnosis_Search' in tool_names}")
+        print(f"   PostgreSQL tool included: {'SQL_Diagnosis_Search' in tool_names}")
         
         # Test 3: Full query processing
         print("\n3️⃣  TESTING FULL QUERY PROCESSING")
@@ -97,7 +97,7 @@ def test_complete_integration():
         print("-" * 40)
         
         try:
-            fallback_result = system._direct_tool_execution("What diagnoses are available?", "PostgreSQL_Diagnosis_Search")
+            fallback_result = system._direct_tool_execution("What diagnoses are available?", "SQL_Diagnosis_Search")
             print(f"✅ Direct tool execution successful")
             print(f"   Result length: {len(str(fallback_result))} characters")
             print(f"   Contains diagnosis data: {'Diagnosis' in str(fallback_result)}")
