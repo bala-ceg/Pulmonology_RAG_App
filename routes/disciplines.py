@@ -5,7 +5,7 @@ Routes:
   GET  /                          — index (creates new session)
   GET  /api/disciplines           — list available disciplines
   POST /api/validate_disciplines  — validate user's selection
-  GET  /search_doctors            — autocomplete search in pces_users
+  GET  /search_doctors            — autocomplete search in p_party
   GET  /search_patients           — patient autocomplete (CCM/EHR API)
   GET  /api/patient/search        — advanced patient search (CCM/EHR API)
   GET  /api/hospitals/search      — hospital search (CCM/EHR API)
@@ -85,6 +85,48 @@ def _ehr_conn() -> Generator:
     }
     with psycopg.connect(**kwargs) as conn:
         yield conn
+
+
+def _table_columns(cursor, table_name: str) -> set[str]:
+    """Return lowercase column names for a table visible on the current search_path."""
+    cursor.execute(
+        """
+        SELECT LOWER(column_name)
+        FROM information_schema.columns
+        WHERE table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def _first_existing(columns: set[str], candidates: list[str]) -> str | None:
+    """Pick the first candidate column present in a table."""
+    for candidate in candidates:
+        if candidate.lower() in columns:
+            return candidate.lower()
+    return None
+
+
+def _fetch_default_hospital_name() -> str:
+    """Fetch the default organisation name from p_affiliates in pces_ehr_ccm."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT organization_name
+                    FROM p_affiliates
+                    WHERE org_code = 'PCES101'
+                    LIMIT 1
+                    """
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return row[0]
+    except Exception as exc:
+        logger.warning("Default hospital lookup from p_affiliates failed — %s", exc)
+    return "Default PCES"
 
 
 # ---------------------------------------------------------------------------
@@ -539,18 +581,7 @@ def index():
     from config import Config  # noqa: PLC0415
 
     # Pre-fetch hospital name for the login modal (best-effort)
-    default_hospital: str = "Default PCES"
-    try:
-        with _db_conn() as _hconn:
-            with _hconn.cursor() as _hcur:
-                _hcur.execute(
-                    "SELECT organization_name FROM pces_affiliates WHERE org_code = 'PCES101' LIMIT 1"
-                )
-                _hrow = _hcur.fetchone()
-                if _hrow and _hrow[0]:
-                    default_hospital = _hrow[0]
-    except Exception:
-        pass
+    default_hospital = _fetch_default_hospital_name()
 
     return render_template(
         "index.html",
@@ -562,7 +593,7 @@ def index():
 
 @disciplines_bp.route("/api/login", methods=["POST"])
 def login():
-    """Authenticate a PCES user and resolve the matching EHR p_party UUID."""
+    """Authenticate a PCES doctor against p_party in pces_ehr_ccm."""
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -571,105 +602,62 @@ def login():
         return jsonify({"success": False, "message": "Username and password are required"}), 400
 
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
+                columns = _table_columns(cursor, "p_party")
+                login_columns = [
+                    col for col in ("username", "user_name", "email")
+                    if col in columns
+                ]
+                password_col = _first_existing(columns, ["password_hash", "password"])
+                role_col = _first_existing(columns, ["pces_role", "role", "specialty", "department"])
+
+                if not login_columns or not password_col:
+                    logger.error(
+                        "p_party login schema missing required columns: login_columns=%s password_col=%s",
+                        login_columns,
+                        password_col,
+                    )
+                    return jsonify({"success": False, "message": "Login is not configured for the EHR schema"}), 500
+
+                role_expr = role_col if role_col else "NULL"
+                username_expr = "username" if "username" in columns else login_columns[0]
+                predicates = " OR ".join(f"LOWER({col}) = LOWER(%s)" for col in login_columns)
+                params = tuple(username for _ in login_columns)
                 cursor.execute(
-                    "SELECT username, password_hash, pces_role, first_name, last_name, email "
-                    "FROM pces_users WHERE username = %s LIMIT 1",
-                    (username,),
+                    f"""
+                    SELECT
+                        party_id,
+                        {username_expr} AS login_name,
+                        {password_col} AS password_hash,
+                        {role_expr} AS pces_role,
+                        first_name,
+                        last_name,
+                        email
+                    FROM p_party
+                    WHERE party_type = 'DOCTOR'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                      AND ({predicates})
+                    LIMIT 1
+                    """,
+                    params,
                 )
                 row = cursor.fetchone()
 
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        db_username, password_hash, pces_role, first_name, last_name, email = row
+        doctor_party_id, db_username, password_hash, pces_role, first_name, last_name, email = row
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        role_tokens = {
-            token.strip().upper()
-            for token in (pces_role or "").split(",")
-            if token.strip()
-        }
-        party_type = "NURSE" if "NURSE" in role_tokens else "DOCTOR"
-
-        # Resolve the EHR UUID. Nurse emails are not unique in the current
-        # p_party data, so nurse matching uses email + first name + normalized
-        # last name (trailing commas ignored). Doctors keep the previous
-        # email-only fallback to avoid breaking existing accounts.
-        ehr_party_id: str | None = None
-        if email:
-            try:
-                with _ehr_conn() as ehr_conn:
-                    with ehr_conn.cursor() as ehr_cur:
-                        ehr_cur.execute(
-                            """
-                            SELECT party_id
-                            FROM ehr_ccm_schema.p_party
-                            WHERE party_type = %s
-                              AND LOWER(email) = LOWER(%s)
-                              AND LOWER(TRIM(COALESCE(first_name, ''))) =
-                                  LOWER(TRIM(%s))
-                              AND LOWER(RTRIM(TRIM(COALESCE(last_name, '')), ',')) =
-                                  LOWER(RTRIM(TRIM(%s), ','))
-                              AND COALESCE(is_active, TRUE) = TRUE
-                            ORDER BY updated_at DESC NULLS LAST,
-                                     created_at DESC NULLS LAST
-                            LIMIT 1
-                            """,
-                            (
-                                party_type,
-                                email,
-                                first_name or "",
-                                last_name or "",
-                            ),
-                        )
-                        party_row = ehr_cur.fetchone()
-
-                        if party_row:
-                            ehr_party_id = str(party_row[0])
-                        elif party_type == "DOCTOR":
-                            ehr_cur.execute(
-                                """
-                                SELECT party_id
-                                FROM ehr_ccm_schema.p_party
-                                WHERE party_type = 'DOCTOR'
-                                  AND LOWER(email) = LOWER(%s)
-                                  AND COALESCE(is_active, TRUE) = TRUE
-                                ORDER BY updated_at DESC NULLS LAST,
-                                         created_at DESC NULLS LAST
-                                LIMIT 1
-                                """,
-                                (email,),
-                            )
-                            party_row = ehr_cur.fetchone()
-                            if party_row:
-                                ehr_party_id = str(party_row[0])
-            except Exception as exc:
-                logger.warning("Unable to resolve EHR party_id for %s: %s", db_username, exc)
-
-        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
-
-        hospital_name: str = "Default PCES"
-        try:
-            with _db_conn() as _hconn:
-                with _hconn.cursor() as _hcur:
-                    _hcur.execute(
-                        "SELECT organization_name FROM pces_affiliates "
-                        "WHERE org_code = 'PCES101' LIMIT 1"
-                    )
-                    _hrow = _hcur.fetchone()
-                    if _hrow and _hrow[0]:
-                        hospital_name = _hrow[0]
-        except Exception:
-            pass
+        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
+        hospital_name = _fetch_default_hospital_name()
 
         return jsonify({
             "success": True,
             "username": db_username,
-            "party_id": ehr_party_id,
-            "party_type": party_type,
+            "party_id": str(doctor_party_id),
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
@@ -811,20 +799,24 @@ def dept_model_status():
     })
 @handle_route_errors
 def search_doctors():
-    """Search for doctors by first_name and last_name from pces_users table."""
+    """Search for doctors by first_name and last_name from p_party in pces_ehr_ccm."""
     try:
         query = request.args.get("q", "").strip().lower()
         if not query:
             return jsonify([])
 
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
                 SELECT DISTINCT first_name, last_name 
-                FROM pces_users 
-                WHERE LOWER(first_name) LIKE %s 
-                   OR LOWER(last_name) LIKE %s 
-                   OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                FROM p_party
+                WHERE party_type = 'DOCTOR'
+                  AND COALESCE(is_active, TRUE) = TRUE
+                  AND (
+                    LOWER(first_name) LIKE %s 
+                    OR LOWER(last_name) LIKE %s 
+                    OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                  )
                 ORDER BY first_name, last_name
                 LIMIT 10
                 """
@@ -2504,10 +2496,10 @@ def search_patients_advanced():
         # Resolve org_code → display name for user-facing error messages
         source_label = source
         try:
-            with _db_conn() as _sc:
+            with _ehr_conn() as _sc:
                 with _sc.cursor() as _scur:
                     _scur.execute(
-                        "SELECT organization_name FROM pces_affiliates WHERE org_code = %s LIMIT 1",
+                        "SELECT organization_name FROM p_affiliates WHERE org_code = %s LIMIT 1",
                         (source,),
                     )
                     _srow = _scur.fetchone()
@@ -2903,7 +2895,7 @@ def search_hospitals():
 def get_affiliated_sources():
     """Return the list of affiliated organisation sources for the Select Source dropdown.
 
-    Queries pces_affiliates from pces_base. The first entry is always
+    Queries p_affiliates from pces_ehr_ccm. The first entry is always
     Default PCES (local New VM search). All other active entries are
     external sources (routed to CCM/EHR API on Old VM).
 
@@ -2916,12 +2908,12 @@ def get_affiliated_sources():
     """
     sources: list[dict] = []
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT affl_id, organization_name, org_code, city, state
-                    FROM pces_affiliates
+                    FROM p_affiliates
                     WHERE (enddate IS NULL OR enddate >= CURRENT_DATE)
                     ORDER BY affl_id
                     LIMIT 50
@@ -2940,7 +2932,7 @@ def get_affiliated_sources():
             })
 
     except Exception as exc:
-        logger.warning("get_affiliated_sources: pces_affiliates query failed — %s", exc)
+        logger.warning("get_affiliated_sources: p_affiliates query failed — %s", exc)
 
     # Always guarantee at least the default source
     if not any(s["is_default"] for s in sources):
@@ -3375,5 +3367,3 @@ def get_patient_ai_summary(patient_id: str):
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
         return jsonify({"summary": "", "conclusion": "", "error": f"LLM error: {exc}", **structured_sections}), 500
-
-

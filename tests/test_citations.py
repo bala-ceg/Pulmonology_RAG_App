@@ -55,8 +55,8 @@ class TestSourceLabels(unittest.TestCase):
     def test_all_tool_names_have_labels(self):
         tool_names = [
             "Pinecone_KB_Search", "Internal_VectorDB", "AdHocRAG_Search",
-            "PostgreSQL_Diagnosis_Search", "ArXiv_Search", "Tavily_Search",
-            "Wikipedia_Search",
+            "SQL_Diagnosis_Search", "Abnormal_Vitals_Search", "ArXiv_Search",
+            "Tavily_Search", "Wikipedia_Search",
         ]
         for name in tool_names:
             self.assertIn(name, SOURCE_LABELS, f"Missing label for tool: {name}")
