@@ -24,7 +24,7 @@ except ImportError:
 # Import our custom modules
 from config import Config
 from rag_architecture import TwoStoreRAGManager, MedicalQueryRouter
-from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, PostgreSQL_Diagnosis_Search, Patient_History_Search, Pinecone_KB_Search, AdHocRAG_Search, _set_adhoc_context, AVAILABLE_TOOLS
+from tools import Wikipedia_Search, ArXiv_Search, Tavily_Search, Internal_VectorDB, SQL_Diagnosis_Search, Patient_History_Search, Abnormal_Vitals_Search, Pinecone_KB_Search, AdHocRAG_Search, _set_adhoc_context, AVAILABLE_TOOLS
 from prompts import ROUTING_SYSTEM_PROMPT, get_routing_explanation
 from utils.error_handlers import get_logger
 
@@ -52,8 +52,9 @@ _TOOL_SOURCE_LABELS: Dict[str, str] = {
     'Pinecone_KB_Search':          'PCES Pinecone Knowledge Base',
     'Internal_VectorDB':           'Uploaded Documents (Adhoc VectorDB)',
     'AdHocRAG_Search':             'Ad Hoc RAG (Doctor/Patient Documents)',
-    'PostgreSQL_Diagnosis_Search': 'PostgreSQL EHR Database',
+    'SQL_Diagnosis_Search': 'PostgreSQL EHR Database',
     'Patient_History_Search':      'PCES EHR — Patient History (p_encounter + p_diagnosis)',
+    'Abnormal_Vitals_Search':      "PCES EHR — Abnormal Vitals (p_vitals, abnormal_flag = 'Y')",
     'ArXiv_Search':                'arXiv Research Papers',
     'Tavily_Search':               'Web Search (Tavily)',
     'Wikipedia_Search':            'Wikipedia',
@@ -166,7 +167,7 @@ class IntegratedMedicalRAG:
         
         # Create Wikipedia, ArXiv, Tavily, PostgreSQL, Pinecone KB, AdHocRAG, and Patient History tools
         # (these don't need RAG manager injected via closure)
-        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, PostgreSQL_Diagnosis_Search, Patient_History_Search, Pinecone_KB_Search])
+        tools.extend([Wikipedia_Search, ArXiv_Search, Tavily_Search, SQL_Diagnosis_Search, Patient_History_Search, Abnormal_Vitals_Search, Pinecone_KB_Search])
 
         # Inject rag_manager into the AdHocRAG_Search tool via module-level holder
         from config import Config as _Config
@@ -234,8 +235,9 @@ class IntegratedMedicalRAG:
         'Internal_VectorDB',
         'ArXiv_Search',
         'Tavily_Search',
-        'PostgreSQL_Diagnosis_Search',
+        'SQL_Diagnosis_Search',
         'Patient_History_Search',
+        'Abnormal_Vitals_Search',
         'Wikipedia_Search',
     ]
 
@@ -285,6 +287,7 @@ class IntegratedMedicalRAG:
         # PostgreSQL — errors & timeouts treated as empty so cascade continues
         "no diagnosis information found",
         "no medical diagnosis data",
+        "no abnormal vitals found",
         "not found in the database",
         "no data found",
         "error searching diagnosis database",
@@ -349,13 +352,24 @@ class IntegratedMedicalRAG:
             logger.warning("Tool %s raised %s", tool_name, exc)
             return ""
 
-    def _format_answer(self, raw_content: str, question: str, tool_name: str) -> str:
+    @staticmethod
+    def _first_role(pces_role: str = "") -> str:
+        """Return the first comma-separated role from a (possibly multi-role)
+        pces_role string, e.g. 'CARDIOLOGY, GENERAL SURGEON, SME' -> 'CARDIOLOGY'.
+        Mirrors the pattern already used in services/session_service.py."""
+        if not pces_role:
+            return ""
+        return pces_role.split(",")[0].strip()
+
+    def _format_answer(self, raw_content: str, question: str, tool_name: str, pces_role: str = "") -> str:
         """
         Use the LLM to produce a focused Q&A answer from *raw_content*.
         Content may be merged from multiple sources (separated by ---).
         """
+        role = self._first_role(pces_role)
+        identity = f"You are a {role} medical assistant." if role else "You are a medical Q&A assistant."
         prompt = (
-            f"You are a medical Q&A assistant. The content below is retrieved from "
+            f"{identity} The content below is retrieved from "
             f"one or more medical knowledge sources. Read ALL sections carefully and "
             f"synthesize a complete, accurate answer to the question.\n\n"
             f"Instructions:\n"
@@ -363,9 +377,14 @@ class IntegratedMedicalRAG:
             f"- If one section covers the topic better than another, prioritise it but "
             f"do not ignore the others\n"
             f"- Be concise and specific\n"
-            f"- Only say the content does not address the question if NONE of the "
-            f"sections contain relevant information\n\n"
-            f"Question: {question}\n\n"
+            f"- ONLY use information from the Retrieved Content below — this is the sole set "
+            f"of data sources you are permitted to answer from. NEVER invent, assume, or "
+            f"supplement with outside/general knowledge not present in the Retrieved Content\n"
+            f"- If NONE of the sections contain information relevant to the question, "
+            f"- Ignore any username and password encounter in the data sources you are accessing,"
+            f"respond exactly with: \"I don't have data on this from the available sources.\" "
+            f"Do not attempt to answer from memory in that case"
+	    f"Question: {question}\n\n"
             f"Retrieved Content:\n{raw_content}\n\n"
             f"Answer:"
         )
@@ -386,8 +405,9 @@ class IntegratedMedicalRAG:
         'Wikipedia_Search',
         'AdHocRAG_Search',
         'Internal_VectorDB',
-        'PostgreSQL_Diagnosis_Search',
+        'SQL_Diagnosis_Search',
         'Patient_History_Search',
+        'Abnormal_Vitals_Search',
     ]
 
     _FALLBACK_TOOL: str = 'Tavily_Search'
@@ -396,8 +416,9 @@ class IntegratedMedicalRAG:
         'AdHocRAG_Search',
         'Internal_VectorDB',
         'ArXiv_Search',
-        'PostgreSQL_Diagnosis_Search',
+        'SQL_Diagnosis_Search',
         'Patient_History_Search',
+        'Abnormal_Vitals_Search',
         'Wikipedia_Search',
         'Tavily_Search',
     ]
@@ -460,7 +481,8 @@ class IntegratedMedicalRAG:
         'Wikipedia_Search':            'Encyclopedic facts — definitions, anatomy, basic biology, general knowledge',
         'AdHocRAG_Search':             'Doctor/patient session docs — uploaded case notes, patient-specific clinical files',
         'Internal_VectorDB':           'Session-uploaded PDFs/URLs — user uploaded documents in current session',
-        'PostgreSQL_Diagnosis_Search': 'EHR database — patient diagnosis records, ICD codes, clinical history by patient ID',
+        'SQL_Diagnosis_Search': 'EHR database — patient diagnosis records, ICD codes, clinical history by patient ID',
+        'Abnormal_Vitals_Search':      "EHR database — abnormal vital signs from p_vitals only where abnormal_flag = 'Y'",
     }
 
     # Planner LLM call timeout (seconds)
@@ -480,11 +502,24 @@ class IntegratedMedicalRAG:
             tools.remove('AdHocRAG_Search')
             logger.info("_plan_tools: adhoc_rag_ready=False — skipping AdHocRAG_Search")
 
+        q_lower = question.lower()
+        abnormal_vitals_requested = (
+            "p_vitals" in q_lower
+            or "abnormal_flag" in q_lower
+            or ("abnormal" in q_lower and any(term in q_lower for term in ("vital", "vitals", "bp", "blood pressure", "pulse", "temperature", "oxygen", "spo2", "respiratory")))
+        )
+        if not abnormal_vitals_requested and 'Abnormal_Vitals_Search' in tools:
+            tools.remove('Abnormal_Vitals_Search')
+            logger.info("_plan_tools: abnormal vitals not requested — skipping Abnormal_Vitals_Search")
+
         logger.info("_plan_tools: running all tools in parallel: %s", tools)
         return tools
 
+    # Maximum number of (reranked) tool results merged into the final LLM context.
+    _MAX_MERGE_TOOLS: int = 4
+
     def query(self, question: str, session_id: str = None, patient_context: str = None,
-              adhoc_rag_ready: bool = False) -> Dict[str, Any]:
+              adhoc_rag_ready: bool = False, pces_role: str = "") -> Dict[str, Any]:
         """
         LLM-driven multi-tool parallel query.
 
@@ -557,6 +592,22 @@ class IntegratedMedicalRAG:
                     except Exception as _rerank_exc:
                         logger.warning("Tool-merge reranking failed — using planned order (%s)", _rerank_exc)
 
+                # Keep only the top _MAX_MERGE_TOOLS (reranked, or planner-order
+                # if reranking was unavailable/degenerate) results before
+                # merging into the final LLM context — even when many tools
+                # return content (e.g. Pinecone + Patient History + Tavily +
+                # ArXiv + Wikipedia + AdHocRAG + Internal_VectorDB + SQL all at
+                # once), only the top 4 highest-quality sources are used.
+                top4_dropped = [n for n in merge_order if n not in merge_order[: self._MAX_MERGE_TOOLS]]
+                merge_order = merge_order[: self._MAX_MERGE_TOOLS]
+                if top4_dropped:
+                    logger.info(
+                        "Multi-tool: keeping top %d of %d merge-ranked tools — "
+                        "dropped due to top-%d cap: %s",
+                        self._MAX_MERGE_TOOLS, len(top4_dropped) + len(merge_order),
+                        self._MAX_MERGE_TOOLS, top4_dropped,
+                    )
+
                 # Merge results in (possibly reranked) order, capped to
                 # Config.MAX_CONTEXT_CHARS (Doc 04 "Build Context" Step 8 —
                 # Control Token Size). Blocks are appended in priority order
@@ -585,14 +636,14 @@ class IntegratedMedicalRAG:
                     raw_content = _SEP.join(parts)
                     if dropped_tools:
                         logger.info(
-                            "Multi-tool: merged %d/%d planned tools (%d chars, capped at %d) — "
+                            "Multi-tool: merged %d/%d top-ranked tools (%d chars, capped at %d) — "
                             "dropped due to context cap: %s",
-                            len(tools_used), len(planned_tools), len(raw_content),
+                            len(tools_used), len(merge_order), len(raw_content),
                             _max_chars, dropped_tools,
                         )
                     else:
-                        logger.info("Multi-tool: merged %d/%d planned tools (%d chars)",
-                                    len(parallel_results), len(planned_tools), len(raw_content))
+                        logger.info("Multi-tool: merged %d/%d top-ranked tools (%d chars)",
+                                    len(parts), len(merge_order), len(raw_content))
                 except Exception as _cap_exc:
                     logger.warning("Context-size cap failed (%s) — falling back to unbounded merge", _cap_exc)
                     parts = []
@@ -671,7 +722,7 @@ class IntegratedMedicalRAG:
                 raw_content,
                 flags=_re.IGNORECASE | _re.DOTALL,
             ).strip()
-            answer = self._format_answer(content_for_llm, question, ", ".join(tools_used) if tools_used else "unknown")
+            answer = self._format_answer(content_for_llm, question, ", ".join(tools_used) if tools_used else "unknown", pces_role=pces_role)
 
             # The answer must NOT contain the Source Documents block — strip it
             # if the LLM happened to reproduce it.
@@ -750,9 +801,13 @@ class IntegratedMedicalRAG:
                 from enhanced_tools import enhanced_tavily_search, format_enhanced_response
                 result = enhanced_tavily_search(question, patient_context)
                 return format_enhanced_response(result)
-            elif tool_name == 'PostgreSQL_Diagnosis_Search':
+            elif tool_name == 'SQL_Diagnosis_Search':
                 # Use PostgreSQL database search for diagnosis information
-                result = PostgreSQL_Diagnosis_Search(question)
+                result = SQL_Diagnosis_Search(question)
+                return result
+            elif tool_name == 'Abnormal_Vitals_Search':
+                # Use PostgreSQL database search for abnormal p_vitals records only
+                result = Abnormal_Vitals_Search.func(question)
                 return result
             else:
                 return f"Unknown tool: {tool_name}. Falling back to Wikipedia."

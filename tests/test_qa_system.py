@@ -105,15 +105,15 @@ class TestMedicalQueryRouter:
     # --- PostgreSQL routing ---
     def test_diagnoses_available_routes_to_postgres(self):
         result = self.router.route_tools("What diagnoses are available in the database?")
-        assert result["primary_tool"] == "PostgreSQL_Diagnosis_Search"
+        assert result["primary_tool"] == "SQL_Diagnosis_Search"
 
     def test_diagnosis_codes_routes_to_postgres(self):
         result = self.router.route_tools("Show me diagnosis codes from the database")
-        assert result["primary_tool"] == "PostgreSQL_Diagnosis_Search"
+        assert result["primary_tool"] == "SQL_Diagnosis_Search"
 
     def test_medical_database_routes_to_postgres(self):
         result = self.router.route_tools("What is in the medical database?")
-        assert result["primary_tool"] == "PostgreSQL_Diagnosis_Search"
+        assert result["primary_tool"] == "SQL_Diagnosis_Search"
 
     # --- Result structure ---
     def test_result_has_required_keys(self):
@@ -319,8 +319,8 @@ class TestPostgreSQLDiagnosisTool:
         }
         with patch("postgres_tool.enhanced_postgres_search", return_value=mock_result, create=True):
             with patch("enhanced_tools.format_enhanced_response", return_value="Diabetes: ICD E11", create=True):
-                from tools import PostgreSQL_Diagnosis_Search
-                result = PostgreSQL_Diagnosis_Search.invoke("What diagnoses are available?")
+                from tools import SQL_Diagnosis_Search
+                result = SQL_Diagnosis_Search.invoke("What diagnoses are available?")
         assert isinstance(result, str)
 
     def test_db_unavailable_falls_back_gracefully(self):
@@ -329,8 +329,8 @@ class TestPostgreSQLDiagnosisTool:
                    side_effect=Exception("Connection refused"), create=True):
             with patch("tools.Wikipedia_Search") as mock_wiki:
                 mock_wiki.invoke.return_value = "Wikipedia fallback content"
-                from tools import PostgreSQL_Diagnosis_Search
-                result = PostgreSQL_Diagnosis_Search.invoke("Show me diagnosis codes")
+                from tools import SQL_Diagnosis_Search
+                result = SQL_Diagnosis_Search.invoke("Show me diagnosis codes")
         assert isinstance(result, str)
 
 
@@ -614,7 +614,8 @@ class TestIntegratedMedicalRAG:
             assert "ArXiv_Search" in tool_names
             assert "Tavily_Search" in tool_names
             assert "Internal_VectorDB" in tool_names
-            assert "PostgreSQL_Diagnosis_Search" in tool_names
+            assert "SQL_Diagnosis_Search" in tool_names
+            assert "Abnormal_Vitals_Search" in tool_names
 
 
 # ---------------------------------------------------------------------------
@@ -625,7 +626,9 @@ class TestAvailableToolsRegistry:
     def test_all_tools_in_registry(self):
         from tools import AVAILABLE_TOOLS
         expected = {"Wikipedia_Search", "ArXiv_Search", "Tavily_Search",
-                    "Internal_VectorDB", "PostgreSQL_Diagnosis_Search"}
+                    "Internal_VectorDB", "AdHocRAG_Search", "SQL_Diagnosis_Search",
+                    "Patient_History_Search", "Abnormal_Vitals_Search",
+                    "Pinecone_KB_Search"}
         assert expected == set(AVAILABLE_TOOLS.keys())
 
     def test_tools_are_callable(self):

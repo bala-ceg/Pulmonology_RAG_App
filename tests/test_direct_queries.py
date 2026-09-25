@@ -7,7 +7,7 @@ Test the PostgreSQL tool directly without going through the AI agent.
 """
 
 from postgres_tool import PostgreSQLTool, enhanced_postgres_search
-from tools import PostgreSQL_Diagnosis_Search
+from tools import SQL_Diagnosis_Search
 
 def test_direct_postgres_queries():
     """Test PostgreSQL tool with various queries"""
@@ -52,7 +52,7 @@ def test_direct_postgres_queries():
     print(f"   Retrieved {len(result['content'])} chars of diagnosis data")
     
     print("\n4️⃣ Testing LangChain tool interface:")
-    langchain_result = PostgreSQL_Diagnosis_Search.invoke("diagnosis")
+    langchain_result = SQL_Diagnosis_Search.invoke("diagnosis")
     print(f"   LangChain tool returned {len(langchain_result)} chars")
 
 if __name__ == "__main__":

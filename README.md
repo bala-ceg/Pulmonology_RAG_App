@@ -125,7 +125,7 @@ User Query
 | `ArXiv_Search` | Latest research, recent papers, scientific evidence | `arxiv` library |
 | `Tavily_Search` | Real-time / current medical information | Tavily API |
 | `Internal_VectorDB` | User's uploaded documents / specific files | ChromaDB similarity search |
-| `PostgreSQL_Diagnosis_Search` | Structured diagnosis data | `pces_ehr_ccm.p_diagnosis` table |
+| `SQL_Diagnosis_Search` | Structured diagnosis data | `pces_ehr_ccm.p_diagnosis` table |
 
 All tools use a `guarded_retrieve()` wrapper with a similarity threshold of **0.35** and a Wikipedia fallback for low-confidence local results.
 
