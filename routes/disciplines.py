@@ -653,6 +653,83 @@ def login():
 
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
         hospital_name = _fetch_default_hospital_name()
+        role_tokens = {
+            token.strip().upper()
+            for token in (pces_role or "").split(",")
+            if token.strip()
+        }
+        party_type = "NURSE" if "NURSE" in role_tokens else "DOCTOR"
+
+        # Resolve the EHR UUID. Nurse emails are not unique in the current
+        # p_party data, so nurse matching uses email + first name + normalized
+        # last name (trailing commas ignored). Doctors keep the previous
+        # email-only fallback to avoid breaking existing accounts.
+        ehr_party_id: str | None = None
+        if email:
+            try:
+                with _ehr_conn() as ehr_conn:
+                    with ehr_conn.cursor() as ehr_cur:
+                        ehr_cur.execute(
+                            """
+                            SELECT party_id
+                            FROM ehr_ccm_schema.p_party
+                            WHERE party_type = %s
+                              AND LOWER(email) = LOWER(%s)
+                              AND LOWER(TRIM(COALESCE(first_name, ''))) =
+                                  LOWER(TRIM(%s))
+                              AND LOWER(RTRIM(TRIM(COALESCE(last_name, '')), ',')) =
+                                  LOWER(RTRIM(TRIM(%s), ','))
+                              AND COALESCE(is_active, TRUE) = TRUE
+                            ORDER BY updated_at DESC NULLS LAST,
+                                     created_at DESC NULLS LAST
+                            LIMIT 1
+                            """,
+                            (
+                                party_type,
+                                email,
+                                first_name or "",
+                                last_name or "",
+                            ),
+                        )
+                        party_row = ehr_cur.fetchone()
+
+                        if party_row:
+                            ehr_party_id = str(party_row[0])
+                        elif party_type == "DOCTOR":
+                            ehr_cur.execute(
+                                """
+                                SELECT party_id
+                                FROM ehr_ccm_schema.p_party
+                                WHERE party_type = 'DOCTOR'
+                                  AND LOWER(email) = LOWER(%s)
+                                  AND COALESCE(is_active, TRUE) = TRUE
+                                ORDER BY updated_at DESC NULLS LAST,
+                                         created_at DESC NULLS LAST
+                                LIMIT 1
+                                """,
+                                (email,),
+                            )
+                            party_row = ehr_cur.fetchone()
+                            if party_row:
+                                ehr_party_id = str(party_row[0])
+            except Exception as exc:
+                logger.warning("Unable to resolve EHR party_id for %s: %s", db_username, exc)
+
+        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
+
+        hospital_name: str = "Default PCES"
+        try:
+            with _db_conn() as _hconn:
+                with _hconn.cursor() as _hcur:
+                    _hcur.execute(
+                        "SELECT organization_name FROM pces_affiliates "
+                        "WHERE org_code = 'PCES101' LIMIT 1"
+                    )
+                    _hrow = _hcur.fetchone()
+                    if _hrow and _hrow[0]:
+                        hospital_name = _hrow[0]
+        except Exception:
+            pass
 
         return jsonify({
             "success": True,
@@ -661,7 +738,7 @@ def login():
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
-            "department": pces_role or "",   # pces_role IS the specialty (CARDIOLOGIST, etc.)
+            "department": pces_role or "",
             "hospital_name": hospital_name,
         })
     except Exception as exc:
@@ -1208,8 +1285,131 @@ def get_doctor_patients(doctor_id: str):
         }), 500
 
 # ============================================================
-# Doctor's Schedule
+# My Schedule - Doctor / Nurse
 # ============================================================
+
+def _get_today_schedule_for_party(party_id: str, party_type: str):
+    """Return today's schedule filtered by provider_id (doctor) or nurse_id."""
+    try:
+        party_uuid = uuid.UUID(party_id)
+    except ValueError:
+        return None, (jsonify({"error": "Invalid party_id"}), 400)
+
+    party_type = (party_type or "").upper()
+    if party_type == "NURSE":
+        filter_column = "PS.nurse_id"
+    else:
+        filter_column = "PS.provider_id"
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT
+                        PS.schedule_id,
+                        PS.hospital_id,
+                        PS.patient_id,
+                        PS.provider_id,
+                        PS.nurse_id,
+                        PS.appointment_date,
+                        PS.appointment_time,
+                        PS.pre_notes,
+                        PP.first_name,
+                        PP.middle_name,
+                        PP.last_name,
+                        PP.date_of_birth,
+                        PP.gender,
+                        DP.first_name,
+                        DP.middle_name,
+                        DP.last_name,
+                        NP.first_name,
+                        NP.middle_name,
+                        NP.last_name
+                    FROM ehr_ccm_schema.p_schedule PS
+                    JOIN ehr_ccm_schema.p_party PP
+                        ON PS.patient_id = PP.party_id
+                    LEFT JOIN ehr_ccm_schema.p_party DP
+                        ON PS.provider_id = DP.party_id
+                    LEFT JOIN ehr_ccm_schema.p_party NP
+                        ON PS.nurse_id = NP.party_id
+                    WHERE {filter_column} = %s
+                      AND PS.appointment_date = CURRENT_DATE
+                      AND PS.status = 'SCHEDULED'
+                      AND COALESCE(PS.is_active, TRUE) = TRUE
+                    ORDER BY PS.appointment_time
+                    """,
+                    (party_uuid,),
+                )
+                rows = cursor.fetchall()
+
+        schedule = []
+        for row in rows:
+            (
+                schedule_id,
+                hospital_id,
+                patient_id,
+                provider_id,
+                nurse_id,
+                appointment_date,
+                appointment_time,
+                pre_notes,
+                first_name,
+                middle_name,
+                last_name,
+                dob,
+                gender,
+                doctor_first,
+                doctor_middle,
+                doctor_last,
+                nurse_first,
+                nurse_middle,
+                nurse_last,
+            ) = row
+
+            full_name = " ".join(
+                value for value in [first_name, middle_name, last_name] if value
+            )
+            doctor_name = " ".join(
+                value for value in [doctor_first, doctor_middle, doctor_last] if value
+            )
+            nurse_name = " ".join(
+                value for value in [nurse_first, nurse_middle, nurse_last] if value
+            )
+
+            schedule.append({
+                "schedule_id": str(schedule_id),
+                "hospital_id": str(hospital_id) if hospital_id else "",
+                "patient_id": str(patient_id) if patient_id else "",
+                "provider_id": str(provider_id) if provider_id else "",
+                "nurse_id": str(nurse_id) if nurse_id else "",
+                "appointment_date": (
+                    appointment_date.strftime("%Y-%m-%d")
+                    if appointment_date else ""
+                ),
+                "appointment_time": str(appointment_time) if appointment_time else "",
+                "pre_notes": pre_notes or "",
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "gender": gender or "",
+                "doctor_name": doctor_name,
+                "nurse_name": nurse_name,
+            })
+
+        return schedule, None
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to retrieve %s schedule for %s: %s",
+            party_type,
+            party_id,
+            exc,
+        )
+        return None, (jsonify({"error": str(exc)}), 500)
+
 
 @disciplines_bp.route(
     "/api/doctors/<doctor_id>/schedule",
@@ -1217,85 +1417,476 @@ def get_doctor_patients(doctor_id: str):
 )
 @handle_route_errors
 def get_doctor_schedule(doctor_id: str):
+    schedule, error = _get_today_schedule_for_party(doctor_id, "DOCTOR")
+    if error:
+        return error
+    return jsonify(schedule)
+
+
+@disciplines_bp.route(
+    "/api/nurses/<nurse_id>/schedule",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_nurse_schedule(nurse_id: str):
+    schedule, error = _get_today_schedule_for_party(nurse_id, "NURSE")
+    if error:
+        return error
+    return jsonify(schedule)
+
+
+@disciplines_bp.route(
+    "/api/schedules/<schedule_id>/pre-notes",
+    methods=["PUT"]
+)
+@handle_route_errors
+def update_schedule_pre_notes(schedule_id: str):
+    """Update nurse-entered pre-notes for one schedule row."""
+    try:
+        schedule_uuid = uuid.UUID(schedule_id)
+    except ValueError:
+        return jsonify({"error": "Invalid schedule_id"}), 400
+
+    data = request.get_json(silent=True) or {}
+    pre_notes = str(data.get("pre_notes") or "")
+    updated_by = str(data.get("updated_by") or "PCES_UI").strip() or "PCES_UI"
+
+    if len(pre_notes) > 2000:
+        return jsonify({"error": "pre_notes cannot exceed 2000 characters"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE ehr_ccm_schema.p_schedule
+                    SET pre_notes = %s,
+                        updated_at = NOW(),
+                        updated_by = %s,
+                        version_no = COALESCE(version_no, 0) + 1
+                    WHERE schedule_id = %s
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    RETURNING schedule_id, pre_notes
+                    """,
+                    (pre_notes or None, updated_by[:100], schedule_uuid),
+                )
+                row = cursor.fetchone()
+
+        if not row:
+            return jsonify({"error": "Schedule record not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "schedule_id": str(row[0]),
+            "pre_notes": row[1] or "",
+        })
+
+    except Exception as exc:
+        logger.exception("Unable to update pre-notes for %s: %s", schedule_id, exc)
+        return jsonify({"error": "Unable to update pre-notes"}), 500
+
+
+# ============================================================
+# Patient Vitals - Nurse Entry / Doctor History
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/vitals",
+    methods=["POST"]
+)
+@handle_route_errors
+def save_patient_vitals(patient_id: str):
+    """Insert one nurse-entered vital-sign snapshot into p_vitals."""
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        return jsonify({"error": "Invalid patient_id"}), 400
+
+    data = request.get_json(silent=True) or {}
+    provider_id = (data.get("provider_id") or "").strip()
+    nurse_id = (data.get("nurse_id") or "").strip()
+    encounter_id = (data.get("encounter_id") or "").strip()
+    created_by = (data.get("created_by") or "PCES_UI").strip() or "PCES_UI"
+    measurement_raw = (data.get("measurement_datetime") or "").strip()
+    vitals = data.get("vitals") or []
+
+    if not isinstance(vitals, list) or not vitals:
+        return jsonify({"error": "At least one vital value is required"}), 400
+
+    try:
+        provider_uuid = uuid.UUID(provider_id) if provider_id else None
+        nurse_uuid = uuid.UUID(nurse_id) if nurse_id else None
+        encounter_uuid = uuid.UUID(encounter_id) if encounter_id else None
+    except ValueError:
+        return jsonify({"error": "provider_id, nurse_id or encounter_id is not a valid UUID"}), 400
+
+    try:
+        measurement_dt = (
+            datetime.fromisoformat(measurement_raw.replace("Z", "+00:00"))
+            if measurement_raw
+            else datetime.now()
+        )
+        if measurement_dt.tzinfo is not None:
+            measurement_dt = measurement_dt.replace(tzinfo=None)
+    except ValueError:
+        return jsonify({"error": "measurement_datetime must be ISO formatted"}), 400
+
+    # Verify patient and nurse/provider IDs when provided.
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_id = %s
+                      AND party_type = 'PATIENT'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (patient_uuid,),
+                )
+                if cursor.fetchone() is None:
+                    return jsonify({"error": "Patient record not found"}), 404
+
+                if nurse_uuid:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM ehr_ccm_schema.p_party
+                        WHERE party_id = %s
+                          AND party_type = 'NURSE'
+                          AND COALESCE(is_active, TRUE) = TRUE
+                        LIMIT 1
+                        """,
+                        (nurse_uuid,),
+                    )
+                    if cursor.fetchone() is None:
+                        return jsonify({"error": "Nurse record not found"}), 400
+
+                inserted_ids = []
+                for item in vitals:
+                    vital_type = str(item.get("vital_type") or "").strip()
+                    value = str(item.get("value") or "").strip()
+                    uom = str(item.get("uom") or "").strip()
+                    notes = str(item.get("notes") or "").strip()
+
+                    if not vital_type or not value:
+                        continue
+
+                    new_vital_id = uuid.uuid4()
+                    cursor.execute(
+                        """
+                        INSERT INTO ehr_ccm_schema.p_vitals (
+                            vital_id,
+                            patient_id,
+                            encounter_id,
+                            vital_type,
+                            value,
+                            uom,
+                            measurement_datetime,
+                            source,
+                            notes,
+                            created_at,
+                            created_by,
+                            is_active,
+                            version_no
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s,
+                            'NURSE', %s, NOW(), %s, TRUE, 1
+                        )
+                        """,
+                        (
+                            new_vital_id,
+                            patient_uuid,
+                            encounter_uuid,
+                            vital_type[:50],
+                            value[:100],
+                            uom[:100] or None,
+                            measurement_dt,
+                            notes[:1000] or None,
+                            created_by[:100],
+                        ),
+                    )
+                    inserted_ids.append(str(new_vital_id))
+
+        if not inserted_ids:
+            return jsonify({"error": "No non-empty vital values were supplied"}), 400
+
+        return jsonify({
+            "success": True,
+            "patient_id": str(patient_uuid),
+            "provider_id": str(provider_uuid) if provider_uuid else "",
+            "nurse_id": str(nurse_uuid) if nurse_uuid else "",
+            "measurement_datetime": measurement_dt.isoformat(timespec="seconds"),
+            "inserted_count": len(inserted_ids),
+            "vital_ids": inserted_ids,
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Unable to save vitals for patient %s: %s", patient_id, exc)
+        return jsonify({"error": "Unable to save patient vitals"}), 500
+
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/vitals-history",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_patient_vitals_history(patient_id: str):
+    """Return the latest N distinct calendar-day vital snapshots for a patient.
+
+    Each p_vitals row stores one vital_type/value.  For the Doctor My Schedule
+    view, rows are grouped by measurement calendar date so the UI can transpose
+    them into date columns, newest date on the left.
     """
-    Return today's scheduled appointments for the selected doctor.
-    """
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        return jsonify({"error": "Invalid patient_id"}), 400
+
+    try:
+        limit = max(1, min(int(request.args.get("limit", 5)), 10))
+    except ValueError:
+        limit = 5
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH latest_dates AS (
+                        SELECT DISTINCT
+                            measurement_datetime::date AS measurement_date
+                        FROM ehr_ccm_schema.p_vitals
+                        WHERE patient_id = %s
+                          AND COALESCE(is_active, TRUE) = TRUE
+                          AND measurement_datetime IS NOT NULL
+                        ORDER BY measurement_date DESC
+                        LIMIT %s
+                    )
+                    SELECT
+                        PV.vital_id,
+                        PV.vital_type,
+                        PV.value,
+                        PV.uom,
+                        PV.measurement_datetime,
+                        PV.abnormal_flag,
+                        PV.notes
+                    FROM ehr_ccm_schema.p_vitals PV
+                    JOIN latest_dates LD
+                      ON PV.measurement_datetime::date = LD.measurement_date
+                    WHERE PV.patient_id = %s
+                      AND COALESCE(PV.is_active, TRUE) = TRUE
+                      AND PV.measurement_datetime IS NOT NULL
+                    ORDER BY
+                        PV.measurement_datetime::date DESC,
+                        PV.measurement_datetime DESC,
+                        PV.created_at DESC
+                    """,
+                    (patient_uuid, limit, patient_uuid),
+                )
+                rows = cursor.fetchall()
+
+        snapshots = []
+        by_date = {}
+
+        for (
+            vital_id,
+            vital_type,
+            value,
+            uom,
+            measured_at,
+            abnormal_flag,
+            notes,
+        ) in rows:
+            date_key = measured_at.strftime("%Y-%m-%d")
+
+            if date_key not in by_date:
+                snapshot = {
+                    "date": date_key,
+                    "display_date": measured_at.strftime("%m/%d/%Y"),
+                    "measurement_datetime": measured_at.isoformat(timespec="seconds"),
+                    "values": {},
+                }
+                by_date[date_key] = snapshot
+                snapshots.append(snapshot)
+
+            snapshot = by_date[date_key]
+            key = vital_type or "Other"
+
+            # Rows are newest first within each calendar day.  Keep the latest
+            # measurement for each vital type on that date.
+            if key not in snapshot["values"]:
+                snapshot["values"][key] = {
+                    "value": value or "",
+                    "uom": uom or "",
+                    "abnormal_flag": bool(abnormal_flag),
+                    "notes": notes or "",
+                    "vital_id": str(vital_id),
+                    "measurement_datetime": measured_at.isoformat(timespec="seconds"),
+                }
+
+        return jsonify(snapshots)
+
+    except Exception as exc:
+        logger.exception(
+            "Unable to load vitals history for patient %s: %s",
+            patient_id,
+            exc,
+        )
+        return jsonify({"error": "Unable to load patient vitals history"}), 500
+
+
+# ============================================================
+# Patient Encounter - Phase 1 (read-only)
+# ============================================================
+
+@disciplines_bp.route(
+    "/api/patients/<patient_id>/encounter-view",
+    methods=["GET"]
+)
+@handle_route_errors
+def get_patient_encounter_view(patient_id: str):
+    """Return selected patient demographics and the latest 10 encounters."""
+
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        return jsonify({"error": "Invalid patient_id"}), 400
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
 
+                # Top applet: read-only patient demographics.
                 cursor.execute(
                     """
                     SELECT
-                        PS.patient_id,
                         PP.first_name,
                         PP.middle_name,
                         PP.last_name,
-                        PP.date_of_birth,
-                        PP.gender,
-                        PS.appointment_time
-                    FROM ehr_ccm_schema.p_schedule PS
-                    JOIN ehr_ccm_schema.p_party PP
-                        ON PS.patient_id = PP.party_id
-                    WHERE PS.provider_id = %s
-                      AND PS.appointment_date = CURRENT_DATE
-                      AND PS.status = 'SCHEDULED'
-                    ORDER BY PS.appointment_time
+                        PA.line1,
+                        PA.line2,
+                        PA.city,
+                        PA.state,
+                        PP.phone,
+                        PP.email,
+                        PP.date_of_birth
+                    FROM ehr_ccm_schema.p_party PP
+                    LEFT JOIN ehr_ccm_schema.p_address PA
+                        ON PA.party_id = PP.party_id
+                       AND COALESCE(PA.is_active, TRUE) = TRUE
+                    WHERE PP.party_id = %s
+                      AND PP.party_type = 'PATIENT'
+                    LIMIT 1
                     """,
-                    (doctor_id,)
+                    (patient_uuid,)
                 )
 
-                rows = cursor.fetchall()
+                patient_row = cursor.fetchone()
 
-        schedule = []
+                if patient_row is None:
+                    return jsonify({"error": "Patient not found"}), 404
 
-        for row in rows:
-            (
-                patient_id,
-                first_name,
-                middle_name,
-                last_name,
-                dob,
-                gender,
-                appointment_time
-            ) = row
-
-            full_name = " ".join(
-                value
-                for value in [
+                (
                     first_name,
                     middle_name,
-                    last_name
-                ]
-                if value
-            )
+                    last_name,
+                    address1,
+                    address2,
+                    city,
+                    state,
+                    phone,
+                    email,
+                    dob,
+                ) = patient_row
 
-            schedule.append({
-                "patient_id": str(patient_id),
-                "first_name": first_name or "",
-                "middle_name": middle_name or "",
-                "last_name": last_name or "",
-                "full_name": full_name,
-                "dob": str(dob)[:10] if dob else "",
-                "gender": gender or "",
-                "appointment_time":
-                    str(appointment_time)
-                    if appointment_time
+                # Bottom applet: latest 10 encounters for selected patient.
+                # Hospital name comes from the ORGANIZATION party referenced
+                # by p_encounter.hospital_id.
+                cursor.execute(
+                    """
+                    SELECT
+                        PE.encounter_id,
+                        H.name AS hospital_name,
+                        PE.provider_id,
+                        PE.encounter_date,
+                        PE.notes,
+                        PE.created_by,
+                        PE.updated_by
+                    FROM ehr_ccm_schema.p_encounter PE
+                    LEFT JOIN ehr_ccm_schema.p_party H
+                        ON H.party_id = PE.hospital_id
+                       AND H.party_type = 'ORGANIZATION'
+                    WHERE PE.patient_id = %s
+                      AND COALESCE(PE.is_active, TRUE) = TRUE
+                    ORDER BY PE.encounter_date DESC
+                    LIMIT 10
+                    """,
+                    (patient_uuid,)
+                )
+
+                encounter_rows = cursor.fetchall()
+
+        patient = {
+            "patient_id": str(patient_uuid),
+            "first_name": first_name or "",
+            "middle_name": middle_name or "",
+            "last_name": last_name or "",
+            "address1": address1 or "",
+            "address2": address2 or "",
+            "city": city or "",
+            "state": state or "",
+            "phone": phone or "",
+            "email": email or "",
+            "dob": str(dob)[:10] if dob else "",
+        }
+
+        encounters = []
+
+        for (
+            encounter_id,
+            hospital_name,
+            provider_id,
+            encounter_date,
+            notes,
+            created_by,
+            updated_by,
+        ) in encounter_rows:
+
+            encounters.append({
+                "encounter_id": str(encounter_id),
+                "hospital_name": hospital_name or "",
+                "provider_id": str(provider_id) if provider_id else "",
+                "date": (
+                    encounter_date.strftime("%Y-%m-%d")
+                    if encounter_date
                     else ""
+                ),
+                "time": (
+                    encounter_date.strftime("%I:%M %p")
+                    if encounter_date
+                    else ""
+                ),
+                "notes": notes or "",
+                "created_by": created_by or "",
+                "updated_by": updated_by or "",
             })
 
-        return jsonify(schedule)
+        return jsonify({
+            "patient": patient,
+            "encounters": encounters,
+        })
 
     except Exception as exc:
         logger.exception(
-            "Unable to retrieve schedule for doctor %s: %s",
-            doctor_id,
+            "Unable to retrieve Encounter view for patient %s: %s",
+            patient_id,
             exc
         )
-
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 # ============================================================
@@ -2045,10 +2636,36 @@ def search_patients_advanced():
 
         where = " AND ".join(conditions)
         sql_q = f"""
-            SELECT pp.party_id, pp.first_name, pp.middle_name, pp.last_name,
-                   pp.date_of_birth, pa.line1, pa.city, pa.state, pa.postal_code
+            SELECT
+                pp.party_id,
+                pp.first_name,
+                pp.middle_name,
+                pp.last_name,
+                pp.date_of_birth,
+                pp.phone,
+                pp.email,
+                pa.address_id,
+                pa.line1,
+                pa.line2,
+                pa.city,
+                pa.state,
+                pa.postal_code
             FROM p_party pp
-            LEFT JOIN p_address pa ON pa.party_id = pp.party_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    a.address_id,
+                    a.line1,
+                    a.line2,
+                    a.city,
+                    a.state,
+                    a.postal_code
+                FROM p_address a
+                WHERE a.party_id = pp.party_id
+                  AND a.is_active = true
+                ORDER BY a.updated_at DESC NULLS LAST,
+                         a.created_at DESC NULLS LAST
+                LIMIT 1
+            ) pa ON true
             WHERE {where}
             ORDER BY pp.last_name, pp.first_name
             LIMIT 20
@@ -2060,8 +2677,24 @@ def search_patients_advanced():
 
         results = []
         for row in rows:
-            pid, fn, mn, ln, dob_val, line1, city, state, postal = row
+            (
+                pid,
+                fn,
+                mn,
+                ln,
+                dob_val,
+                phone_val,
+                email_val,
+                address_id,
+                line1,
+                line2,
+                city,
+                state,
+                postal,
+            ) = row
+
             name_parts = [p for p in [fn, mn, ln] if p]
+
             results.append({
                 "patient_id":  str(pid) if pid else "",
                 "first_name":  fn or "",
@@ -2069,7 +2702,11 @@ def search_patients_advanced():
                 "last_name":   ln or "",
                 "full_name":   " ".join(name_parts),
                 "dob":         str(dob_val)[:10] if dob_val else "",
+                "phone":       phone_val or "",
+                "email":       email_val or "",
+                "address_id":  str(address_id) if address_id else "",
                 "address1":    line1 or "",
+                "address2":    line2 or "",
                 "city":        city or "",
                 "state":       state or "",
                 "zip":         postal or "",
@@ -2080,6 +2717,155 @@ def search_patients_advanced():
         logger.warning("search_patients_advanced[local]: DB unavailable — %s", exc)
         return jsonify([])
 
+
+
+
+
+@disciplines_bp.route("/api/doctor/search", methods=["GET"])
+@handle_route_errors
+def search_doctors_advanced():
+    """Search active local doctors by name / DOB.
+
+    Query params (at least one required):
+      first, last, middle, dob (YYYY-MM-DD), phone, email
+
+    Returns records in the same shape as /api/doctors/first20 so the
+    existing Doctor and Doctor-Patient source-list renderers can be reused.
+    """
+    first  = (request.args.get("first",  "") or "").strip()
+    last   = (request.args.get("last",   "") or "").strip()
+    middle = (request.args.get("middle", "") or "").strip()
+    dob    = (request.args.get("dob",    "") or "").strip()
+    phone  = (request.args.get("phone",  "") or "").strip()
+    email  = (request.args.get("email",  "") or "").strip()
+
+    if not any([first, last, middle, dob, phone, email]):
+        return jsonify([])
+
+    try:
+        conditions = ["pp.party_type = 'DOCTOR'", "pp.is_active = true"]
+        params: list = []
+
+        if first:
+            conditions.append("LOWER(pp.first_name) LIKE %s")
+            params.append(f"%{first.lower()}%")
+
+        if last:
+            conditions.append("LOWER(pp.last_name) LIKE %s")
+            params.append(f"%{last.lower()}%")
+
+        if middle:
+            conditions.append("LOWER(pp.middle_name) LIKE %s")
+            params.append(f"%{middle.lower()}%")
+
+        if dob:
+            conditions.append("CAST(pp.date_of_birth AS TEXT) LIKE %s")
+            params.append(f"%{dob}%")
+
+        if phone:
+            conditions.append("pp.phone LIKE %s")
+            params.append(f"%{phone}%")
+
+        if email:
+            conditions.append("LOWER(pp.email) LIKE %s")
+            params.append(f"%{email.lower()}%")
+
+        where = " AND ".join(conditions)
+
+        sql_q = f"""
+            SELECT
+                pp.party_id,
+                pp.first_name,
+                pp.middle_name,
+                pp.last_name,
+                pp.date_of_birth,
+                pp.phone,
+                pp.email,
+                pa.address_id,
+                pa.line1,
+                pa.line2,
+                pa.city,
+                pa.state,
+                pa.postal_code
+            FROM p_party pp
+            LEFT JOIN LATERAL (
+                SELECT
+                    a.address_id,
+                    a.line1,
+                    a.line2,
+                    a.city,
+                    a.state,
+                    a.postal_code
+                FROM p_address a
+                WHERE a.party_id = pp.party_id
+                  AND a.is_active = true
+                ORDER BY a.updated_at DESC NULLS LAST,
+                         a.created_at DESC NULLS LAST
+                LIMIT 1
+            ) pa ON true
+            WHERE {where}
+            ORDER BY pp.last_name, pp.first_name
+            LIMIT 20
+        """
+
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(sql_q, params)
+                rows = cursor.fetchall()
+
+        results = []
+
+        for row in rows:
+            (
+                party_id,
+                first_name,
+                middle_name,
+                last_name,
+                dob_value,
+                phone_value,
+                email_value,
+                address_id,
+                address1,
+                address2,
+                city,
+                state,
+                postal_code,
+            ) = row
+
+            full_name = " ".join(
+                value
+                for value in [
+                    first_name,
+                    middle_name,
+                    last_name,
+                ]
+                if value
+            )
+
+            results.append({
+                "doctor_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob_value)[:10] if dob_value else "",
+                "phone": phone_value or "",
+                "email": email_value or "",
+                "address_id": str(address_id) if address_id else "",
+                "address1": address1 or "",
+                "address2": address2 or "",
+                "city": city or "",
+                "state": state or "",
+                "zip": postal_code or "",
+            })
+
+        return jsonify(results)
+
+    except Exception as exc:
+        logger.exception("Unable to search doctors: %s", exc)
+        return jsonify({
+            "error": "Unable to search doctors"
+        }), 500
 
 
 # ============================================================
