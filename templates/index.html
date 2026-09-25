@@ -3642,13 +3642,17 @@
 #patient-scheduling-panel .scheduling-action-column-compact {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 5px;
+    grid-template-rows: repeat(4, 28px);
+    gap: 3px;
     align-content: start;
+    align-self: start;
+    height: auto;
     min-width: 0;
 }
 
 #patient-scheduling-panel .scheduling-action-column-compact .scheduling-action-title {
     height: 28px;
+    min-height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3696,7 +3700,293 @@
     }
 }
 
-</style>
+
+
+/* =====================================================
+   Patient Encounter - Phase 1 read-only screen
+   ===================================================== */
+#doctor-schedule-panel .my-schedule-encounter-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 7px 10px 8px;
+    border-top: 1px solid #d7dde5;
+}
+
+#doctor-schedule-panel #my-schedule-encounter-btn {
+    min-width: 120px;
+    height: 30px;
+    margin: 0;
+}
+
+#patient-encounter-panel {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    overflow-y: auto;
+    background: #fff;
+}
+
+#patient-encounter-panel .patient-encounter-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 30px;
+}
+
+#patient-encounter-panel .patient-encounter-header-row .entity-list-title {
+    margin: 0;
+}
+
+#patient-encounter-panel .patient-encounter-back-btn {
+    position: absolute;
+    right: 0;
+    top: 0;
+    margin: 0;
+    min-width: 130px;
+    height: 28px;
+}
+
+#patient-encounter-panel .patient-encounter-section {
+    border: 1px solid #222;
+    padding: 8px 10px 10px;
+    background: #fff;
+}
+
+#patient-encounter-panel .patient-encounter-section .entity-detail-title,
+#patient-encounter-panel .patient-encounter-section .entity-list-title {
+    text-align: center;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+
+#patient-encounter-panel .patient-encounter-details-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+    gap: 5px 18px;
+    align-items: center;
+}
+
+#patient-encounter-panel .patient-encounter-field {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr);
+    min-width: 0;
+}
+
+#patient-encounter-panel .patient-encounter-field label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 27px;
+    border: 1px solid #555;
+    font-size: 12px;
+    font-weight: 700;
+    background: #f7f7f7;
+}
+
+#patient-encounter-panel .patient-encounter-field input {
+    min-width: 0;
+    height: 27px;
+    border: 1px solid #777;
+    border-left: 0;
+    padding: 3px 6px;
+    background: #fff;
+    color: #222;
+}
+
+#patient-encounter-panel .patient-encounter-spacer {
+    visibility: hidden;
+}
+
+#patient-encounter-panel .patient-encounter-list-section {
+    min-height: 230px;
+}
+
+#patient-encounter-panel .patient-encounter-row {
+    cursor: pointer;
+}
+
+#patient-encounter-panel .patient-encounter-row:hover td {
+    background: #edf4ff;
+}
+
+#patient-encounter-panel .patient-encounter-row.selected td {
+    background: #d9e9fb;
+}
+
+@media (max-width: 1050px) {
+    #patient-encounter-panel .patient-encounter-details-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    #patient-encounter-panel .patient-encounter-spacer {
+        display: none;
+    }
+}
+
+@media (max-width: 700px) {
+    #patient-encounter-panel .patient-encounter-details-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+
+/* =====================================================
+   Patient / Doctor Data - inline shared search
+   ===================================================== */
+#entity-data-panel .patient-list-search {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #b9c3cf;
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+
+#entity-data-panel .patient-list-search-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a3a5c;
+    margin-right: 2px;
+}
+
+#entity-data-panel .patient-list-search input {
+    width: 145px;
+    min-width: 0;
+    height: 30px;
+    padding: 4px 7px;
+    border: 1px solid #9aa8b7;
+    border-radius: 3px;
+    background: #fff;
+    color: #111;
+    font-size: 12px;
+}
+
+#entity-data-panel .patient-list-search input[type="date"] {
+    width: 155px;
+}
+
+#entity-data-panel .patient-list-search button {
+    height: 30px;
+    min-width: 68px;
+    margin: 0;
+    padding: 4px 10px;
+    border: 1px solid #183b64;
+    border-radius: 3px;
+    background: #deeaf5;
+    color: #111;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#entity-data-panel .patient-list-search button:hover {
+    background: #cbdff2;
+}
+
+#entity-data-panel .patient-list-search button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+@media (max-width: 1000px) {
+    #entity-data-panel .patient-list-search {
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+}
+
+
+        /* =====================================================
+           Nurse / Doctor My Schedule + Patient Vitals
+           ===================================================== */
+        #doctor-schedule-panel .my-schedule-pre-notes {
+            width: 100%;
+            min-width: 220px;
+            min-height: 34px;
+            resize: vertical;
+            padding: 5px 7px;
+            border: 1px solid #9aa8b7;
+            border-radius: 3px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            background: #eef9ee;
+        }
+
+        #doctor-schedule-panel .my-schedule-pre-notes[readonly] {
+            background: #f5f5f5;
+        }
+
+        #doctor-schedule-panel .my-schedule-action-btns {
+            display: flex;
+            justify-content: flex-end;
+            gap: 7px;
+            padding: 7px 10px 8px;
+            border-top: 1px solid #d7dde5;
+        }
+
+        #doctor-schedule-panel .my-schedule-action-btns button {
+            margin: 0;
+            min-width: 100px;
+            height: 30px;
+        }
+
+        #my-schedule-vitals-area {
+            border: 1px solid #222;
+            background: #fff;
+        }
+
+        #my-schedule-vitals-area .my-schedule-vitals-meta {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
+            gap: 6px 12px;
+            padding: 8px 10px;
+            border-bottom: 1px solid #d7dde5;
+            background: #f8fafc;
+            font-size: 12px;
+        }
+
+        #my-schedule-vitals-area .my-schedule-vitals-meta strong {
+            color: #1a3a5c;
+        }
+
+        #my-schedule-vitals-area .vital-entry-input {
+            width: 100%;
+            min-width: 110px;
+            height: 28px;
+            padding: 4px 6px;
+            border: 1px solid #7aa874;
+            border-radius: 3px;
+            background: #eaf7e7;
+            font-size: 12px;
+        }
+
+        #my-schedule-vitals-area .vitals-entry-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 7px;
+            padding: 7px 10px;
+            border-top: 1px solid #d7dde5;
+        }
+
+        #my-schedule-vitals-area .vitals-entry-actions button {
+            margin: 0;
+            min-width: 90px;
+        }
+
+        #my-schedule-vitals-area .vital-abnormal {
+            font-weight: 700;
+        }
+
+        @media (max-width: 900px) {
+            #my-schedule-vitals-area .my-schedule-vitals-meta {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+    </style>
 </head>
 <body> 
     <div id="toast" class="toast"></div>
@@ -4141,6 +4431,45 @@
             Records
         </div>
 
+        <!-- Inline search for Patient / Doctor / relationship source lists -->
+        <div id="patient-list-search" class="patient-list-search" style="display:none;">
+            <span class="patient-list-search-label">Search</span>
+
+            <input
+                id="patient-search-first"
+                type="text"
+                placeholder="First Name"
+                autocomplete="off"
+                onkeydown="handlePatientListSearchKeydown(event)">
+
+            <input
+                id="patient-search-last"
+                type="text"
+                placeholder="Last Name"
+                autocomplete="off"
+                onkeydown="handlePatientListSearchKeydown(event)">
+
+            <input
+                id="patient-search-dob"
+                type="date"
+                aria-label="Date of birth"
+                onkeydown="handlePatientListSearchKeydown(event)">
+
+            <button
+                id="patient-search-btn"
+                type="button"
+                onclick="searchPatientList()">
+                Search
+            </button>
+
+            <button
+                id="patient-search-reset-btn"
+                type="button"
+                onclick="resetPatientSearch()">
+                Reset
+            </button>
+        </div>
+
         <div class="entity-table-wrapper">
 
             <table class="entity-table">
@@ -4316,11 +4645,7 @@
 </div>
 
 <!-- =====================================================
-     DOCTOR SCHEDULE SCREEN
-     (moved to be a sibling of entity-data-panel, not nested
-     inside it — previously nesting meant entityPanel's
-     display:none also hid this panel, so "My Schedule -
-     Today" could never actually render)
+     MY SCHEDULE - DOCTOR / NURSE
      ===================================================== -->
 <div
     id="doctor-schedule-panel"
@@ -4329,31 +4654,234 @@
 
     <div class="entity-list-area">
 
-        <div class="entity-list-title">
+        <div id="my-schedule-main-title" class="entity-list-title">
             My Schedule - Today
         </div>
 
         <div class="entity-table-wrapper">
-
             <table class="entity-table">
-
                 <thead>
                     <tr>
                         <th>S No</th>
                         <th>Patient Name</th>
                         <th>Date of Birth</th>
                         <th>Gender</th>
+                        <th>Pre-Notes</th>
                         <th>Appointment Time</th>
                     </tr>
                 </thead>
-
-                <tbody id="doctor-schedule-body">
-                </tbody>
-
+                <tbody id="doctor-schedule-body"></tbody>
             </table>
-
         </div>
 
+        <div class="my-schedule-action-btns">
+            <button
+                id="my-schedule-save-notes-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="saveSelectedSchedulePreNotes()"
+                style="display:none;">
+                Save Notes
+            </button>
+
+            <button
+                id="my-schedule-cancel-notes-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="cancelSelectedSchedulePreNotes()"
+                style="display:none;">
+                Cancel
+            </button>
+
+            <button
+                id="my-schedule-encounter-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="openSelectedPatientEncounter()">
+                Encounter
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Role-based middle applet -->
+    <div id="my-schedule-vitals-area" class="my-schedule-history-area">
+        <div id="my-schedule-vitals-title" class="entity-list-title">
+            Patient Vitals
+        </div>
+
+        <div id="my-schedule-vitals-meta" class="my-schedule-vitals-meta">
+            <div><strong>Patient:</strong> <span id="vitals-meta-patient">—</span></div>
+            <div><strong>Doctor:</strong> <span id="vitals-meta-doctor">—</span></div>
+            <div><strong>Nurse:</strong> <span id="vitals-meta-nurse">—</span></div>
+            <div><strong>Date:</strong> <span id="vitals-meta-date">—</span></div>
+        </div>
+
+        <div class="entity-table-wrapper">
+            <table class="entity-table">
+                <thead id="my-schedule-vitals-head">
+                    <tr>
+                        <th>Vital Type</th>
+                        <th>UoM</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody id="my-schedule-vitals-body">
+                    <tr>
+                        <td colspan="3" style="text-align:center;padding:16px;">
+                            Select a patient above to view patient vitals.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="my-schedule-vitals-actions" class="vitals-entry-actions" style="display:none;">
+            <button type="button" class="scheduling-select-btn" onclick="saveNurseVitals()">
+                Save Vitals
+            </button>
+            <button type="button" class="scheduling-select-btn" onclick="resetNurseVitalsEditor()">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <!-- Existing Medical History applet remains unchanged -->
+    <div class="my-schedule-history-area">
+        <div
+            id="my-schedule-history-title"
+            class="entity-list-title">
+            Medical History
+        </div>
+
+        <div class="entity-table-wrapper">
+            <table class="entity-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Date</th>
+                        <th>Medical History</th>
+                    </tr>
+                </thead>
+                <tbody id="my-schedule-history-body">
+                    <tr>
+                        <td colspan="3" style="text-align:center;padding:16px;">
+                            Select a patient above to view medical history.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- =====================================================
+     PATIENT ENCOUNTER SCREEN - PHASE 1 (READ ONLY)
+     ===================================================== -->
+<div
+    id="patient-encounter-panel"
+    class="entity-data-panel"
+    style="display:none;">
+
+    <div class="patient-encounter-header-row">
+        <div class="entity-list-title">Patient - Encounter</div>
+
+        <button
+            type="button"
+            class="patient-encounter-back-btn"
+            onclick="backToMyScheduleFromEncounter()">
+            Back to My Schedule
+        </button>
+    </div>
+
+    <!-- TOP: Patient Detail Applet -->
+    <div class="patient-encounter-section">
+        <div class="entity-detail-title">Patient Details</div>
+
+        <div class="patient-encounter-details-grid">
+            <div class="patient-encounter-field">
+                <label>First Name</label>
+                <input id="encounter-patient-first-name" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Address 1</label>
+                <input id="encounter-patient-address1" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Phone</label>
+                <input id="encounter-patient-phone" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Middle</label>
+                <input id="encounter-patient-middle-name" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Address 2</label>
+                <input id="encounter-patient-address2" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Email</label>
+                <input id="encounter-patient-email" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>Last Name</label>
+                <input id="encounter-patient-last-name" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>City</label>
+                <input id="encounter-patient-city" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field">
+                <label>DOB</label>
+                <input id="encounter-patient-dob" type="text" readonly>
+            </div>
+
+            <div class="patient-encounter-field patient-encounter-spacer"></div>
+
+            <div class="patient-encounter-field">
+                <label>State</label>
+                <input id="encounter-patient-state" type="text" readonly>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM: Patient Encounter Applet -->
+    <div class="patient-encounter-section patient-encounter-list-section">
+        <div class="entity-list-title">Patient Encounter</div>
+
+        <div class="entity-table-wrapper">
+            <table class="entity-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Hospital Name</th>
+                        <th>Provider ID</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Notes</th>
+                        <th>Created By</th>
+                        <th>Updated By</th>
+                    </tr>
+                </thead>
+
+                <tbody id="patient-encounter-body">
+                    <tr>
+                        <td colspan="8" style="text-align:center;padding:18px;">
+                            Select a patient from My Schedule and click Encounter.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </div>
@@ -5083,6 +5611,8 @@ let selectedSchedulingHospitalName = '';
 
 async function loadRelationshipMode(mode) {
 
+    hidePatientEncounterPanel();
+
     const schedulePanel =
     document.getElementById(
         'doctor-schedule-panel'
@@ -5184,6 +5714,20 @@ async function loadEntityDatasetForRelationship(type) {
         chatAiRow.style.display = 'none';
     }
 
+    // Restore the shared lower clinical UI when returning from My Schedule
+    // or Encounter to Patient / Doctor / relationship applets.
+    const legacyMedicalHistory =
+        document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) {
+        legacyMedicalHistory.style.display = '';
+    }
+
+    const problemRow =
+        document.querySelector('.problem-row');
+    if (problemRow) {
+        problemRow.style.display = '';
+    }
+
     panel.style.display = 'flex';
 
     if (type === 'patient') {
@@ -5195,6 +5739,13 @@ async function loadEntityDatasetForRelationship(type) {
 
         title.textContent = 'List of Doctors';
         nameHeader.textContent = 'Doctor Name';
+    }
+
+    const entitySearchBar =
+        document.getElementById('patient-list-search');
+
+    if (entitySearchBar) {
+        entitySearchBar.style.display = 'flex';
     }
 
     tbody.innerHTML = `
@@ -5368,6 +5919,21 @@ function renderRelationshipSourceRecords(records) {
 
         tbody.appendChild(row);
     });
+
+    // Automatically select the first source record for
+    // Patient -> Doctor and Doctor -> Patient relationship applets.
+    if (records.length > 0) {
+        const firstRow = tbody.querySelector('tr');
+
+        if (firstRow) {
+            firstRow.classList.add('selected');
+        }
+
+        currentEntityRecord = records[0];
+
+        // Load the related doctors/patients for the first selected row.
+        loadRelationshipResults(records[0]);
+    }
 }
 async function loadRelationshipResults(record) {
 
@@ -5623,6 +6189,8 @@ function renderRelationshipResults(records) {
     }
 }
 async function loadEntityDataset(type) {
+
+    hidePatientEncounterPanel();
     const schedulePanel =
         document.getElementById(
             'doctor-schedule-panel'
@@ -5694,6 +6262,20 @@ if (relationshipArea) {
         chatAiRow.style.display = 'none';
     }
 
+    // Restore the shared lower clinical UI when returning from My Schedule
+    // or Encounter to Patient / Doctor / relationship applets.
+    const legacyMedicalHistory =
+        document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) {
+        legacyMedicalHistory.style.display = '';
+    }
+
+    const problemRow =
+        document.querySelector('.problem-row');
+    if (problemRow) {
+        problemRow.style.display = '';
+    }
+
 
     // Show Patient / Doctor panel
     panel.style.display = 'flex';
@@ -5711,6 +6293,13 @@ if (relationshipArea) {
 
         title.textContent = 'List of Doctors';
         nameHeader.textContent = 'Doctor Name';
+    }
+
+    const entitySearchBar =
+        document.getElementById('patient-list-search');
+
+    if (entitySearchBar) {
+        entitySearchBar.style.display = 'flex';
     }
 
 
@@ -5800,6 +6389,184 @@ if (relationshipArea) {
                 </td>
             </tr>
         `;
+    }
+}
+
+
+
+async function searchPatientList() {
+    // Shared search for:
+    // Patient, Doctor, Patient -> Doctor source Patient,
+    // and Doctor -> Patient source Doctor.
+
+    if (currentEntityType !== 'patient' && currentEntityType !== 'doctor') {
+        return;
+    }
+
+    const firstInput =
+        document.getElementById('patient-search-first');
+
+    const lastInput =
+        document.getElementById('patient-search-last');
+
+    const dobInput =
+        document.getElementById('patient-search-dob');
+
+    const searchButton =
+        document.getElementById('patient-search-btn');
+
+    const tbody =
+        document.getElementById('entity-list-body');
+
+    if (!firstInput || !lastInput || !dobInput || !tbody) {
+        console.error('[EntitySearch] Required search elements not found.');
+        return;
+    }
+
+    const first = firstInput.value.trim();
+    const last = lastInput.value.trim();
+    const dob = dobInput.value.trim();
+
+    if (!first && !last && !dob) {
+        alert('Enter First Name, Last Name, or DOB.');
+        firstInput.focus();
+        return;
+    }
+
+    const params = new URLSearchParams();
+
+    if (first) params.set('first', first);
+    if (last) params.set('last', last);
+    if (dob) params.set('dob', dob);
+
+    let url;
+
+    if (currentEntityType === 'patient') {
+        params.set('source', 'PCES_BASE');
+        url = `/api/patient/search?${params.toString()}`;
+    } else {
+        url = `/api/doctor/search?${params.toString()}`;
+    }
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="11"
+                style="text-align:center;padding:20px;">
+                Searching ${currentEntityType === 'patient' ? 'patients' : 'doctors'}...
+            </td>
+        </tr>
+    `;
+
+    // Normal Patient/Doctor screens use the details panel.
+    // Relationship screens use the bottom relationship-results panel.
+    if (!currentRelationshipMode) {
+        clearEntityDetails();
+    }
+
+    if (searchButton) {
+        searchButton.disabled = true;
+        searchButton.textContent = 'Searching...';
+    }
+
+    try {
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                result.error ||
+                result.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(result)) {
+            throw new Error('Unexpected response from entity search.');
+        }
+
+        console.log(
+            `[EntitySearch] ${currentEntityType} results:`,
+            result
+        );
+
+        if (currentRelationshipMode) {
+            // This renderer auto-selects the first result and
+            // loads the related Doctor/Patient applet.
+            renderRelationshipSourceRecords(result);
+        } else {
+            // This renderer auto-selects the first result and
+            // populates the detail applet.
+            renderEntityRecords(result);
+        }
+
+    } catch (error) {
+        console.error('[EntitySearch] Failed:', error);
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11"
+                    style="
+                        text-align:center;
+                        color:red;
+                        padding:20px;
+                    ">
+                    Unable to search ${currentEntityType === 'patient' ? 'patients' : 'doctors'}:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+
+    } finally {
+        if (searchButton) {
+            searchButton.disabled = false;
+            searchButton.textContent = 'Search';
+        }
+    }
+}
+
+
+function clearEntitySearchInputs() {
+    const firstInput =
+        document.getElementById('patient-search-first');
+
+    const lastInput =
+        document.getElementById('patient-search-last');
+
+    const dobInput =
+        document.getElementById('patient-search-dob');
+
+    if (firstInput) firstInput.value = '';
+    if (lastInput) lastInput.value = '';
+    if (dobInput) dobInput.value = '';
+}
+
+
+async function resetPatientSearch() {
+    clearEntitySearchInputs();
+
+    if (currentRelationshipMode === 'patient-doctor') {
+        await loadRelationshipMode('patient-doctor');
+        return;
+    }
+
+    if (currentRelationshipMode === 'doctor-patient') {
+        await loadRelationshipMode('doctor-patient');
+        return;
+    }
+
+    if (currentEntityType === 'doctor') {
+        await loadEntityDataset('doctor');
+        return;
+    }
+
+    await loadEntityDataset('patient');
+}
+
+
+function handlePatientListSearchKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        searchPatientList();
     }
 }
 
@@ -5949,6 +6716,8 @@ function renderEntityRecords(records) {
 
 async function loadSchedulingPanel() {
 
+    hidePatientEncounterPanel();
+
     const chatMessages =
         document.getElementById('chat-messages');
 
@@ -5977,6 +6746,20 @@ async function loadSchedulingPanel() {
     const chatAiRow = document.querySelector('.chat-ai-row');
     if (chatAiRow) {
         chatAiRow.style.display = 'none';
+    }
+
+    // Scheduling should keep the shared lower clinical UI visible.
+    // This restores it if My Schedule or Encounter previously hid it.
+    const legacyMedicalHistory =
+        document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) {
+        legacyMedicalHistory.style.display = '';
+    }
+
+    const problemRow =
+        document.querySelector('.problem-row');
+    if (problemRow) {
+        problemRow.style.display = '';
     }
 
     if (entityPanel) {
@@ -6992,6 +7775,8 @@ function setEntityCrudSectionsVisible(visible) {
 
 async function loadDoctorSchedule() {
 
+    hidePatientEncounterPanel();
+
     const patientSchedulingPanel =
         document.getElementById('patient-scheduling-panel');
 
@@ -6999,13 +7784,18 @@ async function loadDoctorSchedule() {
         patientSchedulingPanel.style.display = 'none';
     }
 
-    const doctorId =
+    const partyId =
+        sessionStorage.getItem('pces_party_id') ||
         sessionStorage.getItem('pces_doctor_id');
 
-    if (!doctorId) {
-        alert(
-            'Doctor ID was not found. Please login again.'
-        );
+    const role =
+        (sessionStorage.getItem('pces_doctor_role') || '').toUpperCase();
+
+    const isNurse =
+        role.split(',').map(value => value.trim()).includes('NURSE');
+
+    if (!partyId) {
+        alert('User party ID was not found. Please login again.');
         return;
     }
 
@@ -7016,42 +7806,58 @@ async function loadDoctorSchedule() {
         document.getElementById('entity-data-panel');
 
     const schedulePanel =
-        document.getElementById(
-            'doctor-schedule-panel'
-        );
+        document.getElementById('doctor-schedule-panel');
 
     const body =
-        document.getElementById(
-            'doctor-schedule-body'
-        );
+        document.getElementById('doctor-schedule-body');
 
-    // Hide normal chat
-    if (chatMessages) {
-        chatMessages.style.display = 'none';
-    }
-    // Also hide our AI-summary panel (sibling of #chat-messages inside .chat-ai-row)
+    const mainTitle =
+        document.getElementById('my-schedule-main-title');
+
+    const saveNotesBtn =
+        document.getElementById('my-schedule-save-notes-btn');
+
+    const cancelNotesBtn =
+        document.getElementById('my-schedule-cancel-notes-btn');
+
+    const encounterBtn =
+        document.getElementById('my-schedule-encounter-btn');
+
+    if (chatMessages) chatMessages.style.display = 'none';
+
     const chatAiRow = document.querySelector('.chat-ai-row');
-    if (chatAiRow) {
-        chatAiRow.style.display = 'none';
+    if (chatAiRow) chatAiRow.style.display = 'none';
+
+    if (entityPanel) entityPanel.style.display = 'none';
+
+    // My Schedule has its own Medical History section.
+    const legacyMedicalHistory = document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) legacyMedicalHistory.style.display = 'none';
+
+    const problemRow = document.querySelector('.problem-row');
+    if (problemRow) problemRow.style.display = 'none';
+
+    if (schedulePanel) schedulePanel.style.display = 'flex';
+
+    if (mainTitle) {
+        mainTitle.textContent = isNurse
+            ? 'My Schedule - Today (Nurse)'
+            : 'My Schedule - Today';
     }
 
-    // doctor-schedule-panel is nested inside entity-data-panel, so the parent
-    // must remain visible. Hide only the normal CRUD sections.
-    if (entityPanel) {
-        entityPanel.style.display = 'flex';
-        setEntityCrudSectionsVisible(false);
-    }
+    // Nurses edit pre-notes and enter vitals. Doctors see pre-notes
+    // read-only and retain the existing Encounter action.
+    if (saveNotesBtn) saveNotesBtn.style.display = isNurse ? '' : 'none';
+    if (cancelNotesBtn) cancelNotesBtn.style.display = isNurse ? '' : 'none';
+    if (encounterBtn) encounterBtn.style.display = isNurse ? 'none' : '';
 
-    // Show Schedule panel
-    if (schedulePanel) {
-        schedulePanel.style.display = 'flex';
-    }
+    window.myScheduleSelectedPatientId = null;
+    window.myScheduleSelectedPatientName = '';
+    window.myScheduleSelectedRecord = null;
 
     body.innerHTML = `
         <tr>
-            <td
-                colspan="8"
-                style="text-align:center;padding:20px;">
+            <td colspan="6" style="text-align:center;padding:20px;">
                 Loading today's schedule...
             </td>
         </tr>
@@ -7060,171 +7866,585 @@ async function loadDoctorSchedule() {
     const historyBody = document.getElementById('my-schedule-history-body');
     const historyTitle = document.getElementById('my-schedule-history-title');
 
-    if (historyTitle) {
-        historyTitle.textContent = 'Patient Diagnosis History';
-    }
+    if (historyTitle) historyTitle.textContent = 'Medical History';
 
     if (historyBody) {
         historyBody.innerHTML = `
             <tr>
                 <td colspan="3" style="text-align:center;padding:16px;">
-                    Select a patient above to view the latest diagnosis history.
+                    Select a patient above to view medical history.
                 </td>
             </tr>
         `;
     }
 
+    resetMyScheduleVitalsArea();
+
     try {
+        const url = isNurse
+            ? `/api/nurses/${encodeURIComponent(partyId)}/schedule`
+            : `/api/doctors/${encodeURIComponent(partyId)}/schedule`;
 
-        const response = await fetch(
-            `/api/doctors/${
-                encodeURIComponent(doctorId)
-            }/schedule`
-        );
-
-        const records =
-            await response.json();
+        const response = await fetch(url);
+        const records = await response.json();
 
         if (!response.ok) {
-            throw new Error(
-                records.error ||
-                `HTTP ${response.status}`
-            );
+            throw new Error(records.error || `HTTP ${response.status}`);
         }
 
         renderDoctorSchedule(records);
 
     } catch (error) {
-
         body.innerHTML = `
             <tr>
-                <td
-                    colspan="8"
-                    style="
-                        text-align:center;
-                        color:red;
-                        padding:20px;
-                    ">
-                    ${escapeEntityHtml(
-                        error.message
-                    )}
+                <td colspan="6"
+                    style="text-align:center;color:red;padding:20px;">
+                    ${escapeEntityHtml(error.message)}
                 </td>
             </tr>
         `;
     }
 }
 
+
 function renderDoctorSchedule(records) {
 
     const body =
-        document.getElementById(
-            'doctor-schedule-body'
-        );
+        document.getElementById('doctor-schedule-body');
+
+    if (!body) return;
 
     body.innerHTML = '';
 
-    if (!records || records.length === 0) {
+    const role =
+        (sessionStorage.getItem('pces_doctor_role') || '').toUpperCase();
 
+    const isNurse =
+        role.split(',').map(value => value.trim()).includes('NURSE');
+
+    if (!records || records.length === 0) {
         body.innerHTML = `
             <tr>
-                <td
-                    colspan="8"
-                    style="
-                        text-align:center;
-                        padding:20px;
-                    ">
+                <td colspan="6" style="text-align:center;padding:20px;">
                     No scheduled appointments for today.
                 </td>
             </tr>
         `;
-
         return;
     }
 
     records.forEach((record, index) => {
-
-        const row =
-            document.createElement('tr');
+        const row = document.createElement('tr');
 
         row.classList.add('my-schedule-row');
         row.dataset.patientId = record.patient_id || '';
+        row.dataset.scheduleId = record.schedule_id || '';
+
+        const preNotesHtml = isNurse
+            ? `<textarea
+                    class="my-schedule-pre-notes"
+                    maxlength="2000"
+                    aria-label="Pre-notes for ${escapeEntityHtml(record.full_name || 'patient')}"
+                >${escapeEntityHtml(record.pre_notes || '')}</textarea>`
+            : escapeEntityHtml(record.pre_notes || '—');
 
         row.innerHTML = `
-            <td style="text-align:center;">
-                ${index + 1}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.patient_id || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.first_name || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.middle_name || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.last_name || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.dob || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.gender || '—'
-                )}
-            </td>
-
-            <td>
-                ${escapeEntityHtml(
-                    record.appointment_time || '—'
-                )}
-            </td>
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(record.full_name || '—')}</td>
+            <td>${escapeEntityHtml(record.dob || '—')}</td>
+            <td>${escapeEntityHtml(record.gender || '—')}</td>
+            <td>${preNotesHtml}</td>
+            <td>${escapeEntityHtml(record.appointment_time || '—')}</td>
         `;
 
-        row.addEventListener('click', async () => {
-            body.querySelectorAll('.my-schedule-row').forEach(existingRow => {
-                existingRow.classList.remove('selected');
+        const noteField = row.querySelector('.my-schedule-pre-notes');
+        if (noteField) {
+            noteField.addEventListener('click', event => {
+                event.stopPropagation();
+                selectMyScheduleRow(row, record);
             });
+            noteField.addEventListener('focus', () => {
+                selectMyScheduleRow(row, record);
+            });
+        }
 
-            row.classList.add('selected');
-
-            // Keep My Schedule selection separate from the application's
-            // existing global patient context.
-            window.myScheduleSelectedPatientId = record.patient_id || null;
-            window.myScheduleSelectedPatientName = record.full_name || '';
-
-            if (window.myScheduleSelectedPatientId) {
-                await loadMySchedulePatientHistory(
-                    window.myScheduleSelectedPatientId,
-                    window.myScheduleSelectedPatientName
-                );
-            }
+        row.addEventListener('click', () => {
+            selectMyScheduleRow(row, record);
         });
 
         body.appendChild(row);
 
-        // Select the first appointment by default so a future bottom applet
-        // has a deterministic patient context immediately after load.
         if (index === 0) {
-            row.click();
+            selectMyScheduleRow(row, record);
         }
     });
+}
+
+
+async function selectMyScheduleRow(row, record) {
+    const body = document.getElementById('doctor-schedule-body');
+    if (!body || !row || !record) return;
+
+    body.querySelectorAll('.my-schedule-row').forEach(existingRow => {
+        existingRow.classList.remove('selected');
+    });
+
+    row.classList.add('selected');
+
+    window.myScheduleSelectedPatientId = record.patient_id || null;
+    window.myScheduleSelectedPatientName = record.full_name || '';
+    window.myScheduleSelectedRecord = record;
+
+    if (window.myScheduleSelectedPatientId) {
+        await Promise.all([
+            loadMySchedulePatientHistory(
+                window.myScheduleSelectedPatientId,
+                window.myScheduleSelectedPatientName
+            ),
+            loadMyScheduleVitals(record)
+        ]);
+    }
+}
+
+
+async function saveSelectedSchedulePreNotes() {
+    const record = window.myScheduleSelectedRecord;
+
+    if (!record || !record.schedule_id) {
+        alert('Please select a scheduled patient first.');
+        return;
+    }
+
+    const selectedRow =
+        document.querySelector('#doctor-schedule-body .my-schedule-row.selected');
+
+    const field =
+        selectedRow && selectedRow.querySelector('.my-schedule-pre-notes');
+
+    if (!field) {
+        alert('Pre-notes are editable only for the nurse schedule.');
+        return;
+    }
+
+    const updatedBy =
+        sessionStorage.getItem('pces_username') ||
+        sessionStorage.getItem('pces_doctor_name') ||
+        'PCES_UI';
+
+    try {
+        const response = await fetch(
+            `/api/schedules/${encodeURIComponent(record.schedule_id)}/pre-notes`,
+            {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    pre_notes: field.value,
+                    updated_by: updatedBy
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+
+        record.pre_notes = data.pre_notes || '';
+        field.value = record.pre_notes;
+        alert('Pre-notes saved successfully.');
+
+    } catch (error) {
+        alert(`Unable to save pre-notes: ${error.message}`);
+    }
+}
+
+
+function cancelSelectedSchedulePreNotes() {
+    const record = window.myScheduleSelectedRecord;
+    const selectedRow =
+        document.querySelector('#doctor-schedule-body .my-schedule-row.selected');
+    const field =
+        selectedRow && selectedRow.querySelector('.my-schedule-pre-notes');
+
+    if (record && field) {
+        field.value = record.pre_notes || '';
+    }
+}
+
+
+const MY_SCHEDULE_VITALS = [
+    ['Height', 'Inches'],
+    ['Weight', 'Lb'],
+    ['BMI', 'kg/m²'],
+    ['Blood Pressure', 'mmHg'],
+    ['Heart Rate / Pulse', 'bpm'],
+    ['Respiratory Rate', 'breaths/min'],
+    ['Body Temperature', '°F'],
+    ['Oxygen Saturation', '%'],
+    ['Others', '']
+];
+
+
+function resetMyScheduleVitalsArea() {
+    const title = document.getElementById('my-schedule-vitals-title');
+    const head = document.getElementById('my-schedule-vitals-head');
+    const body = document.getElementById('my-schedule-vitals-body');
+    const actions = document.getElementById('my-schedule-vitals-actions');
+
+    if (title) title.textContent = 'Patient Vitals';
+    if (head) {
+        head.innerHTML = `
+            <tr>
+                <th>Vital Type</th>
+                <th>UoM</th>
+                <th>Value</th>
+            </tr>
+        `;
+    }
+    if (body) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="3" style="text-align:center;padding:16px;">
+                    Select a patient above to view patient vitals.
+                </td>
+            </tr>
+        `;
+    }
+    if (actions) actions.style.display = 'none';
+
+    ['vitals-meta-patient', 'vitals-meta-doctor', 'vitals-meta-nurse', 'vitals-meta-date']
+        .forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = '—';
+        });
+}
+
+
+async function loadMyScheduleVitals(record) {
+    const role =
+        (sessionStorage.getItem('pces_doctor_role') || '').toUpperCase();
+
+    const isNurse =
+        role.split(',').map(value => value.trim()).includes('NURSE');
+
+    updateVitalsMeta(record);
+
+    if (isNurse) {
+        renderNurseVitalsEditor(record);
+    } else {
+        await loadDoctorVitalsHistory(record.patient_id);
+    }
+}
+
+
+function updateVitalsMeta(record) {
+    const values = {
+        'vitals-meta-patient': record.full_name || '—',
+        'vitals-meta-doctor': record.doctor_name || '—',
+        'vitals-meta-nurse': record.nurse_name ||
+            sessionStorage.getItem('pces_doctor_name') || '—',
+        'vitals-meta-date': record.appointment_date || '—'
+    };
+
+    Object.entries(values).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
+}
+
+
+function renderNurseVitalsEditor(record) {
+    const title = document.getElementById('my-schedule-vitals-title');
+    const head = document.getElementById('my-schedule-vitals-head');
+    const body = document.getElementById('my-schedule-vitals-body');
+    const actions = document.getElementById('my-schedule-vitals-actions');
+
+    if (title) title.textContent = 'Patient Vitals - Nurse Entry';
+
+    if (head) {
+        head.innerHTML = `
+            <tr>
+                <th>Vital Type</th>
+                <th>UoM</th>
+                <th>Value</th>
+            </tr>
+        `;
+    }
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    MY_SCHEDULE_VITALS.forEach(([vitalType, uom]) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${escapeEntityHtml(vitalType)}</td>
+            <td>${escapeEntityHtml(uom || '—')}</td>
+            <td>
+                <input
+                    class="vital-entry-input"
+                    type="text"
+                    data-vital-type="${escapeEntityHtml(vitalType)}"
+                    data-uom="${escapeEntityHtml(uom)}"
+                    maxlength="${vitalType === 'Others' ? '1000' : '100'}"
+                    autocomplete="off">
+            </td>
+        `;
+        body.appendChild(row);
+    });
+
+    if (actions) actions.style.display = 'flex';
+}
+
+
+function resetNurseVitalsEditor() {
+    const record = window.myScheduleSelectedRecord;
+    if (record) renderNurseVitalsEditor(record);
+}
+
+
+async function saveNurseVitals() {
+    const record = window.myScheduleSelectedRecord;
+
+    if (!record || !record.patient_id) {
+        alert('Please select a patient first.');
+        return;
+    }
+
+    const inputs =
+        Array.from(document.querySelectorAll('#my-schedule-vitals-body .vital-entry-input'));
+
+    const vitals = inputs
+        .map(input => ({
+            vital_type: input.dataset.vitalType || '',
+            uom: input.dataset.uom || '',
+            value: input.value.trim()
+        }))
+        .filter(item => item.value);
+
+    if (!vitals.length) {
+        alert('Enter at least one vital value before saving.');
+        return;
+    }
+
+    const username =
+        sessionStorage.getItem('pces_username') ||
+        sessionStorage.getItem('pces_doctor_name') ||
+        'PCES_UI';
+
+    const datePart = record.appointment_date || new Date().toISOString().slice(0, 10);
+    const timePart = String(record.appointment_time || '00:00:00').slice(0, 8);
+    const measurementDatetime = `${datePart}T${timePart}`;
+
+    try {
+        const response = await fetch(
+            `/api/patients/${encodeURIComponent(record.patient_id)}/vitals`,
+            {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    provider_id: record.provider_id || '',
+                    nurse_id: record.nurse_id ||
+                        sessionStorage.getItem('pces_party_id') ||
+                        sessionStorage.getItem('pces_doctor_id') || '',
+                    measurement_datetime: measurementDatetime,
+                    created_by: username,
+                    vitals
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+
+        alert(`${data.inserted_count} vital value(s) saved successfully.`);
+        resetNurseVitalsEditor();
+
+    } catch (error) {
+        alert(`Unable to save patient vitals: ${error.message}`);
+    }
+}
+
+
+async function loadDoctorVitalsHistory(patientId) {
+    const title = document.getElementById('my-schedule-vitals-title');
+    const head = document.getElementById('my-schedule-vitals-head');
+    const body = document.getElementById('my-schedule-vitals-body');
+    const actions = document.getElementById('my-schedule-vitals-actions');
+
+    if (title) title.textContent = 'Patient Vitals History';
+    if (actions) actions.style.display = 'none';
+
+    if (!body || !head) return;
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="8" style="text-align:center;padding:16px;">
+                Loading patient vitals...
+            </td>
+        </tr>
+    `;
+
+    try {
+        const response = await fetch(
+            `/api/patients/${encodeURIComponent(patientId)}/vitals-history?limit=5`
+        );
+        const snapshots = await response.json();
+
+        if (!response.ok) {
+            throw new Error(snapshots.error || `HTTP ${response.status}`);
+        }
+
+        renderDoctorVitalsHistory(snapshots);
+
+    } catch (error) {
+        head.innerHTML = `
+            <tr>
+                <th>S No</th>
+                <th>Vital Type</th>
+                <th>UoM</th>
+                <th>Latest Values</th>
+            </tr>
+        `;
+        body.innerHTML = `
+            <tr>
+                <td colspan="4"
+                    style="text-align:center;color:red;padding:16px;">
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderDoctorVitalsHistory(snapshots) {
+    const head = document.getElementById('my-schedule-vitals-head');
+    const body = document.getElementById('my-schedule-vitals-body');
+    const title = document.getElementById('my-schedule-vitals-title');
+
+    if (!head || !body) return;
+
+    if (title) {
+        const patientName =
+            window.myScheduleSelectedPatientName || '';
+        title.textContent = patientName
+            ? `Patient Vitals History - ${patientName}`
+            : 'Patient Vitals History';
+    }
+
+    if (!Array.isArray(snapshots) || !snapshots.length) {
+        head.innerHTML = `
+            <tr>
+                <th>S No</th>
+                <th>Vital Type</th>
+                <th>UoM</th>
+                <th>Latest Values</th>
+            </tr>
+        `;
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center;padding:16px;">
+                    No vitals found for this patient.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // API returns newest calendar date first, so the latest date appears
+    // immediately after UoM and older dates continue to the right.
+    head.innerHTML = `
+        <tr>
+            <th>S No</th>
+            <th>Vital Type</th>
+            <th>UoM</th>
+            ${snapshots.map(snapshot =>
+                `<th>${escapeEntityHtml(
+                    snapshot.display_date ||
+                    formatVitalsHistoryDate(snapshot.date)
+                )}</th>`
+            ).join('')}
+        </tr>
+    `;
+
+    body.innerHTML = '';
+
+    MY_SCHEDULE_VITALS.forEach(([vitalType, defaultUom], index) => {
+        const row = document.createElement('tr');
+
+        const dateValues = snapshots.map(snapshot => {
+            const entry =
+                findVitalEntry(snapshot.values || {}, vitalType);
+
+            const displayValue =
+                entry ? (entry.value || '—') : '—';
+
+            const abnormalClass =
+                entry && entry.abnormal_flag
+                    ? ' class="vital-abnormal"'
+                    : '';
+
+            return `
+                <td${abnormalClass}>
+                    ${escapeEntityHtml(displayValue)}
+                </td>
+            `;
+        }).join('');
+
+        row.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(vitalType)}</td>
+            <td>${escapeEntityHtml(defaultUom || '—')}</td>
+            ${dateValues}
+        `;
+
+        body.appendChild(row);
+    });
+}
+
+
+function formatVitalsHistoryDate(value) {
+    if (!value) return '—';
+
+    const parts = String(value).split('-');
+
+    if (parts.length === 3) {
+        return `${parts[1]}/${parts[2]}/${parts[0]}`;
+    }
+
+    return String(value);
+}
+
+
+function findVitalEntry(values, requestedType) {
+    if (values[requestedType]) return values[requestedType];
+
+    const normalized = value =>
+        String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const aliases = {
+        'heartratepulse': ['heartrate', 'pulse', 'heartratepulse'],
+        'bodytemperature': ['temperature', 'bodytemp', 'bodytemperature'],
+        'oxygensaturation': ['spo2', 'oxygensat', 'oxygensaturation'],
+        'bloodpressure': ['bp', 'bloodpressure'],
+        'respiratoryrate': ['respiratoryrate', 'respirationrate', 'rr']
+    };
+
+    const wanted = normalized(requestedType);
+    const accepted = new Set([wanted, ...(aliases[wanted] || [])]);
+
+    for (const [key, entry] of Object.entries(values)) {
+        if (accepted.has(normalized(key))) {
+            return entry;
+        }
+    }
+
+    return null;
 }
 
 
@@ -7236,14 +8456,14 @@ async function loadMySchedulePatientHistory(patientId, patientName) {
 
     if (title) {
         title.textContent = patientName
-            ? `Patient Diagnosis History - ${patientName}`
-            : 'Patient Diagnosis History';
+            ? `Medical History - ${patientName}`
+            : 'Medical History';
     }
 
     body.innerHTML = `
         <tr>
             <td colspan="3" style="text-align:center;padding:16px;">
-                Loading diagnosis history...
+                Loading medical history...
             </td>
         </tr>
     `;
@@ -7285,7 +8505,7 @@ function renderMySchedulePatientHistory(records) {
         body.innerHTML = `
             <tr>
                 <td colspan="3" style="text-align:center;padding:16px;">
-                    No diagnosis history found for this patient.
+                    No medical history found for this patient.
                 </td>
             </tr>
         `;
@@ -7303,6 +8523,186 @@ function renderMySchedulePatientHistory(records) {
 
         body.appendChild(row);
     });
+}
+
+
+function hidePatientEncounterPanel() {
+    const panel = document.getElementById('patient-encounter-panel');
+    if (panel) {
+        panel.style.display = 'none';
+    }
+}
+
+async function openSelectedPatientEncounter() {
+    const patientId = window.myScheduleSelectedPatientId;
+
+    if (!patientId) {
+        alert('Please select a patient in My Schedule first.');
+        return;
+    }
+
+    await loadPatientEncounterPanel(patientId);
+}
+
+async function loadPatientEncounterPanel(patientId) {
+    const panel = document.getElementById('patient-encounter-panel');
+    const doctorSchedulePanel = document.getElementById('doctor-schedule-panel');
+    const patientSchedulingPanel = document.getElementById('patient-scheduling-panel');
+    const entityPanel = document.getElementById('entity-data-panel');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    const body = document.getElementById('patient-encounter-body');
+
+    if (!panel || !body) {
+        console.error('[Encounter] Required Encounter panel elements are missing.');
+        return;
+    }
+
+    if (doctorSchedulePanel) doctorSchedulePanel.style.display = 'none';
+    if (patientSchedulingPanel) patientSchedulingPanel.style.display = 'none';
+    if (entityPanel) entityPanel.style.display = 'none';
+    if (chatMessages) chatMessages.style.display = 'none';
+    if (chatAiRow) chatAiRow.style.display = 'none';
+
+    const legacyMedicalHistory = document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) legacyMedicalHistory.style.display = 'none';
+
+    const problemRow = document.querySelector('.problem-row');
+    if (problemRow) problemRow.style.display = 'none';
+
+    panel.style.display = 'flex';
+
+    clearPatientEncounterDetails();
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="8" style="text-align:center;padding:18px;">
+                Loading patient encounters...
+            </td>
+        </tr>
+    `;
+
+    try {
+        const response = await fetch(
+            `/api/patients/${encodeURIComponent(patientId)}/encounter-view`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+
+        populatePatientEncounterDetails(data.patient || {});
+        renderPatientEncounterRows(data.encounters || []);
+
+    } catch (error) {
+        console.error('[Encounter] Unable to load encounter screen:', error);
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="8"
+                    style="text-align:center;color:red;padding:18px;">
+                    Unable to load encounter data:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function clearPatientEncounterDetails() {
+    [
+        'encounter-patient-first-name',
+        'encounter-patient-middle-name',
+        'encounter-patient-last-name',
+        'encounter-patient-address1',
+        'encounter-patient-address2',
+        'encounter-patient-city',
+        'encounter-patient-state',
+        'encounter-patient-phone',
+        'encounter-patient-email',
+        'encounter-patient-dob'
+    ].forEach(id => {
+        const field = document.getElementById(id);
+        if (field) field.value = '';
+    });
+}
+
+function populatePatientEncounterDetails(patient) {
+    const values = {
+        'encounter-patient-first-name': patient.first_name || '',
+        'encounter-patient-middle-name': patient.middle_name || '',
+        'encounter-patient-last-name': patient.last_name || '',
+        'encounter-patient-address1': patient.address1 || '',
+        'encounter-patient-address2': patient.address2 || '',
+        'encounter-patient-city': patient.city || '',
+        'encounter-patient-state': patient.state || '',
+        'encounter-patient-phone': patient.phone || '',
+        'encounter-patient-email': patient.email || '',
+        'encounter-patient-dob': patient.dob || ''
+    };
+
+    Object.entries(values).forEach(([id, value]) => {
+        const field = document.getElementById(id);
+        if (field) field.value = value;
+    });
+}
+
+function renderPatientEncounterRows(records) {
+    const body = document.getElementById('patient-encounter-body');
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!records || records.length === 0) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align:center;padding:18px;">
+                    No encounters found for this patient.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    records.forEach((record, index) => {
+        const row = document.createElement('tr');
+        row.classList.add('patient-encounter-row');
+        row.dataset.encounterId = record.encounter_id || '';
+
+        row.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(record.hospital_name || '—')}</td>
+            <td>${escapeEntityHtml(record.provider_id || '—')}</td>
+            <td>${escapeEntityHtml(record.date || '—')}</td>
+            <td>${escapeEntityHtml(record.time || '—')}</td>
+            <td>${escapeEntityHtml(record.notes || '—')}</td>
+            <td>${escapeEntityHtml(record.created_by || '—')}</td>
+            <td>${escapeEntityHtml(record.updated_by || '—')}</td>
+        `;
+
+        row.addEventListener('click', () => {
+            body.querySelectorAll('.patient-encounter-row').forEach(existing => {
+                existing.classList.remove('selected');
+            });
+
+            row.classList.add('selected');
+            window.selectedEncounterId = record.encounter_id || null;
+        });
+
+        body.appendChild(row);
+
+        // Phase 1 requirement: first encounter is selected automatically.
+        if (index === 0) {
+            row.click();
+        }
+    });
+}
+
+function backToMyScheduleFromEncounter() {
+    hidePatientEncounterPanel();
+    loadDoctorSchedule();
 }
 
 function populateEntityDetails(record) {
@@ -7745,7 +9145,7 @@ function escapeEntityHtml(value) {
 // Patient/Doctor Data admin panels. Added so the ported admin feature has a
 // way back to chat (the source files didn't provide one).
 function backToChat() {
-    ['entity-data-panel', 'doctor-schedule-panel', 'patient-scheduling-panel'].forEach(id => {
+    ['entity-data-panel', 'doctor-schedule-panel', 'patient-scheduling-panel', 'patient-encounter-panel'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -7755,6 +9155,12 @@ function backToChat() {
 
     const chatAiRow = document.querySelector('.chat-ai-row');
     if (chatAiRow) chatAiRow.style.display = '';
+
+    const legacyMedicalHistory = document.querySelector('.medical-history-panel');
+    if (legacyMedicalHistory) legacyMedicalHistory.style.display = '';
+
+    const problemRow = document.querySelector('.problem-row');
+    if (problemRow) problemRow.style.display = '';
 
     ['patient-data-tab', 'doctor-data-tab', 'patient-doctor-tab',
      'doctor-patient-tab', 'doctor-schedule-tab', 'patient-scheduling-tab'].forEach(id => {
@@ -10850,8 +12256,11 @@ ${data.conclusion}
 
                 _pcesAuthed = true;
                 sessionStorage.setItem('pces_auth', 'true');
+                sessionStorage.setItem('pces_username', data.username || '');
+                sessionStorage.setItem('pces_party_id', data.party_id || '');
+                sessionStorage.setItem('pces_party_type', data.party_type || '');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
-                sessionStorage.setItem('pces_doctor_id', data.party_id || data.username || '');
+                sessionStorage.setItem('pces_doctor_id', data.party_id || '');
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
