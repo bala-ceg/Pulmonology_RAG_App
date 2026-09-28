@@ -593,7 +593,7 @@ def index():
 
 @disciplines_bp.route("/api/login", methods=["POST"])
 def login():
-    """Authenticate a PCES doctor against p_party in pces_ehr_ccm."""
+    """Authenticate a PCES provider against p_party in pces_ehr_ccm."""
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -620,7 +620,7 @@ def login():
                     )
                     return jsonify({"success": False, "message": "Login is not configured for the EHR schema"}), 500
 
-                role_expr = role_col if role_col else "NULL"
+                role_expr = role_col if role_col else "party_type"
                 username_expr = "username" if "username" in columns else login_columns[0]
                 predicates = " OR ".join(f"LOWER({col}) = LOWER(%s)" for col in login_columns)
                 params = tuple(username for _ in login_columns)
@@ -635,7 +635,7 @@ def login():
                         last_name,
                         email
                     FROM p_party
-                    WHERE party_type = 'DOCTOR'
+                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
                       AND COALESCE(is_active, TRUE) = TRUE
                       AND ({predicates})
                     LIMIT 1
@@ -647,94 +647,17 @@ def login():
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        doctor_party_id, db_username, password_hash, pces_role, first_name, last_name, email = row
+        provider_party_id, db_username, password_hash, pces_role, first_name, last_name, email = row
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
         hospital_name = _fetch_default_hospital_name()
-        role_tokens = {
-            token.strip().upper()
-            for token in (pces_role or "").split(",")
-            if token.strip()
-        }
-        party_type = "NURSE" if "NURSE" in role_tokens else "DOCTOR"
-
-        # Resolve the EHR UUID. Nurse emails are not unique in the current
-        # p_party data, so nurse matching uses email + first name + normalized
-        # last name (trailing commas ignored). Doctors keep the previous
-        # email-only fallback to avoid breaking existing accounts.
-        ehr_party_id: str | None = None
-        if email:
-            try:
-                with _ehr_conn() as ehr_conn:
-                    with ehr_conn.cursor() as ehr_cur:
-                        ehr_cur.execute(
-                            """
-                            SELECT party_id
-                            FROM ehr_ccm_schema.p_party
-                            WHERE party_type = %s
-                              AND LOWER(email) = LOWER(%s)
-                              AND LOWER(TRIM(COALESCE(first_name, ''))) =
-                                  LOWER(TRIM(%s))
-                              AND LOWER(RTRIM(TRIM(COALESCE(last_name, '')), ',')) =
-                                  LOWER(RTRIM(TRIM(%s), ','))
-                              AND COALESCE(is_active, TRUE) = TRUE
-                            ORDER BY updated_at DESC NULLS LAST,
-                                     created_at DESC NULLS LAST
-                            LIMIT 1
-                            """,
-                            (
-                                party_type,
-                                email,
-                                first_name or "",
-                                last_name or "",
-                            ),
-                        )
-                        party_row = ehr_cur.fetchone()
-
-                        if party_row:
-                            ehr_party_id = str(party_row[0])
-                        elif party_type == "DOCTOR":
-                            ehr_cur.execute(
-                                """
-                                SELECT party_id
-                                FROM ehr_ccm_schema.p_party
-                                WHERE party_type = 'DOCTOR'
-                                  AND LOWER(email) = LOWER(%s)
-                                  AND COALESCE(is_active, TRUE) = TRUE
-                                ORDER BY updated_at DESC NULLS LAST,
-                                         created_at DESC NULLS LAST
-                                LIMIT 1
-                                """,
-                                (email,),
-                            )
-                            party_row = ehr_cur.fetchone()
-                            if party_row:
-                                ehr_party_id = str(party_row[0])
-            except Exception as exc:
-                logger.warning("Unable to resolve EHR party_id for %s: %s", db_username, exc)
-
-        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
-
-        hospital_name: str = "Default PCES"
-        try:
-            with _db_conn() as _hconn:
-                with _hconn.cursor() as _hcur:
-                    _hcur.execute(
-                        "SELECT organization_name FROM pces_affiliates "
-                        "WHERE org_code = 'PCES101' LIMIT 1"
-                    )
-                    _hrow = _hcur.fetchone()
-                    if _hrow and _hrow[0]:
-                        hospital_name = _hrow[0]
-        except Exception:
-            pass
 
         return jsonify({
             "success": True,
             "username": db_username,
-            "party_id": str(doctor_party_id),
+            "party_id": str(provider_party_id),
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
@@ -885,13 +808,13 @@ def search_doctors():
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
-                SELECT DISTINCT first_name, last_name 
+                SELECT DISTINCT first_name, last_name
                 FROM p_party
                 WHERE party_type = 'DOCTOR'
                   AND COALESCE(is_active, TRUE) = TRUE
                   AND (
-                    LOWER(first_name) LIKE %s 
-                    OR LOWER(last_name) LIKE %s 
+                    LOWER(first_name) LIKE %s
+                    OR LOWER(last_name) LIKE %s
                     OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
                   )
                 ORDER BY first_name, last_name
