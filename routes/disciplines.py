@@ -87,6 +87,28 @@ def _ehr_conn() -> Generator:
         yield conn
 
 
+def _table_columns(cursor, table_name: str, schema: str = "public") -> set[str]:
+    """Return lowercase column names for a table."""
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = %s
+        """,
+        (schema, table_name),
+    )
+    return {str(row[0]).lower() for row in cursor.fetchall()}
+
+
+def _first_existing(columns: set[str], candidates: list[str]) -> str | None:
+    """Return the first candidate column present in columns."""
+    for candidate in candidates:
+        if candidate.lower() in columns:
+            return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Disciplines configuration helpers
 # ---------------------------------------------------------------------------
@@ -562,7 +584,7 @@ def index():
 
 @disciplines_bp.route("/api/login", methods=["POST"])
 def login():
-    """Authenticate a PCES user against the pces_users table."""
+    """Authenticate a PCES provider against p_party in pces_ehr_ccm."""
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -571,57 +593,63 @@ def login():
         return jsonify({"success": False, "message": "Username and password are required"}), 400
 
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
+                columns = _table_columns(cursor, "p_party")
+                login_columns = [
+                    col for col in ("username", "user_name", "email")
+                    if col in columns
+                ]
+                password_col = _first_existing(columns, ["password_hash", "password"])
+                role_col = _first_existing(columns, ["pces_role", "role", "specialty", "department"])
+
+                if not login_columns or not password_col:
+                    logger.error(
+                        "p_party login schema missing required columns: login_columns=%s password_col=%s",
+                        login_columns,
+                        password_col,
+                    )
+                    return jsonify({"success": False, "message": "Login is not configured for the EHR schema"}), 500
+
+                role_expr = role_col if role_col else "party_type"
+                username_expr = "username" if "username" in columns else login_columns[0]
+                predicates = " OR ".join(f"LOWER({col}) = LOWER(%s)" for col in login_columns)
+                params = tuple(username for _ in login_columns)
                 cursor.execute(
-                    "SELECT username, password_hash, pces_role, first_name, last_name, email FROM pces_users WHERE username = %s LIMIT 1",
-                    (username,),
+                    f"""
+                    SELECT
+                        party_id,
+                        {username_expr} AS login_name,
+                        {password_col} AS password_hash,
+                        {role_expr} AS pces_role,
+                        first_name,
+                        last_name,
+                        email
+                    FROM p_party
+                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
+                      AND COALESCE(is_active, TRUE) = TRUE
+                      AND ({predicates})
+                    LIMIT 1
+                    """,
+                    params,
                 )
                 row = cursor.fetchone()
 
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        db_username, password_hash, pces_role, first_name, last_name, email = row
+        provider_party_id, db_username, password_hash, pces_role, first_name, last_name, email = row
         if password != password_hash:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        # Look up party_id from p_party by email match (best-effort)
-        doctor_party_id: str | None = None
-        if email:
-            try:
-                with _ehr_conn() as ehr_conn:
-                    with ehr_conn.cursor() as ehr_cur:
-                        ehr_cur.execute(
-                            "SELECT party_id FROM p_party WHERE party_type = 'DOCTOR' AND LOWER(email) = LOWER(%s) LIMIT 1",
-                            (email,),
-                        )
-                        party_row = ehr_cur.fetchone()
-                        if party_row:
-                            doctor_party_id = str(party_row[0])
-            except Exception:
-                pass  # non-critical — falls back to username
+        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
 
-        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
-
-        # Look up the default hospital name from pces_affiliates (best-effort)
         hospital_name: str = "Default PCES"
-        try:
-            with _db_conn() as _hconn:
-                with _hconn.cursor() as _hcur:
-                    _hcur.execute(
-                        "SELECT organization_name FROM pces_affiliates WHERE org_code = 'PCES101' LIMIT 1"
-                    )
-                    _hrow = _hcur.fetchone()
-                    if _hrow and _hrow[0]:
-                        hospital_name = _hrow[0]
-        except Exception:
-            pass  # non-critical — keep default
 
         return jsonify({
             "success": True,
             "username": db_username,
-            "party_id": doctor_party_id,   # UUID from p_party; None if no email match
+            "party_id": str(provider_party_id),
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
