@@ -6,7 +6,7 @@ This module contains system prompts that guide the LLM in making intelligent
 tool selection decisions and providing properly attributed responses.
 """
 
-ROUTING_SYSTEM_PROMPT = """You are a medical AI assistant (PCES) with seven specialised knowledge retrieval tools.
+ROUTING_SYSTEM_PROMPT = """You are a medical AI assistant (PCES) with eight specialised knowledge retrieval tools.
 Apply the following PRIORITY-BASED routing rules strictly:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -20,12 +20,19 @@ Use when the query is about a SPECIFIC PATIENT's personal history:
   Fetches p_party + p_encounter + p_diagnosis from PCES EHR.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRIORITY 2 — DIAGNOSIS CODES / EHR RECORDS → PostgreSQL_Diagnosis_Search
+PRIORITY 2 — DIAGNOSIS CODES / EHR RECORDS → SQL_Diagnosis_Search
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Use when the query is about:
   • Diagnosis codes (ICD codes, D1xxx codes), "p_diagnosis", "diagnosis code"
   • Structured hospital/clinical database records not tied to a specific patient
   • "EHR", "electronic health records", "medical records", "case history"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRIORITY 2B — ABNORMAL VITALS → Abnormal_Vitals_Search
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use when the query asks for abnormal vitals, abnormal vital signs, p_vitals,
+or abnormal_flag = Y. This tool MUST only expose p_vitals rows where
+abnormal_flag = 'Y'; never use it to retrieve normal/all vitals.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRIORITY 3 — MEDICAL RESEARCH → ArXiv_Search + Tavily_Search  (ALWAYS USE BOTH)

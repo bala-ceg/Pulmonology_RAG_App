@@ -4,7 +4,7 @@ RAG Routing Pipeline Test Script
 Tests all 5 routing rules + 6 tools end-to-end.
 
 Priority rules under test:
-  1. Patient history       → PostgreSQL_Diagnosis_Search
+  1. Patient history       → SQL_Diagnosis_Search
   2. Medical research      → ArXiv_Search + Tavily_Search (both)
   3. General knowledge     → Wikipedia_Search
   4. Uploaded documents    → Internal_VectorDB
@@ -63,7 +63,7 @@ try:
         ArXiv_Search,
         Tavily_Search,
         Internal_VectorDB,
-        PostgreSQL_Diagnosis_Search,
+        SQL_Diagnosis_Search,
         Pinecone_KB_Search,
     )
     print("  ✓ All 6 tools imported")
@@ -87,8 +87,8 @@ TEST_CASES = [
     (
         "PRIORITY 1 — Patient History → PostgreSQL",
         "Show me patient history for a patient admitted with chest pain",
-        "PostgreSQL_Diagnosis_Search",
-        PostgreSQL_Diagnosis_Search,
+        "SQL_Diagnosis_Search",
+        SQL_Diagnosis_Search,
     ),
     (
         "PRIORITY 2a — Medical Research → ArXiv",
@@ -188,7 +188,7 @@ banner("Routing Accuracy — Additional Scenarios")
 
 ROUTING_ONLY = [
     ("Medical research: systematic review on stroke thrombolysis",   "ArXiv_Search"),
-    ("EHR medical history for patient ID 1234",                       "PostgreSQL_Diagnosis_Search"),
+    ("EHR medical history for patient ID 1234",                       "SQL_Diagnosis_Search"),
     ("Define pneumonia",                                               "Wikipedia_Search"),
     ("PCES neurology guidelines",                                      "Pinecone_KB_Search"),
     ("Search my uploaded documents for diabetes management",           "Internal_VectorDB"),

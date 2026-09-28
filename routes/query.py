@@ -994,7 +994,7 @@ def handle_query():
 
             integrated_result = integrated_rag_system.query(
                 query_input, session_id, patient_problem,
-                adhoc_rag_ready=adhoc_rag_ready
+                adhoc_rag_ready=adhoc_rag_ready, pces_role=doctor_department
             )
 
             if integrated_result and integrated_result.get("answer"):
@@ -1053,7 +1053,7 @@ def handle_query():
                     try:
                         _retry = integrated_rag_system.query(
                             query_input, session_id, patient_problem,
-                            adhoc_rag_ready=adhoc_rag_ready,
+                            adhoc_rag_ready=adhoc_rag_ready, pces_role=doctor_department,
                         )
                         if _retry and _retry.get("answer"):
                             answer = _retry["answer"]
@@ -1720,6 +1720,7 @@ def handle_query_html():
     """HTML endpoint that returns complete HTML documents with 3-section structure."""
     user_input = request.json.get("data", "")
     patient_problem = request.json.get("patient_problem", "").strip()
+    doctor_department = (request.json.get("doctor_department") or "").strip()
 
     if not user_input:
         result_data = {
@@ -1789,7 +1790,7 @@ def handle_query_html():
                 session_id = _get_session_folder() or "guest"
                 logger.info("Using current session: %s", session_id)
 
-            _result = integrated_rag_system.query(query_input, session_id=session_id)
+            _result = integrated_rag_system.query(query_input, session_id=session_id, pces_role=doctor_department)
             answer = _result.get("answer", "")
             routing_info = _result.get("routing_info", {})
             tools_used = _result.get("tools_used", [])

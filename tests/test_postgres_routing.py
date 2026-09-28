@@ -49,13 +49,13 @@ try:
         primary_tool = result.get('primary_tool', 'None')
         confidence = result.get('confidence', 'unknown')
         scores = result.get('tool_scores', {})
-        postgres_score = scores.get('PostgreSQL_Diagnosis_Search', 0)
+        postgres_score = scores.get('SQL_Diagnosis_Search', 0)
         
         print(f"  → Primary Tool: {primary_tool}")
         print(f"  → Confidence: {confidence}")
         print(f"  → PostgreSQL Score: {postgres_score}")
         
-        if primary_tool == 'PostgreSQL_Diagnosis_Search':
+        if primary_tool == 'SQL_Diagnosis_Search':
             print("  ✅ Correctly routed to PostgreSQL")
         else:
             print("  ❌ NOT routed to PostgreSQL")
