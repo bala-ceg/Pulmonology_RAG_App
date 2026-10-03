@@ -108,27 +108,6 @@ def _first_existing(columns: set[str], candidates: list[str]) -> str | None:
     return None
 
 
-def _fetch_default_hospital_name() -> str:
-    """Fetch the default organisation name from p_affiliates in pces_ehr_ccm."""
-    try:
-        with _ehr_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT organization_name
-                    FROM p_affiliates
-                    WHERE org_code = 'PCES101'
-                    LIMIT 1
-                    """
-                )
-                row = cursor.fetchone()
-                if row and row[0]:
-                    return row[0]
-    except Exception as exc:
-        logger.warning("Default hospital lookup from p_affiliates failed — %s", exc)
-    return "Default PCES"
-
-
 # ---------------------------------------------------------------------------
 # Disciplines configuration helpers
 # ---------------------------------------------------------------------------
@@ -580,15 +559,39 @@ def index():
     initialize_session(user)
     from config import Config  # noqa: PLC0415
 
-    # Pre-fetch hospital name for the login modal (best-effort)
-    default_hospital = _fetch_default_hospital_name()
-
     return render_template(
         "index.html",
         yodha_chat_url=Config.YODHA_CHAT_URL,
         doc_patient_v2_url=Config.DOC_PATIENT_V2_URL,
-        default_hospital=default_hospital,
     )
+
+
+@disciplines_bp.route("/api/tenants", methods=["GET"])
+def get_login_tenants():
+    """Return all hospitals available for the PCES login dropdown."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT tenant_id, tenant_code, tenant_name
+                    FROM p_tenant
+                    ORDER BY tenant_name, tenant_id
+                    """
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "tenant_id": str(tenant_id),
+                "tenant_code": tenant_code or "",
+                "tenant_name": tenant_name or "",
+            }
+            for tenant_id, tenant_code, tenant_name in rows
+        ])
+    except Exception as exc:
+        logger.exception("Unable to load login hospitals: %s", exc)
+        return jsonify({"success": False, "message": "Unable to load hospitals"}), 500
 
 
 @disciplines_bp.route("/api/login", methods=["POST"])
@@ -597,9 +600,13 @@ def login():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
+    tenant_id = str(data.get("tenant_id") or "").strip()
 
-    if not username or not password:
-        return jsonify({"success": False, "message": "Username and password are required"}), 400
+    if not username or not password or not tenant_id:
+        return jsonify({
+            "success": False,
+            "message": "Username, password, and hospital are required",
+        }), 400
 
     try:
         with _ehr_conn() as conn:
@@ -628,10 +635,12 @@ def login():
                     f"""
                     SELECT
                         party_id,
+                        party_type,
                         {username_expr} AS login_name,
                         {password_col} AS password_hash,
                         {role_expr} AS pces_role,
                         first_name,
+                        middle_name,
                         last_name,
                         email
                     FROM p_party
@@ -644,25 +653,78 @@ def login():
                 )
                 row = cursor.fetchone()
 
+                if row is not None:
+                    (
+                        provider_party_id,
+                        party_type,
+                        db_username,
+                        password_hash,
+                        pces_role,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        email,
+                    ) = row
+                    if password != password_hash:
+                        return jsonify({"success": False, "message": "Invalid username or password"}), 401
+
+                    cursor.execute(
+                        """
+                        SELECT tenant_id, tenant_code, tenant_name
+                        FROM p_party_tenant
+                        JOIN p_tenant USING (tenant_id)
+                        WHERE party_id = %s
+                          AND CAST(p_party_tenant.tenant_id AS TEXT) = %s
+                        LIMIT 1
+                        """,
+                        (provider_party_id, tenant_id),
+                    )
+                    tenant_row = cursor.fetchone()
+                else:
+                    tenant_row = None
+
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        provider_party_id, db_username, password_hash, pces_role, first_name, last_name, email = row
-        if password != password_hash:
-            return jsonify({"success": False, "message": "Invalid username or password"}), 401
+        if tenant_row is None:
+            return jsonify({
+                "success": False,
+                "message": "The selected hospital is not assigned to this account",
+            }), 403
 
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
-        hospital_name = _fetch_default_hospital_name()
+        selected_tenant_id, tenant_code, tenant_name = tenant_row
+        logger.info(
+            "PCES login successful party_id=%s first_name=%r middle_name=%r "
+            "last_name=%r pces_role=%r party_type=%r tenant_id=%s "
+            "tenant_code=%r tenant_name=%r",
+            provider_party_id,
+            first_name,
+            middle_name,
+            last_name,
+            pces_role,
+            party_type,
+            selected_tenant_id,
+            tenant_code,
+            tenant_name,
+        )
 
         return jsonify({
             "success": True,
             "username": db_username,
             "party_id": str(provider_party_id),
+            "party_type": party_type,
+            "first_name": first_name or "",
+            "middle_name": middle_name or "",
+            "last_name": last_name or "",
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
             "department": pces_role or "",
-            "hospital_name": hospital_name,
+            "tenant_id": str(selected_tenant_id),
+            "tenant_code": tenant_code or "",
+            "tenant_name": tenant_name or "",
+            "hospital_name": tenant_name or "",
         })
     except Exception as exc:
         logger.error("Login error: %s", exc)

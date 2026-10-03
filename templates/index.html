@@ -318,7 +318,8 @@
         }
 
         .yodha-login-modal input[type="text"],
-        .yodha-login-modal input[type="password"] {
+        .yodha-login-modal input[type="password"],
+        .yodha-login-modal select {
             width: 100%;
             padding: 9px 10px;
             font-size: 14px;
@@ -327,7 +328,8 @@
             box-sizing: border-box;
         }
 
-        .yodha-login-modal input:focus {
+        .yodha-login-modal input:focus,
+        .yodha-login-modal select:focus {
             outline: none;
             border-color: #f7971e;
             box-shadow: 0 0 0 2px rgba(247, 151, 30, 0.2);
@@ -4196,7 +4198,6 @@
         <div class="yodha-login-modal">
             <h2>PCES Login</h2>
             <p class="modal-subtitle">Log in to access PCES features</p>
-            <p id="login-hospital-info" style="margin:0 0 10px;font-size:12px;color:#1f4e79;font-weight:600;min-height:18px;">🏥 {{ default_hospital }}</p>
             <div class="field">
                 <label for="yodha-username">Username</label>
                 <input id="yodha-username" type="text" autocomplete="username" placeholder="Username" />
@@ -4205,8 +4206,14 @@
                 <label for="yodha-password">Password</label>
                 <input id="yodha-password" type="password" autocomplete="current-password" placeholder="Password" />
             </div>
+            <div class="field">
+                <label for="yodha-hospital">Hospital</label>
+                <select id="yodha-hospital" autocomplete="organization" disabled>
+                    <option value="">Loading hospitals...</option>
+                </select>
+            </div>
             <div class="login-actions">
-                <button class="btn-login" onclick="submitPcesLogin()">Login</button>
+                <button id="yodha-login-submit" class="btn-login" onclick="submitPcesLogin()">Login</button>
                 <button class="btn-cancel" onclick="closePcesLoginModal()">Cancel</button>
             </div>
             <div id="yodha-login-msg" class="login-msg"></div>
@@ -12213,6 +12220,7 @@ ${data.conclusion}
         function openPcesLoginModal() {
             document.getElementById('yodha-username').value = '';
             document.getElementById('yodha-password').value = '';
+            loadLoginTenants();
             const msg = document.getElementById('yodha-login-msg');
             msg.className = 'login-msg';
             msg.textContent = '';
@@ -12225,14 +12233,47 @@ ${data.conclusion}
             document.getElementById('yodha-login-overlay').classList.remove('active');
         }
 
+        async function loadLoginTenants() {
+            const select = document.getElementById('yodha-hospital');
+            const submit = document.getElementById('yodha-login-submit');
+            select.replaceChildren(new Option('Loading hospitals...', ''));
+            select.disabled = true;
+            submit.disabled = true;
+
+            try {
+                const res = await fetch('/api/tenants');
+                const tenants = await res.json();
+                if (!res.ok || !Array.isArray(tenants)) {
+                    throw new Error(tenants.message || 'Unable to load hospitals');
+                }
+
+                select.replaceChildren(new Option('Select a hospital', ''));
+                tenants.forEach(tenant => {
+                    select.add(new Option(tenant.tenant_name, tenant.tenant_id));
+                });
+                if (tenants.length === 0) {
+                    select.replaceChildren(new Option('No hospitals available', ''));
+                }
+                select.disabled = tenants.length === 0;
+                submit.disabled = tenants.length === 0;
+            } catch (err) {
+                select.replaceChildren(new Option('Unable to load hospitals', ''));
+                const msg = document.getElementById('yodha-login-msg');
+                msg.className = 'login-msg error';
+                msg.textContent = 'Unable to load hospitals. Please try again.';
+                msg.style.display = 'block';
+            }
+        }
+
         async function submitPcesLogin() {
             const username = document.getElementById('yodha-username').value.trim();
             const password = document.getElementById('yodha-password').value;
+            const tenantId = document.getElementById('yodha-hospital').value;
             const msg = document.getElementById('yodha-login-msg');
 
-            if (!username || !password) {
+            if (!username || !password || !tenantId) {
                 msg.className = 'login-msg error';
-                msg.textContent = 'Please enter both username and password.';
+                msg.textContent = 'Please enter your username and password, and select a hospital.';
                 return;
             }
 
@@ -12244,7 +12285,7 @@ ${data.conclusion}
                 const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, password}),
+                    body: JSON.stringify({username, password, tenant_id: tenantId}),
                 });
                 const data = await res.json();
 
@@ -12259,12 +12300,18 @@ ${data.conclusion}
                 sessionStorage.setItem('pces_username', data.username || '');
                 sessionStorage.setItem('pces_party_id', data.party_id || '');
                 sessionStorage.setItem('pces_party_type', data.party_type || '');
+                sessionStorage.setItem('pces_party_first_name', data.first_name || '');
+                sessionStorage.setItem('pces_party_middle_name', data.middle_name || '');
+                sessionStorage.setItem('pces_party_last_name', data.last_name || '');
                 sessionStorage.setItem('pces_doctor_name', data.full_name || data.username);
                 sessionStorage.setItem('pces_doctor_id', data.party_id || '');
                 sessionStorage.setItem('pces_doctor_department', data.department || '');
                 sessionStorage.setItem('pces_doctor_email', data.email || '');
                 sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
-                sessionStorage.setItem('pces_hospital_name', data.hospital_name || 'Default PCES');
+                sessionStorage.setItem('pces_tenant_id', data.tenant_id || '');
+                sessionStorage.setItem('pces_tenant_code', data.tenant_code || '');
+                sessionStorage.setItem('pces_tenant_name', data.tenant_name || '');
+                sessionStorage.setItem('pces_hospital_name', data.tenant_name || '');
 
                 msg.className = 'login-msg success';
                 msg.textContent = `Welcome, ${data.full_name || data.username}!`;
@@ -12481,8 +12528,11 @@ ${data.conclusion}
         function logout() {
             // Clear auth state
             _pcesAuthed = false;
-            ['pces_auth','pces_doctor_name','pces_doctor_id','pces_doctor_department',
-             'pces_doctor_email','pces_doctor_role','pces_hospital_name','pces_patient_org'].forEach(k => sessionStorage.removeItem(k));
+            ['pces_auth','pces_username','pces_party_id','pces_party_type',
+             'pces_party_first_name','pces_party_middle_name','pces_party_last_name',
+             'pces_doctor_name','pces_doctor_id','pces_doctor_department',
+             'pces_doctor_email','pces_doctor_role','pces_tenant_id','pces_tenant_code',
+             'pces_tenant_name','pces_hospital_name','pces_patient_org'].forEach(k => sessionStorage.removeItem(k));
             // Clear patient
             clearPatientInfoBar();
             // Clear chat messages (end session)
