@@ -34,7 +34,7 @@ from datetime import date as date_cls, datetime, timedelta
 from typing import Generator
 
 import psycopg
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request, session
 
 from config import Config
 from utils.error_handlers import get_logger, handle_route_errors
@@ -597,6 +597,7 @@ def get_login_tenants():
 @disciplines_bp.route("/api/login", methods=["POST"])
 def login():
     """Authenticate a PCES provider against p_party in pces_ehr_ccm."""
+    session.pop("pces_identity", None)
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -694,6 +695,10 @@ def login():
 
         full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
         selected_tenant_id, tenant_code, tenant_name = tenant_row
+        session["pces_identity"] = {
+            "party_id": str(provider_party_id),
+            "tenant_id": str(selected_tenant_id),
+        }
         logger.info(
             "PCES login successful party_id=%s first_name=%r middle_name=%r "
             "last_name=%r pces_role=%r party_type=%r tenant_id=%s "
@@ -729,6 +734,22 @@ def login():
     except Exception as exc:
         logger.error("Login error: %s", exc)
         return jsonify({"success": False, "message": "Server error during login"}), 500
+
+
+@disciplines_bp.route("/api/logout", methods=["POST"])
+def logout():
+    session.pop("pces_identity", None)
+    return jsonify({"success": True})
+
+
+def _patient_tenant_condition() -> str:
+    return """
+        EXISTS (
+            SELECT 1 FROM p_party_tenant pt
+            WHERE pt.party_id = pp.party_id
+              AND CAST(pt.tenant_id AS TEXT) = %s
+        )
+    """
 
 
 @disciplines_bp.route("/api/disciplines", methods=["GET"])
@@ -942,10 +963,14 @@ def search_patients():
 @disciplines_bp.route("/api/patients/first20", methods=["GET"])
 @handle_route_errors
 def get_first_20_patients():
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to view patients"}), 401
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
+                cursor.execute(f"""
     SELECT
         pp.party_id,
         pp.first_name,
@@ -966,9 +991,10 @@ def get_first_20_patients():
        AND pa.is_active = true
     WHERE pp.party_type = 'PATIENT'
       AND pp.is_active = true
+      AND {_patient_tenant_condition()}
     ORDER BY pp.last_name, pp.first_name
     LIMIT 20
-""")
+""", (identity["tenant_id"],))
 
                 rows = cursor.fetchall()
 
@@ -2596,9 +2622,17 @@ def search_patients_advanced():
             }), 503
 
     # ── Case 1: local PCES_BASE (p_party direct query) ───────────────────────
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to search patients"}), 401
+
     try:
-        conditions = ["pp.party_type = 'PATIENT'", "pp.is_active = true"]
-        params: list = []
+        conditions = [
+            "pp.party_type = 'PATIENT'",
+            "pp.is_active = true",
+            _patient_tenant_condition(),
+        ]
+        params: list = [identity["tenant_id"]]
 
         if first:
             conditions.append("LOWER(pp.first_name) LIKE %s")

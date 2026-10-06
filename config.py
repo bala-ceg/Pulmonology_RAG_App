@@ -9,12 +9,15 @@ changes to existing .env files.
 from __future__ import annotations
 
 import os
+import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
 class Config:
+    SECRET_KEY: str = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+
     # ------------------------------------------------------------------
     # Storage paths
     # ------------------------------------------------------------------

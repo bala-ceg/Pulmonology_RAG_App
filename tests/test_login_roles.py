@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import sqlite3
 
 from flask import Flask
 
@@ -48,6 +49,7 @@ def _register_test_app():
     app = Flask(__name__)
     app.register_blueprint(disciplines.disciplines_bp)
     app.config["TESTING"] = True
+    app.config["SECRET_KEY"] = "test-only-session-key"
     return app
 
 
@@ -111,6 +113,11 @@ def test_login_maps_nurse_to_nurse_party_id(monkeypatch, caplog):
     assert payload["tenant_id"] == "tenant-101"
     assert payload["tenant_code"] == "HOSP-101"
     assert payload["tenant_name"] == "KIMS Kolkata"
+    with client.session_transaction() as login_session:
+        assert login_session["pces_identity"] == {
+            "party_id": "nurse-party-123",
+            "tenant_id": "tenant-101",
+        }
     assert any(
         "party_id=nurse-party-123" in record.message
         and "tenant_name='KIMS Kolkata'" in record.message
@@ -205,3 +212,97 @@ def test_login_requires_hospital_selection(monkeypatch):
 
     assert response.status_code == 400
     assert "hospital" in response.get_json()["message"]
+
+
+def test_patient_list_requires_login(monkeypatch):
+    def unexpected_db_conn():
+        raise AssertionError("unauthenticated requests must not query patients")
+
+    monkeypatch.setattr(disciplines, "_ehr_conn", unexpected_db_conn)
+    client = _register_test_app().test_client()
+    response = client.get("/api/patients/first20?tenant_id=other-tenant")
+    assert response.status_code == 401
+
+
+def test_patient_list_filters_by_authenticated_tenant(monkeypatch):
+    with sqlite3.connect(":memory:") as database:
+        database.executescript("""
+            CREATE TABLE p_party (
+                party_id TEXT, party_type TEXT, first_name TEXT,
+                middle_name TEXT, last_name TEXT, date_of_birth TEXT,
+                phone TEXT, email TEXT, is_active BOOLEAN
+            );
+            CREATE TABLE p_address (
+                party_id TEXT, address_id TEXT, line1 TEXT, line2 TEXT,
+                city TEXT, state TEXT, postal_code TEXT, is_active BOOLEAN
+            );
+            CREATE TABLE p_party_tenant (party_id TEXT, tenant_id TEXT);
+            INSERT INTO p_party VALUES
+                ('patient-a', 'PATIENT', 'Alice', '', 'A', NULL, '', '', TRUE),
+                ('patient-b', 'PATIENT', 'Bob', '', 'B', NULL, '', '', TRUE);
+            INSERT INTO p_party_tenant VALUES
+                ('patient-a', 'tenant-a'), ('patient-a', 'tenant-a'),
+                ('patient-b', 'tenant-b');
+        """)
+
+        class PatientCursor(_FakeCursor):
+            def execute(self, query, params=None):
+                self.result = database.execute(query.replace("%s", "?"), params)
+
+            def fetchall(self):
+                return self.result.fetchall()
+
+        @contextmanager
+        def fake_ehr_conn():
+            yield _FakeConnection(PatientCursor([]))
+
+        monkeypatch.setattr(disciplines, "_ehr_conn", fake_ehr_conn)
+        client = _register_test_app().test_client()
+        with client.session_transaction() as login_session:
+            login_session["pces_identity"] = {
+                "party_id": "doctor-a",
+                "tenant_id": "tenant-a",
+            }
+        response = client.get("/api/patients/first20?tenant_id=tenant-b")
+        assert response.status_code == 200
+        assert [row["patient_id"] for row in response.get_json()] == ["patient-a"]
+
+        assert client.post("/api/logout").status_code == 200
+        assert client.get("/api/patients/first20").status_code == 401
+
+
+def test_local_patient_search_requires_login(monkeypatch):
+    def unexpected_db_conn():
+        raise AssertionError("unauthenticated search must not query patients")
+
+    monkeypatch.setattr(disciplines, "_ehr_conn", unexpected_db_conn)
+    response = _register_test_app().test_client().get("/api/patient/search?first=Alice")
+    assert response.status_code == 401
+
+
+def test_local_patient_search_uses_session_tenant(monkeypatch):
+    cursor = _FakeCursor([])
+    cursor.params = None
+
+    def execute(query, params=None):
+        cursor.queries.append(str(query))
+        cursor.params = params
+
+    cursor.execute = execute
+
+    @contextmanager
+    def fake_ehr_conn():
+        yield _FakeConnection(cursor)
+
+    monkeypatch.setattr(disciplines, "_ehr_conn", fake_ehr_conn)
+    client = _register_test_app().test_client()
+    with client.session_transaction() as login_session:
+        login_session["pces_identity"] = {
+            "party_id": "doctor-a",
+            "tenant_id": "tenant-a",
+        }
+    response = client.get("/api/patient/search?first=Alice&tenant_id=tenant-b")
+    assert response.status_code == 200
+    assert cursor.params == ["tenant-a", "%alice%"]
+    assert "EXISTS" in cursor.queries[0]
+    assert "pt.party_id = pp.party_id" in cursor.queries[0]

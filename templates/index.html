@@ -319,7 +319,7 @@
 
         .yodha-login-modal input[type="text"],
         .yodha-login-modal input[type="password"],
-        .yodha-login-modal select {
+        .yodha-login-modal input[type="search"] {
             width: 100%;
             padding: 9px 10px;
             font-size: 14px;
@@ -329,10 +329,45 @@
         }
 
         .yodha-login-modal input:focus,
-        .yodha-login-modal select:focus {
+        .yodha-login-modal input[type="search"]:focus {
             outline: none;
             border-color: #f7971e;
             box-shadow: 0 0 0 2px rgba(247, 151, 30, 0.2);
+        }
+
+        .login-organization-picker {
+            position: relative;
+        }
+
+        .login-organization-results {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 3px);
+            max-height: 180px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+            z-index: 2;
+            display: none;
+        }
+
+        .login-organization-results.active {
+            display: block;
+        }
+
+        .login-organization-option {
+            padding: 9px 10px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .login-organization-option:hover,
+        .login-organization-option:focus {
+            background: #fff4df;
+            outline: none;
         }
 
         .yodha-login-modal .login-actions {
@@ -4207,10 +4242,17 @@
                 <input id="yodha-password" type="password" autocomplete="current-password" placeholder="Password" />
             </div>
             <div class="field">
-                <label for="yodha-hospital">Hospital</label>
-                <select id="yodha-hospital" autocomplete="organization" disabled>
-                    <option value="">Loading hospitals...</option>
-                </select>
+                <label for="yodha-hospital">Organization</label>
+                <div class="login-organization-picker">
+                    <input id="yodha-hospital" type="search"
+                           autocomplete="off"
+                           placeholder="Type organization name"
+                           disabled />
+                    <input id="yodha-tenant-id" type="hidden" />
+                    <div id="yodha-organization-results"
+                         class="login-organization-results"
+                         role="listbox"></div>
+                </div>
             </div>
             <div class="login-actions">
                 <button id="yodha-login-submit" class="btn-login" onclick="submitPcesLogin()">Login</button>
@@ -12233,47 +12275,112 @@ ${data.conclusion}
             document.getElementById('yodha-login-overlay').classList.remove('active');
         }
 
+        let loginTenants = [];
+
+        function hideLoginOrganizationResults() {
+            const results = document.getElementById('yodha-organization-results');
+            results.classList.remove('active');
+            results.replaceChildren();
+        }
+
+        function renderLoginOrganizationResults(searchText = '') {
+            const input = document.getElementById('yodha-hospital');
+            const results = document.getElementById('yodha-organization-results');
+            const normalizedSearch = searchText.trim().toLowerCase();
+            if (!normalizedSearch) {
+                hideLoginOrganizationResults();
+                return;
+            }
+            const matches = loginTenants
+                .filter(tenant => tenant.tenant_name.toLowerCase().includes(normalizedSearch))
+                .slice(0, 20);
+
+            results.replaceChildren();
+            if (!input.disabled && matches.length) {
+                matches.forEach(tenant => {
+                    const option = document.createElement('div');
+                    option.className = 'login-organization-option';
+                    option.textContent = tenant.tenant_name;
+                    option.setAttribute('role', 'option');
+                    option.tabIndex = 0;
+                    const selectOrganization = () => {
+                        input.value = tenant.tenant_name;
+                        document.getElementById('yodha-tenant-id').value = tenant.tenant_id;
+                        hideLoginOrganizationResults();
+                    };
+                    option.addEventListener('mousedown', event => event.preventDefault());
+                    option.addEventListener('click', selectOrganization);
+                    option.addEventListener('keydown', event => {
+                        if (event.key === 'Enter') selectOrganization();
+                    });
+                    results.appendChild(option);
+                });
+                results.classList.add('active');
+            } else {
+                hideLoginOrganizationResults();
+            }
+        }
+
         async function loadLoginTenants() {
-            const select = document.getElementById('yodha-hospital');
+            const input = document.getElementById('yodha-hospital');
+            const tenantIdInput = document.getElementById('yodha-tenant-id');
             const submit = document.getElementById('yodha-login-submit');
-            select.replaceChildren(new Option('Loading hospitals...', ''));
-            select.disabled = true;
+            input.value = 'Loading organizations...';
+            tenantIdInput.value = '';
+            input.disabled = true;
             submit.disabled = true;
 
             try {
                 const res = await fetch('/api/tenants');
-                const tenants = await res.json();
-                if (!res.ok || !Array.isArray(tenants)) {
-                    throw new Error(tenants.message || 'Unable to load hospitals');
+                loginTenants = await res.json();
+                if (!res.ok || !Array.isArray(loginTenants)) {
+                    throw new Error(loginTenants.message || 'Unable to load organizations');
                 }
 
-                select.replaceChildren(new Option('Select a hospital', ''));
-                tenants.forEach(tenant => {
-                    select.add(new Option(tenant.tenant_name, tenant.tenant_id));
-                });
-                if (tenants.length === 0) {
-                    select.replaceChildren(new Option('No hospitals available', ''));
-                }
-                select.disabled = tenants.length === 0;
-                submit.disabled = tenants.length === 0;
+                input.value = '';
+                input.placeholder = loginTenants.length
+                    ? 'Type organization name'
+                    : 'No organizations available';
+                input.disabled = loginTenants.length === 0;
+                submit.disabled = loginTenants.length === 0;
             } catch (err) {
-                select.replaceChildren(new Option('Unable to load hospitals', ''));
+                loginTenants = [];
+                input.value = '';
+                input.placeholder = 'Unable to load organizations';
+                input.disabled = true;
                 const msg = document.getElementById('yodha-login-msg');
                 msg.className = 'login-msg error';
-                msg.textContent = 'Unable to load hospitals. Please try again.';
+                msg.textContent = 'Unable to load organizations. Please try again.';
                 msg.style.display = 'block';
             }
         }
 
+        document.getElementById('yodha-hospital').addEventListener('input', event => {
+            document.getElementById('yodha-tenant-id').value = '';
+            renderLoginOrganizationResults(event.target.value);
+        });
+
+        document.getElementById('yodha-hospital').addEventListener('focus', event => {
+            if (event.target.value.trim()) {
+                renderLoginOrganizationResults(event.target.value);
+            }
+        });
+
+        document.addEventListener('click', event => {
+            if (!event.target.closest('.login-organization-picker')) {
+                hideLoginOrganizationResults();
+            }
+        });
+
         async function submitPcesLogin() {
             const username = document.getElementById('yodha-username').value.trim();
             const password = document.getElementById('yodha-password').value;
-            const tenantId = document.getElementById('yodha-hospital').value;
+            const tenantId = document.getElementById('yodha-tenant-id').value;
             const msg = document.getElementById('yodha-login-msg');
 
             if (!username || !password || !tenantId) {
                 msg.className = 'login-msg error';
-                msg.textContent = 'Please enter your username and password, and select a hospital.';
+                msg.textContent = 'Please enter your username and password, and select an organization.';
                 return;
             }
 
@@ -12525,7 +12632,15 @@ ${data.conclusion}
             if (hdrWrapper) hdrWrapper.style.display = authed ? 'flex' : 'none';
         }
 
-        function logout() {
+        async function logout() {
+            try {
+                const response = await fetch('/api/logout', {method: 'POST'});
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('[PCES] Unable to log out:', error);
+                alert('Unable to log out. Please try again.');
+                return;
+            }
             // Clear auth state
             _pcesAuthed = false;
             ['pces_auth','pces_username','pces_party_id','pces_party_type',
