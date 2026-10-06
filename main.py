@@ -155,6 +155,9 @@ init_pool()
 # Flask application
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
+app.config["SECRET_KEY"] = Config.SECRET_KEY
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 persist_directory = Config.PERSIST_DIRECTORY
 
