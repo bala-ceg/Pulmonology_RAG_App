@@ -592,14 +592,19 @@ def login():
             for token in (pces_role or "").split(",")
             if token.strip()
         }
-        party_type = "NURSE" if "NURSE" in role_tokens else "DOCTOR"
+        if "OFFICE_ADMIN" in role_tokens:
+            party_type = "OFFICE_ADMIN"
+        elif "NURSE" in role_tokens:
+            party_type = "NURSE"
+        else:
+            party_type = "DOCTOR"
 
         # Resolve the EHR UUID. Nurse emails are not unique in the current
         # p_party data, so nurse matching uses email + first name + normalized
         # last name (trailing commas ignored). Doctors keep the previous
         # email-only fallback to avoid breaking existing accounts.
         ehr_party_id: str | None = None
-        if email:
+        if email and party_type in {"DOCTOR", "NURSE"}:
             try:
                 with _ehr_conn() as ehr_conn:
                     with ehr_conn.cursor() as ehr_cur:
@@ -679,6 +684,308 @@ def login():
     except Exception as exc:
         logger.error("Login error: %s", exc)
         return jsonify({"success": False, "message": "Server error during login"}), 500
+
+
+
+
+# ============================================================
+# Office Admin - Tenant Management
+# ============================================================
+
+@disciplines_bp.route("/api/tenants", methods=["GET"])
+@handle_route_errors
+def get_tenants():
+    """Return active tenants sorted by tenant_name.
+
+    Optional query parameter:
+        ?name=<partial tenant name>
+    """
+    tenant_name = (request.args.get("name") or "").strip()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                if tenant_name:
+                    cursor.execute(
+                        """
+                        SELECT
+                            tenant_id,
+                            tenant_code,
+                            tenant_name,
+                            status,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            version_no
+                        FROM ehr_ccm_schema.p_tenant
+                        WHERE COALESCE(is_active, TRUE) = TRUE
+                          AND tenant_name ILIKE %s
+                        ORDER BY tenant_name ASC
+                        """,
+                        (f"%{tenant_name}%",),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT
+                            tenant_id,
+                            tenant_code,
+                            tenant_name,
+                            status,
+                            created_at,
+                            updated_at,
+                            created_by,
+                            updated_by,
+                            version_no
+                        FROM ehr_ccm_schema.p_tenant
+                        WHERE COALESCE(is_active, TRUE) = TRUE
+                        ORDER BY tenant_name ASC
+                        """
+                    )
+
+                rows = cursor.fetchall()
+
+        tenants = []
+
+        for (
+            tenant_id,
+            tenant_code,
+            tenant_name_value,
+            status,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            version_no,
+        ) in rows:
+            tenants.append({
+                "tenant_id": str(tenant_id),
+                "tenant_code": tenant_code or "",
+                "tenant_name": tenant_name_value or "",
+                "status": status or "",
+                "created_at": (
+                    created_at.isoformat(timespec="seconds")
+                    if created_at
+                    else ""
+                ),
+                "created_date": (
+                    created_at.strftime("%Y-%m-%d")
+                    if created_at
+                    else ""
+                ),
+                "updated_at": (
+                    updated_at.isoformat(timespec="seconds")
+                    if updated_at
+                    else ""
+                ),
+                "created_by": created_by or "",
+                "updated_by": updated_by or "",
+                "version_no": version_no or 1,
+            })
+
+        return jsonify(tenants)
+
+    except Exception as exc:
+        logger.exception("Unable to retrieve tenants: %s", exc)
+        return jsonify({"error": "Unable to retrieve tenants"}), 500
+
+
+@disciplines_bp.route("/api/tenants", methods=["POST"])
+@handle_route_errors
+def create_tenant():
+    """Create a new active tenant."""
+    data = request.get_json(silent=True) or {}
+
+    tenant_name = (data.get("tenant_name") or "").strip()
+    tenant_code = (data.get("tenant_code") or "").strip()
+    actor = (data.get("actor") or "PCES_UI").strip() or "PCES_UI"
+
+    if not tenant_name:
+        return jsonify({"error": "Tenant Name is required"}), 400
+
+    if not tenant_code:
+        return jsonify({"error": "Tenant Code Name is required"}), 400
+
+    if len(tenant_name) > 200:
+        return jsonify({"error": "Tenant Name cannot exceed 200 characters"}), 400
+
+    if len(tenant_code) > 50:
+        return jsonify({"error": "Tenant Code Name cannot exceed 50 characters"}), 400
+
+    new_tenant_id = uuid.uuid4()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                # Give the user a clean validation error instead of relying only
+                # on the unique-constraint exception.
+                cursor.execute(
+                    """
+                    SELECT tenant_id
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE UPPER(tenant_code) = UPPER(%s)
+                    LIMIT 1
+                    """,
+                    (tenant_code,),
+                )
+
+                if cursor.fetchone():
+                    return jsonify({
+                        "error": (
+                            f"Tenant Code Name '{tenant_code}' already exists. "
+                            "Please use a unique tenant code."
+                        )
+                    }), 409
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_tenant (
+                        tenant_id,
+                        tenant_code,
+                        tenant_name,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, %s, %s, 'ACTIVE',
+                        NOW(), %s, TRUE, 1
+                    )
+                    RETURNING tenant_id
+                    """,
+                    (
+                        new_tenant_id,
+                        tenant_code,
+                        tenant_name,
+                        actor[:100],
+                    ),
+                )
+
+                inserted = cursor.fetchone()
+
+        return jsonify({
+            "success": True,
+            "tenant_id": str(inserted[0] if inserted else new_tenant_id),
+            "tenant_code": tenant_code,
+            "tenant_name": tenant_name,
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Unable to create tenant: %s", exc)
+
+        # Defensive fallback for a race where another request inserted the
+        # same tenant_code after the pre-check.
+        if "uk_p_tenant_code" in str(exc) or "duplicate key" in str(exc).lower():
+            return jsonify({
+                "error": (
+                    f"Tenant Code Name '{tenant_code}' already exists. "
+                    "Please use a unique tenant code."
+                )
+            }), 409
+
+        return jsonify({"error": "Unable to create tenant"}), 500
+
+
+@disciplines_bp.route(
+    "/api/tenants/<tenant_id>",
+    methods=["PUT"]
+)
+@handle_route_errors
+def update_tenant(tenant_id: str):
+    """Update an existing active tenant. tenant_id itself is immutable."""
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        return jsonify({"error": "Invalid tenant_id"}), 400
+
+    data = request.get_json(silent=True) or {}
+
+    tenant_name = (data.get("tenant_name") or "").strip()
+    tenant_code = (data.get("tenant_code") or "").strip()
+    actor = (data.get("actor") or "PCES_UI").strip() or "PCES_UI"
+
+    if not tenant_name:
+        return jsonify({"error": "Tenant Name is required"}), 400
+
+    if not tenant_code:
+        return jsonify({"error": "Tenant Code Name is required"}), 400
+
+    if len(tenant_name) > 200:
+        return jsonify({"error": "Tenant Name cannot exceed 200 characters"}), 400
+
+    if len(tenant_code) > 50:
+        return jsonify({"error": "Tenant Code Name cannot exceed 50 characters"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT tenant_id
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE UPPER(tenant_code) = UPPER(%s)
+                      AND tenant_id <> %s
+                    LIMIT 1
+                    """,
+                    (tenant_code, tenant_uuid),
+                )
+
+                if cursor.fetchone():
+                    return jsonify({
+                        "error": (
+                            f"Tenant Code Name '{tenant_code}' already exists. "
+                            "Please use a unique tenant code."
+                        )
+                    }), 409
+
+                cursor.execute(
+                    """
+                    UPDATE ehr_ccm_schema.p_tenant
+                    SET
+                        tenant_name = %s,
+                        tenant_code = %s,
+                        updated_at = NOW(),
+                        updated_by = %s,
+                        version_no = COALESCE(version_no, 0) + 1
+                    WHERE tenant_id = %s
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    RETURNING tenant_id
+                    """,
+                    (
+                        tenant_name,
+                        tenant_code,
+                        actor[:100],
+                        tenant_uuid,
+                    ),
+                )
+
+                updated = cursor.fetchone()
+
+                if not updated:
+                    return jsonify({"error": "Tenant not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "tenant_id": str(tenant_uuid),
+            "tenant_code": tenant_code,
+            "tenant_name": tenant_name,
+        })
+
+    except Exception as exc:
+        logger.exception("Unable to update tenant %s: %s", tenant_id, exc)
+
+        if "uk_p_tenant_code" in str(exc) or "duplicate key" in str(exc).lower():
+            return jsonify({
+                "error": (
+                    f"Tenant Code Name '{tenant_code}' already exists. "
+                    "Please use a unique tenant code."
+                )
+            }), 409
+
+        return jsonify({"error": "Unable to update tenant"}), 500
 
 
 @disciplines_bp.route("/api/disciplines", methods=["GET"])
@@ -1044,6 +1351,71 @@ def get_first_20_doctors():
 
     except Exception as exc:
         logger.error("Unable to retrieve first 20 doctors: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+# ============================================================
+# Patient Scheduling - Nurse picker
+# ============================================================
+
+@disciplines_bp.route("/api/nurses/first20", methods=["GET"])
+@handle_route_errors
+def get_first_20_nurses():
+    """Return active NURSE parties for the Scheduling nurse picker."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        party_id,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        date_of_birth,
+                        phone,
+                        email
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_type = 'NURSE'
+                      AND is_active = TRUE
+                    ORDER BY last_name, first_name
+                    LIMIT 20
+                    """
+                )
+                rows = cursor.fetchall()
+
+        nurses = []
+
+        for (
+            party_id,
+            first_name,
+            middle_name,
+            last_name,
+            dob,
+            phone,
+            email,
+        ) in rows:
+            full_name = " ".join(
+                value
+                for value in [first_name, middle_name, last_name]
+                if value
+            )
+
+            nurses.append({
+                "nurse_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": full_name,
+                "dob": str(dob)[:10] if dob else "",
+                "phone": phone or "",
+                "email": email or "",
+            })
+
+        return jsonify(nurses)
+
+    except Exception as exc:
+        logger.exception("Unable to retrieve first 20 nurses: %s", exc)
         return jsonify({"error": str(exc)}), 500
 # ============================================================
 # Patient -> Doctor relationship
@@ -1897,7 +2269,7 @@ def create_schedule():
     """Create one appointment in p_schedule and its planned encounter in p_encounter.
 
     Expected JSON:
-      patient_id, provider_id, hospital_id, appointment_date,
+      patient_id, provider_id, nurse_id, hospital_id, appointment_date,
       appointment_time, visit_type, optional notes, optional status,
       optional created_by.
 
@@ -1908,6 +2280,7 @@ def create_schedule():
 
     patient_id = (data.get("patient_id") or "").strip()
     provider_id = (data.get("provider_id") or "").strip()
+    nurse_id = (data.get("nurse_id") or "").strip()
     hospital_id = (data.get("hospital_id") or "").strip()
     appointment_date = (data.get("appointment_date") or "").strip()
     appointment_time = (data.get("appointment_time") or "").strip()
@@ -1921,6 +2294,7 @@ def create_schedule():
     required = {
         "patient_id": patient_id,
         "provider_id": provider_id,
+        "nurse_id": nurse_id,
         "hospital_id": hospital_id,
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
@@ -1937,10 +2311,14 @@ def create_schedule():
     try:
         patient_uuid = uuid.UUID(patient_id)
         provider_uuid = uuid.UUID(provider_id)
+        nurse_uuid = uuid.UUID(nurse_id)
         hospital_uuid = uuid.UUID(hospital_id)
     except ValueError:
         return jsonify({
-            "error": "patient_id, provider_id and hospital_id must be valid UUIDs"
+            "error": (
+                "patient_id, provider_id, nurse_id and hospital_id "
+                "must be valid UUIDs"
+            )
         }), 400
 
     try:
@@ -1964,10 +2342,11 @@ def create_schedule():
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
 
-                # Validate the three selected party IDs and their expected roles.
+                # Validate the selected party IDs and their expected roles.
                 party_checks = [
                     (patient_uuid, "PATIENT", "patient_id"),
                     (provider_uuid, "DOCTOR", "provider_id"),
+                    (nurse_uuid, "NURSE", "nurse_id"),
                     (hospital_uuid, "ORGANIZATION", "hospital_id"),
                 ]
 
@@ -2021,6 +2400,7 @@ def create_schedule():
                         hospital_id,
                         patient_id,
                         provider_id,
+                        nurse_id,
                         appointment_date,
                         appointment_time,
                         status,
@@ -2030,7 +2410,7 @@ def create_schedule():
                         version_no
                     )
                     VALUES (
-                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s,
                         NOW(), %s, TRUE, 1
                     )
                     RETURNING schedule_id
@@ -2040,6 +2420,7 @@ def create_schedule():
                         hospital_uuid,
                         patient_uuid,
                         provider_uuid,
+                        nurse_uuid,
                         parsed_date,
                         parsed_time,
                         status,
@@ -2085,6 +2466,7 @@ def create_schedule():
         return jsonify({
             "success": True,
             "schedule_id": str(inserted[0] if inserted else new_schedule_id),
+            "nurse_id": str(nurse_uuid),
             "encounter_id": str(
                 encounter_inserted[0]
                 if encounter_inserted

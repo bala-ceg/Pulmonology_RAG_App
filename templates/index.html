@@ -3986,7 +3986,129 @@
             }
         }
 
-    </style>
+    
+/* =====================================================
+   OFFICE ADMIN - TENANT MANAGEMENT
+   ===================================================== */
+#tenant-management-panel {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    background: #fff;
+    border: 1px solid #222;
+}
+
+#tenant-management-panel .tenant-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid #b9c3cf;
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+
+#tenant-management-panel .tenant-toolbar label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a3a5c;
+}
+
+#tenant-management-panel .tenant-toolbar input {
+    width: 260px;
+    height: 30px;
+    padding: 4px 8px;
+    border: 1px solid #9aa8b7;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+#tenant-management-panel .tenant-toolbar button {
+    height: 30px;
+    min-width: 82px;
+    margin: 0;
+    padding: 4px 12px;
+    border: 1px solid #183b64;
+    border-radius: 3px;
+    background: #deeaf5;
+    color: #111;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#tenant-management-panel .tenant-list-area {
+    flex: 1 1 auto;
+    min-height: 180px;
+    overflow: auto;
+    border-bottom: 1px solid #777;
+}
+
+#tenant-management-panel .tenant-detail-area {
+    flex: 0 0 235px;
+    padding: 8px 18px 10px;
+    overflow: auto;
+}
+
+#tenant-management-panel .tenant-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+#tenant-management-panel .tenant-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(430px, 700px);
+    gap: 7px;
+}
+
+#tenant-management-panel .tenant-field {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+}
+
+#tenant-management-panel .tenant-field label {
+    border: 1px solid #111;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+}
+
+#tenant-management-panel .tenant-field input {
+    border: 1px solid #111;
+    border-left: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    background: #fffbea;
+}
+
+#tenant-management-panel .tenant-field input[readonly] {
+    background: #f3f4f6;
+    color: #333;
+}
+
+#tenant-management-panel .tenant-save-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+#tenant-management-panel .tenant-save-actions button,
+#tenant-management-panel .tenant-action-bar button {
+    min-width: 100px;
+    margin: 0;
+}
+
+#tenant-management-panel tr.selected td {
+    background: #d7e7fb;
+}
+
+</style>
 </head>
 <body> 
     <div id="toast" class="toast"></div>
@@ -4314,6 +4436,22 @@
                     Scheduling
                 </button>
             </div>
+
+            <!-- Office Admin Menu: visible only for OFFICE_ADMIN -->
+            <div
+                id="office-admin-box"
+                class="sidebar-section-box"
+                style="display:none;">
+                <div class="sidebar-section-label">Office Admin</div>
+
+                <button
+                    id="tenant-admin-tab"
+                    class="section-btn"
+                    onclick="requireAuth(() => { loadTenantManagement(); syncEhrAiToggleLabel(); })">
+                    Tenant
+                </button>
+            </div>
+
 
             </div><!-- /.sidebar-scroll-area -->
 
@@ -4887,6 +5025,125 @@
 </div>
 
 <!-- =====================================================
+     OFFICE ADMIN - TENANT MANAGEMENT
+     ===================================================== -->
+<div
+    id="tenant-management-panel"
+    class="entity-data-panel"
+    style="display:none;">
+
+    <div class="entity-list-area tenant-list-area">
+        <div class="entity-list-title">
+            Tenant List Applet
+        </div>
+
+        <div class="tenant-toolbar">
+            <label for="tenant-search-name">Tenant Name</label>
+
+            <input
+                id="tenant-search-name"
+                type="text"
+                maxlength="200"
+                placeholder="Search by Tenant Name"
+                autocomplete="off"
+                onkeydown="handleTenantSearchKeydown(event)">
+
+            <button
+                type="button"
+                onclick="searchTenants()">
+                Search
+            </button>
+
+            <button
+                type="button"
+                onclick="resetTenantSearch()">
+                Reset
+            </button>
+        </div>
+
+        <div class="entity-table-wrapper">
+            <table class="entity-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Tenant ID</th>
+                        <th>Tenant Name</th>
+                        <th>Tenant Code Name</th>
+                        <th>Created Date</th>
+                    </tr>
+                </thead>
+
+                <tbody id="tenant-list-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tenant-detail-area">
+        <div class="tenant-action-bar">
+            <div class="entity-detail-title" style="margin:0;">
+                Tenant Details
+            </div>
+
+            <button
+                id="tenant-insert-btn"
+                type="button"
+                class="entity-action-btn"
+                onclick="startTenantInsert()">
+                Insert
+            </button>
+        </div>
+
+        <div class="tenant-detail-grid">
+            <div class="tenant-field">
+                <label>Tenant ID</label>
+                <input
+                    id="tenant-detail-id"
+                    type="text"
+                    readonly
+                    placeholder="Generated on Save">
+            </div>
+
+            <div class="tenant-field">
+                <label>Tenant Name</label>
+                <input
+                    id="tenant-detail-name"
+                    type="text"
+                    maxlength="200"
+                    autocomplete="off">
+            </div>
+
+            <div class="tenant-field">
+                <label>Tenant Code Name</label>
+                <input
+                    id="tenant-detail-code"
+                    type="text"
+                    maxlength="50"
+                    autocomplete="off">
+            </div>
+        </div>
+
+        <div class="tenant-save-actions">
+            <button
+                id="tenant-save-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="saveTenant()">
+                Save
+            </button>
+
+            <button
+                id="tenant-cancel-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="cancelTenantEdit()">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- =====================================================
      PATIENT SCHEDULING SCREEN - MILESTONE 1
      ===================================================== -->
 <div
@@ -4967,6 +5224,32 @@
                 </div>
 
                 <div class="entity-field">
+                    <label>Nurse</label>
+
+                    <div class="scheduling-select-row">
+                        <input
+                            id="scheduling-nurse-name"
+                            type="text"
+                            readonly
+                            placeholder="Not selected">
+
+                        <button
+                            type="button"
+                            class="scheduling-select-btn scheduling-picker-btn"
+                            onclick="openSchedulingNurseModal()">
+                            Select Nurse
+                        </button>
+                    </div>
+
+                    <input id="scheduling-nurse-id" type="hidden">
+
+                    <div
+                        id="scheduling-nurse-id-display"
+                        class="scheduling-selected-id">
+                    </div>
+                </div>
+
+                <div class="entity-field">
                     <label>Hospital</label>
 
                     <div class="scheduling-select-row">
@@ -4991,29 +5274,28 @@
                         class="scheduling-selected-id">
                     </div>
                 </div>
-
-                <div class="scheduling-visit-notes-row">
-                    <div class="entity-field">
-                        <label>Visit Type</label>
-                        <input
-                            id="scheduling-visit-type"
-                            type="text"
-                            maxlength="100"
-                            placeholder="e.g. Yearly Check Up">
-                    </div>
-
-                    <div class="entity-field scheduling-notes-field">
-                        <label>Notes</label>
-                        <input
-                            id="scheduling-notes"
-                            type="text"
-                            maxlength="500"
-                            placeholder="Optional visit notes">
-                    </div>
-                </div>
             </div>
 
             <div class="scheduling-appointment-column">
+
+                <div class="entity-field">
+                    <label>Visit Type</label>
+                    <input
+                        id="scheduling-visit-type"
+                        type="text"
+                        maxlength="100"
+                        placeholder="e.g. Yearly Check Up">
+                </div>
+
+                <div class="entity-field scheduling-notes-field">
+                    <label>Notes</label>
+                    <input
+                        id="scheduling-notes"
+                        type="text"
+                        maxlength="500"
+                        placeholder="Optional visit notes">
+                </div>
+
                 <div class="entity-field">
                     <label>Appt Date</label>
                     <input
@@ -5119,6 +5401,50 @@
         </div>
     </div>
 </div>
+
+
+<div
+    id="scheduling-nurse-modal"
+    class="scheduling-picker-overlay"
+    onclick="handleSchedulingModalBackdrop(event, 'nurse')">
+
+    <div
+        class="scheduling-picker-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scheduling-nurse-modal-title">
+
+        <div class="scheduling-picker-header">
+            <h3 id="scheduling-nurse-modal-title">
+                Select Nurse
+            </h3>
+
+            <button
+                type="button"
+                class="scheduling-picker-close"
+                onclick="closeSchedulingNurseModal()"
+                aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="scheduling-picker-body">
+            <table class="scheduling-picker-table">
+                <thead>
+                    <tr>
+                        <th>S No</th>
+                        <th>Nurse Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+
+                <tbody id="scheduling-nurse-modal-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 
 
 <div
@@ -5587,6 +5913,8 @@
         // tab buttons (Patients / Doctor / Patient-Doctor / Doctor-Patient /
         // My Schedule / Scheduling) at a time.
         function setActiveEntityDataTab(activeTabId) {
+            hideTenantManagementPanel();
+
             document
                 .querySelectorAll('.entity-data-tabs-box .entity-data-tab')
                 .forEach(btn => {
@@ -5606,10 +5934,15 @@ let selectedSchedulingPatientName = '';
 let selectedSchedulingProviderId = null;
 let selectedSchedulingProviderName = '';
 
+let selectedSchedulingNurseId = null;
+let selectedSchedulingNurseName = '';
+
 let selectedSchedulingHospitalId = null;
 let selectedSchedulingHospitalName = '';
 
 async function loadRelationshipMode(mode) {
+
+    hideTenantManagementPanel();
 
     hidePatientEncounterPanel();
 
@@ -6190,6 +6523,8 @@ function renderRelationshipResults(records) {
 }
 async function loadEntityDataset(type) {
 
+    hideTenantManagementPanel();
+
     hidePatientEncounterPanel();
     const schedulePanel =
         document.getElementById(
@@ -6716,6 +7051,8 @@ function renderEntityRecords(records) {
 
 async function loadSchedulingPanel() {
 
+    hideTenantManagementPanel();
+
     hidePatientEncounterPanel();
 
     const chatMessages =
@@ -6861,6 +7198,18 @@ function renderSchedulingPatients(patients) {
 
         body.appendChild(row);
     });
+
+    // Automatically select the first patient when Scheduling opens.
+    // This keeps the Scheduling Details applet populated immediately
+    // without requiring an extra click from the user.
+    const firstRow = body.querySelector('tr');
+
+    if (patients.length > 0 && firstRow) {
+        selectSchedulingPatient(
+            patients[0],
+            firstRow
+        );
+    }
 }
 
 function selectSchedulingPatient(patient, selectedRow) {
@@ -6899,13 +7248,16 @@ function selectSchedulingPatient(patient, selectedRow) {
 
 // ============================================================
 // Patient Scheduling - Milestone 2
-// Select Doctor + Select Hospital
+// Select Doctor + Select Nurse + Select Hospital
 // ============================================================
 
 function resetSchedulingSelections() {
 
     selectedSchedulingProviderId = null;
     selectedSchedulingProviderName = '';
+
+    selectedSchedulingNurseId = null;
+    selectedSchedulingNurseName = '';
 
     selectedSchedulingHospitalId = null;
     selectedSchedulingHospitalName = '';
@@ -6919,6 +7271,15 @@ function resetSchedulingSelections() {
     const doctorIdDisplay =
         document.getElementById('scheduling-doctor-id-display');
 
+    const nurseName =
+        document.getElementById('scheduling-nurse-name');
+
+    const nurseId =
+        document.getElementById('scheduling-nurse-id');
+
+    const nurseIdDisplay =
+        document.getElementById('scheduling-nurse-id-display');
+
     const hospitalName =
         document.getElementById('scheduling-hospital-name');
 
@@ -6931,6 +7292,10 @@ function resetSchedulingSelections() {
     if (doctorName) doctorName.value = '';
     if (doctorId) doctorId.value = '';
     if (doctorIdDisplay) doctorIdDisplay.textContent = '';
+
+    if (nurseName) nurseName.value = '';
+    if (nurseId) nurseId.value = '';
+    if (nurseIdDisplay) nurseIdDisplay.textContent = '';
 
     if (hospitalName) hospitalName.value = '';
     if (hospitalId) hospitalId.value = '';
@@ -7008,6 +7373,11 @@ async function saveSchedulingAppointment() {
         return;
     }
 
+    if (!selectedSchedulingNurseId) {
+        alert('Please select a nurse.');
+        return;
+    }
+
     if (!selectedSchedulingHospitalId) {
         alert('Please select a hospital.');
         return;
@@ -7032,6 +7402,7 @@ async function saveSchedulingAppointment() {
     const payload = {
         patient_id: selectedSchedulingPatientId,
         provider_id: selectedSchedulingProviderId,
+        nurse_id: selectedSchedulingNurseId,
         hospital_id: selectedSchedulingHospitalId,
         appointment_date: appointmentDate,
         appointment_time: appointmentTime,
@@ -7257,6 +7628,166 @@ function closeSchedulingDoctorModal() {
 }
 
 
+async function openSchedulingNurseModal() {
+
+    const modal =
+        document.getElementById('scheduling-nurse-modal');
+
+    const body =
+        document.getElementById('scheduling-nurse-modal-body');
+
+    if (!modal || !body) return;
+
+    modal.classList.add('show');
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="4" style="text-align:center;padding:18px;">
+                Loading nurses...
+            </td>
+        </tr>
+    `;
+
+    try {
+        const response =
+            await fetch('/api/nurses/first20');
+
+        const nurses =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                nurses.error || `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(nurses)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        renderSchedulingNurseModal(nurses);
+
+    } catch (error) {
+
+        console.error(
+            '[Scheduling] Unable to load nurses:',
+            error
+        );
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4"
+                    style="text-align:center;color:red;padding:18px;">
+                    Unable to load nurses:
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+
+function renderSchedulingNurseModal(nurses) {
+
+    const body =
+        document.getElementById('scheduling-nurse-modal-body');
+
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!nurses.length) {
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center;padding:18px;">
+                    No nurses found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    nurses.forEach((nurse, index) => {
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeEntityHtml(nurse.full_name || '—')}</td>
+            <td>${escapeEntityHtml(nurse.phone || '—')}</td>
+            <td>${escapeEntityHtml(nurse.email || '—')}</td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => selectSchedulingNurse(nurse)
+        );
+
+        body.appendChild(row);
+    });
+}
+
+
+function selectSchedulingNurse(nurse) {
+
+    selectedSchedulingNurseId =
+        nurse.nurse_id || null;
+
+    selectedSchedulingNurseName =
+        nurse.full_name || '';
+
+    const nameInput =
+        document.getElementById('scheduling-nurse-name');
+
+    const idInput =
+        document.getElementById('scheduling-nurse-id');
+
+    const idDisplay =
+        document.getElementById('scheduling-nurse-id-display');
+
+    if (nameInput) {
+        nameInput.value =
+            selectedSchedulingNurseName;
+    }
+
+    if (idInput) {
+        idInput.value =
+            selectedSchedulingNurseId || '';
+    }
+
+    if (idDisplay) {
+        idDisplay.textContent =
+            selectedSchedulingNurseId
+                ? `Nurse Party ID: ${selectedSchedulingNurseId}`
+                : '';
+    }
+
+    console.log(
+        '[Scheduling] Nurse selected:',
+        {
+            nurse_id: selectedSchedulingNurseId,
+            nurse_name: selectedSchedulingNurseName
+        }
+    );
+
+    closeSchedulingNurseModal();
+}
+
+
+function closeSchedulingNurseModal() {
+
+    const modal =
+        document.getElementById('scheduling-nurse-modal');
+
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+
 async function openSchedulingHospitalModal() {
 
     const modal =
@@ -7428,6 +7959,8 @@ function handleSchedulingModalBackdrop(event, type) {
 
     if (type === 'doctor') {
         closeSchedulingDoctorModal();
+    } else if (type === 'nurse') {
+        closeSchedulingNurseModal();
     } else if (type === 'hospital') {
         closeSchedulingHospitalModal();
     } else if (type === 'schedule') {
@@ -7774,6 +8307,8 @@ function setEntityCrudSectionsVisible(visible) {
 }
 
 async function loadDoctorSchedule() {
+
+    hideTenantManagementPanel();
 
     hidePatientEncounterPanel();
 
@@ -12409,10 +12944,402 @@ ${data.conclusion}
          * OFFICE_ADMIN → S1 hidden, S2 visible, S3 visible, S4 hidden, S5 hidden
          * other        → all visible (SME gate for S5 handled separately)
          */
+        
+
+// ============================================================
+// OFFICE ADMIN - TENANT MANAGEMENT
+// ============================================================
+
+let currentTenantRecord = null;
+let currentTenantMode = 'view';
+let tenantListCache = [];
+
+function _currentRoleTokens() {
+    return (sessionStorage.getItem('pces_doctor_role') || '')
+        .split(',')
+        .map(value => value.trim().toUpperCase())
+        .filter(Boolean);
+}
+
+function _isOfficeAdmin() {
+    return _currentRoleTokens().includes('OFFICE_ADMIN');
+}
+
+function hideTenantManagementPanel() {
+    const panel = document.getElementById('tenant-management-panel');
+    if (panel) panel.style.display = 'none';
+
+    const tenantTab = document.getElementById('tenant-admin-tab');
+    if (tenantTab) tenantTab.classList.remove('active');
+}
+
+function hideClinicalMainPanelsForTenant() {
+    const chatMessages = document.getElementById('chat-messages');
+    if (chatMessages) chatMessages.style.display = 'none';
+
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) chatAiRow.style.display = 'none';
+
+    [
+        'entity-data-panel',
+        'doctor-schedule-panel',
+        'patient-encounter-panel',
+        'patient-scheduling-panel'
+    ].forEach(id => {
+        const panel = document.getElementById(id);
+        if (panel) panel.style.display = 'none';
+    });
+
+    // Match the requested Tenant screen: retain the lower shared area but
+    // do not carry patient-specific medical history into an admin task.
+    const medicalHistoryBody = document.getElementById('medical-history-body');
+    if (medicalHistoryBody) {
+        medicalHistoryBody.innerHTML = `
+            <tr>
+                <td class="history-empty" colspan="3">
+                    Tenant administration does not use patient medical history.
+                </td>
+            </tr>
+        `;
+    }
+
+    const problemText = document.getElementById('problem-text');
+    if (problemText) problemText.textContent = 'Patient problem not applicable';
+}
+
+async function loadTenantManagement(searchName = '') {
+    if (!_isOfficeAdmin()) {
+        alert('Tenant administration is available only to OFFICE_ADMIN users.');
+        return;
+    }
+
+    hideClinicalMainPanelsForTenant();
+
+    const panel = document.getElementById('tenant-management-panel');
+    const body = document.getElementById('tenant-list-body');
+
+    if (!panel || !body) {
+        console.error('[Tenant] Required HTML elements not found');
+        return;
+    }
+
+    panel.style.display = 'flex';
+
+    const tenantTab = document.getElementById('tenant-admin-tab');
+    if (tenantTab) tenantTab.classList.add('active');
+
+    body.innerHTML = `
+        <tr>
+            <td colspan="5" style="text-align:center;padding:18px;">
+                Loading tenants...
+            </td>
+        </tr>
+    `;
+
+    try {
+        const query = searchName
+            ? `?name=${encodeURIComponent(searchName)}`
+            : '';
+
+        const response = await fetch(`/api/tenants${query}`);
+        const records = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                records.error ||
+                records.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        if (!Array.isArray(records)) {
+            throw new Error('Unexpected response from server');
+        }
+
+        tenantListCache = records;
+        renderTenantList(records);
+
+    } catch (error) {
+        console.error('[Tenant] Unable to load tenants:', error);
+
+        body.innerHTML = `
+            <tr>
+                <td colspan="5"
+                    style="text-align:center;color:red;padding:18px;">
+                    ${escapeEntityHtml(error.message)}
+                </td>
+            </tr>
+        `;
+
+        clearTenantDetail();
+    }
+}
+
+function renderTenantList(records) {
+    const body = document.getElementById('tenant-list-body');
+    if (!body) return;
+
+    body.innerHTML = '';
+
+    if (!records.length) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align:center;padding:18px;">
+                    No tenants found.
+                </td>
+            </tr>
+        `;
+
+        currentTenantRecord = null;
+        clearTenantDetail();
+        return;
+    }
+
+    records.forEach((record, index) => {
+        const row = document.createElement('tr');
+
+        row.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(record.tenant_id || '—')}</td>
+            <td>${escapeEntityHtml(record.tenant_name || '—')}</td>
+            <td>${escapeEntityHtml(record.tenant_code || '—')}</td>
+            <td>${escapeEntityHtml(record.created_date || '—')}</td>
+        `;
+
+        row.addEventListener(
+            'click',
+            () => selectTenantRecord(record, row)
+        );
+
+        body.appendChild(row);
+    });
+
+    // Requirement: select first record by default.
+    const firstRow = body.querySelector('tr');
+    if (firstRow) {
+        selectTenantRecord(records[0], firstRow);
+    }
+}
+
+function selectTenantRecord(record, selectedRow) {
+    document
+        .querySelectorAll('#tenant-list-body tr')
+        .forEach(row => row.classList.remove('selected'));
+
+    if (selectedRow) selectedRow.classList.add('selected');
+
+    currentTenantMode = 'edit';
+    currentTenantRecord = record;
+
+    const idInput = document.getElementById('tenant-detail-id');
+    const nameInput = document.getElementById('tenant-detail-name');
+    const codeInput = document.getElementById('tenant-detail-code');
+
+    if (idInput) idInput.value = record.tenant_id || '';
+    if (nameInput) nameInput.value = record.tenant_name || '';
+    if (codeInput) codeInput.value = record.tenant_code || '';
+}
+
+function clearTenantDetail() {
+    ['tenant-detail-id', 'tenant-detail-name', 'tenant-detail-code']
+        .forEach(id => {
+            const input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+}
+
+function startTenantInsert() {
+    if (!_isOfficeAdmin()) {
+        alert('Only OFFICE_ADMIN users can create tenants.');
+        return;
+    }
+
+    currentTenantMode = 'insert';
+    currentTenantRecord = null;
+
+    document
+        .querySelectorAll('#tenant-list-body tr')
+        .forEach(row => row.classList.remove('selected'));
+
+    clearTenantDetail();
+
+    const nameInput = document.getElementById('tenant-detail-name');
+    if (nameInput) nameInput.focus();
+}
+
+function cancelTenantEdit() {
+    if (
+        currentTenantMode === 'insert' &&
+        tenantListCache.length > 0
+    ) {
+        const firstRow =
+            document.querySelector('#tenant-list-body tr');
+
+        selectTenantRecord(
+            tenantListCache[0],
+            firstRow
+        );
+        return;
+    }
+
+    if (currentTenantRecord) {
+        const idInput = document.getElementById('tenant-detail-id');
+        const nameInput = document.getElementById('tenant-detail-name');
+        const codeInput = document.getElementById('tenant-detail-code');
+
+        if (idInput) idInput.value = currentTenantRecord.tenant_id || '';
+        if (nameInput) nameInput.value = currentTenantRecord.tenant_name || '';
+        if (codeInput) codeInput.value = currentTenantRecord.tenant_code || '';
+    } else {
+        clearTenantDetail();
+    }
+}
+
+async function saveTenant() {
+    if (!_isOfficeAdmin()) {
+        alert('Only OFFICE_ADMIN users can save tenants.');
+        return;
+    }
+
+    const nameInput = document.getElementById('tenant-detail-name');
+    const codeInput = document.getElementById('tenant-detail-code');
+    const saveButton = document.getElementById('tenant-save-btn');
+
+    const tenantName =
+        nameInput ? nameInput.value.trim() : '';
+
+    const tenantCode =
+        codeInput ? codeInput.value.trim() : '';
+
+    if (!tenantName) {
+        alert('Tenant Name is required.');
+        if (nameInput) nameInput.focus();
+        return;
+    }
+
+    if (!tenantCode) {
+        alert('Tenant Code Name is required.');
+        if (codeInput) codeInput.focus();
+        return;
+    }
+
+    const actor =
+        sessionStorage.getItem('pces_username') ||
+        sessionStorage.getItem('pces_doctor_name') ||
+        'PCES_UI';
+
+    const payload = {
+        tenant_name: tenantName,
+        tenant_code: tenantCode,
+        actor: actor
+    };
+
+    const isInsert =
+        currentTenantMode === 'insert' ||
+        !currentTenantRecord ||
+        !currentTenantRecord.tenant_id;
+
+    const url = isInsert
+        ? '/api/tenants'
+        : `/api/tenants/${encodeURIComponent(currentTenantRecord.tenant_id)}`;
+
+    const method = isInsert ? 'POST' : 'PUT';
+
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                result.error ||
+                result.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        alert(
+            isInsert
+                ? 'Tenant created successfully.'
+                : 'Tenant updated successfully.'
+        );
+
+        const searchInput =
+            document.getElementById('tenant-search-name');
+
+        await loadTenantManagement(
+            searchInput ? searchInput.value.trim() : ''
+        );
+
+        // Re-select the record that was created/updated when possible.
+        const targetId = result.tenant_id;
+        if (targetId) {
+            const record = tenantListCache.find(
+                item => item.tenant_id === targetId
+            );
+
+            if (record) {
+                const rows =
+                    document.querySelectorAll('#tenant-list-body tr');
+
+                const index = tenantListCache.findIndex(
+                    item => item.tenant_id === targetId
+                );
+
+                if (index >= 0 && rows[index]) {
+                    selectTenantRecord(record, rows[index]);
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error('[Tenant] Save failed:', error);
+        alert(`Unable to save tenant: ${error.message}`);
+
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save';
+        }
+    }
+}
+
+function handleTenantSearchKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        searchTenants();
+    }
+}
+
+function searchTenants() {
+    const input = document.getElementById('tenant-search-name');
+    loadTenantManagement(input ? input.value.trim() : '');
+}
+
+function resetTenantSearch() {
+    const input = document.getElementById('tenant-search-name');
+    if (input) input.value = '';
+    loadTenantManagement('');
+}
+
+
         function applyRoleVisibility(roleStr) {
             const roles   = _parseRoles(roleStr);
             const isNurse = _hasRole(roles, 'NURSE');
             const isAdmin = _hasRole(roles, 'OFFICE_ADMIN');
+
+            console.log('[PCES][Role] Parsed roles:', roles, '| OFFICE_ADMIN:', isAdmin);
 
             const hide = el => { if (el) el.style.display = 'none'; };
             const show = el => { if (el) el.style.display = '';     };
@@ -12422,6 +13349,13 @@ ${data.conclusion}
             const s3 = document.getElementById('sidebar-s3');
             const s4 = document.getElementById('sidebar-s4');
             const s5 = document.getElementById('sme-training-container');
+            const officeAdminBox = document.getElementById('office-admin-box');
+
+            // Office Admin command area must only be visible to OFFICE_ADMIN.
+            // Use an explicit display value because this element starts hidden.
+            if (officeAdminBox) {
+                officeAdminBox.style.display = isAdmin ? 'block' : 'none';
+            }
 
             if (isNurse) {
                 hide(s1); show(s2); show(s3); hide(s4); hide(s5);
