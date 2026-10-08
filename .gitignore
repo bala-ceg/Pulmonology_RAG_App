@@ -2,6 +2,7 @@ vector_db/
 vector_dbs/
 KB/
 .env
+env
 myenv/
 .venv/
 sft_models/

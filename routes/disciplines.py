@@ -5,7 +5,7 @@ Routes:
   GET  /                          — index (creates new session)
   GET  /api/disciplines           — list available disciplines
   POST /api/validate_disciplines  — validate user's selection
-  GET  /search_doctors            — autocomplete search in pces_users
+  GET  /search_doctors            — autocomplete search in p_party
   GET  /search_patients           — patient autocomplete (CCM/EHR API)
   GET  /api/patient/search        — advanced patient search (CCM/EHR API)
   GET  /api/hospitals/search      — hospital search (CCM/EHR API)
@@ -34,7 +34,7 @@ from datetime import date as date_cls, datetime, timedelta
 from typing import Generator
 
 import psycopg
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request, session
 
 from config import Config
 from utils.error_handlers import get_logger, handle_route_errors
@@ -85,6 +85,27 @@ def _ehr_conn() -> Generator:
     }
     with psycopg.connect(**kwargs) as conn:
         yield conn
+
+
+def _table_columns(cursor, table_name: str) -> set[str]:
+    """Return lowercase column names for a table visible on the current search_path."""
+    cursor.execute(
+        """
+        SELECT LOWER(column_name)
+        FROM information_schema.columns
+        WHERE table_name = %s
+        """,
+        (table_name,),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def _first_existing(columns: set[str], candidates: list[str]) -> str | None:
+    """Pick the first candidate column present in a table."""
+    for candidate in candidates:
+        if candidate.lower() in columns:
+            return candidate.lower()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -538,59 +559,145 @@ def index():
     initialize_session(user)
     from config import Config  # noqa: PLC0415
 
-    # Pre-fetch hospital name for the login modal (best-effort)
-    default_hospital: str = "Default PCES"
-    try:
-        with _db_conn() as _hconn:
-            with _hconn.cursor() as _hcur:
-                _hcur.execute(
-                    "SELECT organization_name FROM pces_affiliates WHERE org_code = 'PCES101' LIMIT 1"
-                )
-                _hrow = _hcur.fetchone()
-                if _hrow and _hrow[0]:
-                    default_hospital = _hrow[0]
-    except Exception:
-        pass
-
     return render_template(
         "index.html",
         yodha_chat_url=Config.YODHA_CHAT_URL,
         doc_patient_v2_url=Config.DOC_PATIENT_V2_URL,
-        default_hospital=default_hospital,
     )
+
+
+@disciplines_bp.route("/api/tenants", methods=["GET"])
+def get_login_tenants():
+    """Return all hospitals available for the PCES login dropdown."""
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT tenant_id, tenant_code, tenant_name
+                    FROM p_tenant
+                    ORDER BY tenant_name, tenant_id
+                    """
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "tenant_id": str(tenant_id),
+                "tenant_code": tenant_code or "",
+                "tenant_name": tenant_name or "",
+            }
+            for tenant_id, tenant_code, tenant_name in rows
+        ])
+    except Exception as exc:
+        logger.exception("Unable to load login hospitals: %s", exc)
+        return jsonify({"success": False, "message": "Unable to load hospitals"}), 500
 
 
 @disciplines_bp.route("/api/login", methods=["POST"])
 def login():
-    """Authenticate a PCES user and resolve the matching EHR p_party UUID."""
+    """Authenticate a PCES provider against p_party in pces_ehr_ccm."""
+    session.pop("pces_identity", None)
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
+    tenant_id = str(data.get("tenant_id") or "").strip()
 
-    if not username or not password:
-        return jsonify({"success": False, "message": "Username and password are required"}), 400
+    if not username or not password or not tenant_id:
+        return jsonify({
+            "success": False,
+            "message": "Username, password, and hospital are required",
+        }), 400
 
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
+                columns = _table_columns(cursor, "p_party")
+                login_columns = [
+                    col for col in ("username", "user_name", "email")
+                    if col in columns
+                ]
+                password_col = _first_existing(columns, ["password_hash", "password"])
+                role_col = _first_existing(columns, ["pces_role", "role", "specialty", "department"])
+
+                if not login_columns or not password_col:
+                    logger.error(
+                        "p_party login schema missing required columns: login_columns=%s password_col=%s",
+                        login_columns,
+                        password_col,
+                    )
+                    return jsonify({"success": False, "message": "Login is not configured for the EHR schema"}), 500
+
+                role_expr = role_col if role_col else "party_type"
+                username_expr = "username" if "username" in columns else login_columns[0]
+                predicates = " OR ".join(f"LOWER({col}) = LOWER(%s)" for col in login_columns)
+                params = tuple(username for _ in login_columns)
                 cursor.execute(
-                    "SELECT username, password_hash, pces_role, first_name, last_name, email "
-                    "FROM pces_users WHERE username = %s LIMIT 1",
-                    (username,),
+                    f"""
+                    SELECT
+                        party_id,
+                        party_type,
+                        {username_expr} AS login_name,
+                        {password_col} AS password_hash,
+                        {role_expr} AS pces_role,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        email
+                    FROM p_party
+                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
+                      AND COALESCE(is_active, TRUE) = TRUE
+                      AND ({predicates})
+                    LIMIT 1
+                    """,
+                    params,
                 )
                 row = cursor.fetchone()
+
+                if row is not None:
+                    (
+                        provider_party_id,
+                        party_type,
+                        db_username,
+                        password_hash,
+                        pces_role,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        email,
+                    ) = row
+                    if password != password_hash:
+                        return jsonify({"success": False, "message": "Invalid username or password"}), 401
+
+                    cursor.execute(
+                        """
+                        SELECT tenant_id, tenant_code, tenant_name
+                        FROM p_party_tenant
+                        JOIN p_tenant USING (tenant_id)
+                        WHERE party_id = %s
+                          AND CAST(p_party_tenant.tenant_id AS TEXT) = %s
+                        LIMIT 1
+                        """,
+                        (provider_party_id, tenant_id),
+                    )
+                    tenant_row = cursor.fetchone()
+                else:
+                    tenant_row = None
 
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
-        db_username, password_hash, pces_role, first_name, last_name, email = row
-        if password != password_hash:
-            return jsonify({"success": False, "message": "Invalid username or password"}), 401
+        if tenant_row is None:
+            return jsonify({
+                "success": False,
+                "message": "The selected hospital is not assigned to this account",
+            }), 403
 
-        role_tokens = {
-            token.strip().upper()
-            for token in (pces_role or "").split(",")
-            if token.strip()
+        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
+        selected_tenant_id, tenant_code, tenant_name = tenant_row
+        session["pces_identity"] = {
+            "party_id": str(provider_party_id),
+            "tenant_id": str(selected_tenant_id),
         }
         if "OFFICE_ADMIN" in role_tokens:
             party_type = "OFFICE_ADMIN"
@@ -669,17 +776,37 @@ def login():
                         hospital_name = _hrow[0]
         except Exception:
             pass
+        logger.info(
+            "PCES login successful party_id=%s first_name=%r middle_name=%r "
+            "last_name=%r pces_role=%r party_type=%r tenant_id=%s "
+            "tenant_code=%r tenant_name=%r",
+            provider_party_id,
+            first_name,
+            middle_name,
+            last_name,
+            pces_role,
+            party_type,
+            selected_tenant_id,
+            tenant_code,
+            tenant_name,
+        )
 
         return jsonify({
             "success": True,
             "username": db_username,
-            "party_id": ehr_party_id,
+            "party_id": str(provider_party_id),
             "party_type": party_type,
+            "first_name": first_name or "",
+            "middle_name": middle_name or "",
+            "last_name": last_name or "",
             "pces_role": pces_role,
             "full_name": full_name,
             "email": email or "",
             "department": pces_role or "",
-            "hospital_name": hospital_name,
+            "tenant_id": str(selected_tenant_id),
+            "tenant_code": tenant_code or "",
+            "tenant_name": tenant_name or "",
+            "hospital_name": tenant_name or "",
         })
     except Exception as exc:
         logger.error("Login error: %s", exc)
@@ -986,6 +1113,20 @@ def update_tenant(tenant_id: str):
             }), 409
 
         return jsonify({"error": "Unable to update tenant"}), 500
+@disciplines_bp.route("/api/logout", methods=["POST"])
+def logout():
+    session.pop("pces_identity", None)
+    return jsonify({"success": True})
+
+
+def _patient_tenant_condition() -> str:
+    return """
+        EXISTS (
+            SELECT 1 FROM p_party_tenant pt
+            WHERE pt.party_id = pp.party_id
+              AND CAST(pt.tenant_id AS TEXT) = %s
+        )
+    """
 
 
 @disciplines_bp.route("/api/disciplines", methods=["GET"])
@@ -1118,20 +1259,24 @@ def dept_model_status():
     })
 @handle_route_errors
 def search_doctors():
-    """Search for doctors by first_name and last_name from pces_users table."""
+    """Search for doctors by first_name and last_name from p_party in pces_ehr_ccm."""
     try:
         query = request.args.get("q", "").strip().lower()
         if not query:
             return jsonify([])
 
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 search_query = """
-                SELECT DISTINCT first_name, last_name 
-                FROM pces_users 
-                WHERE LOWER(first_name) LIKE %s 
-                   OR LOWER(last_name) LIKE %s 
-                   OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                SELECT DISTINCT first_name, last_name
+                FROM p_party
+                WHERE party_type = 'DOCTOR'
+                  AND COALESCE(is_active, TRUE) = TRUE
+                  AND (
+                    LOWER(first_name) LIKE %s
+                    OR LOWER(last_name) LIKE %s
+                    OR LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s
+                  )
                 ORDER BY first_name, last_name
                 LIMIT 10
                 """
@@ -1195,10 +1340,14 @@ def search_patients():
 @disciplines_bp.route("/api/patients/first20", methods=["GET"])
 @handle_route_errors
 def get_first_20_patients():
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to view patients"}), 401
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
+                cursor.execute(f"""
     SELECT
         pp.party_id,
         pp.first_name,
@@ -1219,9 +1368,10 @@ def get_first_20_patients():
        AND pa.is_active = true
     WHERE pp.party_type = 'PATIENT'
       AND pp.is_active = true
+      AND {_patient_tenant_condition()}
     ORDER BY pp.last_name, pp.first_name
     LIMIT 20
-""")
+""", (identity["tenant_id"],))
 
                 rows = cursor.fetchall()
 
@@ -2886,10 +3036,10 @@ def search_patients_advanced():
         # Resolve org_code → display name for user-facing error messages
         source_label = source
         try:
-            with _db_conn() as _sc:
+            with _ehr_conn() as _sc:
                 with _sc.cursor() as _scur:
                     _scur.execute(
-                        "SELECT organization_name FROM pces_affiliates WHERE org_code = %s LIMIT 1",
+                        "SELECT organization_name FROM p_affiliates WHERE org_code = %s LIMIT 1",
                         (source,),
                     )
                     _srow = _scur.fetchone()
@@ -2924,9 +3074,17 @@ def search_patients_advanced():
             }), 503
 
     # ── Case 1: local PCES_BASE (p_party direct query) ───────────────────────
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to search patients"}), 401
+
     try:
-        conditions = ["pp.party_type = 'PATIENT'", "pp.is_active = true"]
-        params: list = []
+        conditions = [
+            "pp.party_type = 'PATIENT'",
+            "pp.is_active = true",
+            _patient_tenant_condition(),
+        ]
+        params: list = [identity["tenant_id"]]
 
         if first:
             conditions.append("LOWER(pp.first_name) LIKE %s")
@@ -3285,7 +3443,7 @@ def search_hospitals():
 def get_affiliated_sources():
     """Return the list of affiliated organisation sources for the Select Source dropdown.
 
-    Queries pces_affiliates from pces_base. The first entry is always
+    Queries p_affiliates from pces_ehr_ccm. The first entry is always
     Default PCES (local New VM search). All other active entries are
     external sources (routed to CCM/EHR API on Old VM).
 
@@ -3298,12 +3456,12 @@ def get_affiliated_sources():
     """
     sources: list[dict] = []
     try:
-        with _db_conn() as conn:
+        with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT affl_id, organization_name, org_code, city, state
-                    FROM pces_affiliates
+                    FROM p_affiliates
                     WHERE (enddate IS NULL OR enddate >= CURRENT_DATE)
                     ORDER BY affl_id
                     LIMIT 50
@@ -3322,7 +3480,7 @@ def get_affiliated_sources():
             })
 
     except Exception as exc:
-        logger.warning("get_affiliated_sources: pces_affiliates query failed — %s", exc)
+        logger.warning("get_affiliated_sources: p_affiliates query failed — %s", exc)
 
     # Always guarantee at least the default source
     if not any(s["is_default"] for s in sources):
@@ -3757,5 +3915,3 @@ def get_patient_ai_summary(patient_id: str):
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
         return jsonify({"summary": "", "conclusion": "", "error": f"LLM error: {exc}", **structured_sections}), 500
-
-

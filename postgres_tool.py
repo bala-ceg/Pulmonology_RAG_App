@@ -148,9 +148,9 @@ class PostgreSQLTool:
                     
                     # Format tool routing info consistently with enhanced_tools.py
                     tool_info = self._format_tool_routing_html(
-                        primary_tool="PostgreSQL_Diagnosis_Search",
+                        primary_tool="SQL_Diagnosis_Search",
                         confidence="high",
-                        tools_used=["PostgreSQL_Diagnosis_Search"],
+                        tools_used=["SQL_Diagnosis_Search"],
                         reasoning="Query contains database-specific keywords; PostgreSQL selected for diagnosis data retrieval",
                         result_count=len(results)
                     )
@@ -481,6 +481,158 @@ Provide a 2-3 sentence summary that is informative and professional."""
         
         return "".join(parts)
 
+    def fetch_abnormal_vitals(
+        self,
+        patient_id: str | None = None,
+        encounter_id: str | None = None,
+        limit: int = 20,
+    ) -> Dict[str, str]:
+        """Fetch abnormal vital-sign records from p_vitals.
+
+        This tool intentionally exposes only rows where abnormal_flag = 'Y'.
+        Optional patient filtering is applied through p_encounter when the
+        p_vitals table does not carry patient_id directly.
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'p_vitals'
+                        """
+                    )
+                    columns = {row["column_name"] for row in cursor.fetchall()}
+
+                    if not columns:
+                        return {
+                            "content": "p_vitals table was not found in the EHR database.",
+                            "summary": "Unable to retrieve abnormal vitals because p_vitals is unavailable.",
+                            "citations": f"Database: {self.database}.p_vitals",
+                            "tool_info": "<div class='tool-route'><strong>⚠️ Abnormal Vitals Tool</strong><br>Result: p_vitals unavailable</div>",
+                        }
+
+                    if "abnormal_flag" not in columns:
+                        return {
+                            "content": "p_vitals does not contain abnormal_flag, so abnormal-only vitals cannot be queried safely.",
+                            "summary": "Unable to retrieve abnormal vitals because abnormal_flag is unavailable.",
+                            "citations": f"Database: {self.database}.p_vitals",
+                            "tool_info": "<div class='tool-route'><strong>⚠️ Abnormal Vitals Tool</strong><br>Result: abnormal_flag unavailable</div>",
+                        }
+
+                    preferred_columns = [
+                        "vital_id",
+                        "encounter_id",
+                        "patient_id",
+                        "vital_type",
+                        "vital_name",
+                        "name",
+                        "code",
+                        "value",
+                        "vital_value",
+                        "result_value",
+                        "unit",
+                        "units",
+                        "abnormal_flag",
+                        "recorded_at",
+                        "created_at",
+                        "updated_at",
+                    ]
+                    selected_columns = [col for col in preferred_columns if col in columns]
+                    if not selected_columns:
+                        selected_columns = sorted(columns)
+
+                    select_list = ", ".join(f"V.{col}" for col in selected_columns)
+                    where_clauses = ["V.abnormal_flag = %s"]
+                    params: list = ["Y"]
+                    join_clause = ""
+
+                    if encounter_id and "encounter_id" in columns:
+                        where_clauses.append("V.encounter_id = %s")
+                        params.append(encounter_id)
+
+                    if patient_id:
+                        if "patient_id" in columns:
+                            where_clauses.append("V.patient_id = %s")
+                            params.append(patient_id)
+                        elif "encounter_id" in columns:
+                            join_clause = "JOIN p_encounter E ON V.encounter_id = E.encounter_id"
+                            where_clauses.append("E.patient_id = %s")
+                            params.append(patient_id)
+
+                    if "is_active" in columns:
+                        where_clauses.append("V.is_active = TRUE")
+                    if "deleted_at" in columns:
+                        where_clauses.append("V.deleted_at IS NULL")
+
+                    if "created_at" in columns:
+                        order_by = "V.created_at DESC"
+                    elif "recorded_at" in columns:
+                        order_by = "V.recorded_at DESC"
+                    elif "vital_id" in columns:
+                        order_by = "V.vital_id DESC"
+                    else:
+                        order_by = selected_columns[0]
+
+                    sql = f"""
+                        SELECT {select_list}
+                        FROM p_vitals V
+                        {join_clause}
+                        WHERE {" AND ".join(where_clauses)}
+                        ORDER BY {order_by}
+                        LIMIT %s
+                    """
+                    params.append(limit)
+                    cursor.execute(sql, tuple(params))
+                    rows = cursor.fetchall()
+
+                    label = f"patient_id={patient_id}" if patient_id else "all patients"
+                    if encounter_id:
+                        label += f", encounter_id={encounter_id}"
+
+                    if not rows:
+                        return {
+                            "content": f"No abnormal vital-sign records found for {label}.",
+                            "summary": f"No p_vitals rows with abnormal_flag = 'Y' were found for {label}.",
+                            "citations": f"Database: {self.database}.p_vitals",
+                            "tool_info": "<div class='tool-route'><strong>🩺 Abnormal Vitals Tool</strong><br>Result: No abnormal records</div>",
+                        }
+
+                    content_parts = []
+                    for index, row in enumerate(rows, 1):
+                        lines = []
+                        for col in selected_columns:
+                            value = row.get(col)
+                            if value is not None:
+                                lines.append(f"- **{col.replace('_', ' ').title()}:** {value}")
+                        content_parts.append(f"**Abnormal Vital {index}**\n" + "\n".join(lines))
+
+                    content = "\n\n".join(content_parts)
+                    summary = (
+                        f"Found {len(rows)} abnormal vital-sign record(s) in p_vitals "
+                        f"for {label}. All returned rows are restricted to abnormal_flag = 'Y'."
+                    )
+
+                    return {
+                        "content": content,
+                        "summary": summary,
+                        "citations": f"Database: {self.database}.p_vitals (abnormal_flag = 'Y')",
+                        "tool_info": (
+                            f"<div class='tool-route'><strong>🩺 Abnormal Vitals Tool</strong><br>"
+                            f"Rows: {len(rows)} | Filter: abnormal_flag = 'Y'</div>"
+                        ),
+                    }
+
+        except Exception as exc:
+            logger.error("fetch_abnormal_vitals error: %s", exc)
+            return {
+                "content": f"Error retrieving abnormal vitals: {exc}",
+                "summary": "Abnormal vitals query failed due to a database error.",
+                "citations": "Database error",
+                "tool_info": "<div class='tool-route'><strong>❌ Abnormal Vitals Tool</strong><br>Status: Error</div>",
+            }
+
 
 # Initialize the PostgreSQL tool instance
 postgres_tool = PostgreSQLTool()
@@ -621,5 +773,18 @@ def get_patient_history(
         patient_id=patient_id,
         first_name=first_name,
         last_name=last_name,
+        limit=limit,
+    )
+
+
+def get_abnormal_vitals(
+    patient_id: str | None = None,
+    encounter_id: str | None = None,
+    limit: int = 20,
+) -> Dict[str, str]:
+    """Fetch abnormal vital signs from p_vitals where abnormal_flag = 'Y'."""
+    return postgres_tool.fetch_abnormal_vitals(
+        patient_id=patient_id,
+        encounter_id=encounter_id,
         limit=limit,
     )

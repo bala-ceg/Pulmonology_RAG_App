@@ -479,7 +479,7 @@ def Internal_VectorDB(query: str, session_id: str = None, rag_manager=None) -> s
 
 
 @tool
-def PostgreSQL_Diagnosis_Search(query: str) -> str:
+def SQL_Diagnosis_Search(query: str) -> str:
     """
     Search PostgreSQL EHR database for patient history, diagnosis records, and medical codes.
 
@@ -498,7 +498,7 @@ def PostgreSQL_Diagnosis_Search(query: str) -> str:
     - Query is about department protocols (use Pinecone_KB_Search)
     """
     try:
-        logger.info(f"PostgreSQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
+        logger.info(f"SQL_Diagnosis_Search: Searching diagnosis database for '{query}'")
         
         # Import the PostgreSQL tool
         try:
@@ -786,7 +786,7 @@ def AdHocRAG_Search(query: str) -> str:
     DO NOT use this tool when:
     - Query is about general medical knowledge (use Wikipedia or Pinecone_KB_Search)
     - Query is about published research (use ArXiv_Search or Tavily_Search)
-    - Query is about structured EHR/diagnosis database records (use PostgreSQL_Diagnosis_Search)
+    - Query is about structured EHR/diagnosis database records (use SQL_Diagnosis_Search)
     - No adhoc documents have been uploaded for this doctor/patient session
     """
     from config import Config as _Config
@@ -941,6 +941,76 @@ def Patient_History_Search(query: str) -> str:
     return "\n".join(parts)
 
 
+@tool
+def Abnormal_Vitals_Search(query: str) -> str:
+    """
+    Retrieve abnormal patient vitals from the PCES EHR p_vitals table.
+
+    This tool only returns p_vitals rows where abnormal_flag = 'Y'.
+
+    USE this tool when:
+    - Query asks for abnormal vitals, abnormal vital signs, abnormal observations,
+      abnormal_flag = Y, or p_vitals records
+    - User asks about a selected patient's abnormal blood pressure, temperature,
+      pulse, oxygen saturation, respiratory rate, BMI, or other vital signs
+
+    DO NOT use this tool when:
+    - Query asks for normal/all vitals; this tool is abnormal-only
+    - Query is about general medical knowledge, research papers, or uploaded documents
+    - No patient is selected and the query does not explicitly ask for database-wide
+      abnormal p_vitals records
+    """
+    try:
+        from postgres_tool import get_abnormal_vitals
+    except ImportError:
+        return "Abnormal vitals tool not available. Please ensure psycopg2 and database credentials are configured."
+
+    patient_id: str | None = _history_patient_holder.get("patient_id")
+    encounter_id: str | None = None
+
+    import re as _re
+    encounter_match = _re.search(r"(?:encounter(?:_id)?|visit)\s*(?:id)?\s*[:#-]?\s*([A-Za-z0-9_-]+)", query, _re.IGNORECASE)
+    if encounter_match:
+        encounter_id = encounter_match.group(1)
+
+    logger.info(
+        "Abnormal_Vitals_Search: patient_id=%r encounter_id=%r query=%r",
+        patient_id, encounter_id, query[:60],
+    )
+
+    try:
+        result = _run_with_timeout(
+            get_abnormal_vitals,
+            kwargs={"patient_id": patient_id, "encounter_id": encounter_id},
+            timeout_seconds=15,
+        )
+    except TimeoutError:
+        return "Abnormal vitals search timed out. Please try again."
+    except Exception as exc:
+        logger.error("Abnormal_Vitals_Search error: %s", exc)
+        return f"Error retrieving abnormal vitals: {exc}"
+
+    content_text = (result.get("summary") or result.get("content") or "").strip()
+    _no_data = (
+        "no abnormal vital",
+        "p_vitals table was not found",
+        "p_vitals is unavailable",
+        "abnormal_flag is unavailable",
+        "error retrieving",
+    )
+    if not content_text or any(signal in content_text.lower() for signal in _no_data):
+        return "No abnormal vitals found in p_vitals with abnormal_flag = 'Y'."
+
+    parts = []
+    if result.get("summary"):
+        parts.append(f"**Abnormal Vitals Summary:**\n{result['summary']}\n")
+    if result.get("content"):
+        parts.append(result["content"])
+    parts.append("\n\nSources:\n- Source: PCES EHR Database (pces_ehr_ccm — p_vitals, abnormal_flag = 'Y')")
+
+    return "\n".join(parts)
+
+
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'Wikipedia_Search': Wikipedia_Search,
@@ -948,8 +1018,9 @@ AVAILABLE_TOOLS = {
     'Tavily_Search': Tavily_Search,
     'Internal_VectorDB': Internal_VectorDB,
     'AdHocRAG_Search': AdHocRAG_Search,
-    'PostgreSQL_Diagnosis_Search': PostgreSQL_Diagnosis_Search,
+    'SQL_Diagnosis_Search': SQL_Diagnosis_Search,
     'Patient_History_Search': Patient_History_Search,
+    'Abnormal_Vitals_Search': Abnormal_Vitals_Search,
     'Pinecone_KB_Search': Pinecone_KB_Search,
 }
 
@@ -967,7 +1038,8 @@ def get_tool_descriptions() -> Dict[str, str]:
         'Tavily_Search': "Search current web information for real-time medical updates, guidelines, and breaking news.",
         'Internal_VectorDB': "Search uploaded PDFs and URLs in the internal knowledge base for user-specific content.",
         'AdHocRAG_Search': "Search doctor-uploaded patient-specific clinical notes, case files, and session documents in the Ad Hoc RAG store.",
-        'PostgreSQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table.",
+        'SQL_Diagnosis_Search': "Search PostgreSQL database for medical diagnosis information, codes, and clinical records from p_diagnosis table.",
         'Patient_History_Search': "Retrieve a patient's complete medical history from the EHR database — past encounters, visit notes, diagnosis codes, and medication/prescription descriptions (p_party + p_encounter + p_diagnosis).",
+        'Abnormal_Vitals_Search': "Retrieve abnormal patient vital signs from p_vitals; this tool only returns rows where abnormal_flag = 'Y'.",
         'Pinecone_KB_Search': "Search PCES organisation Pinecone knowledge base for curated department clinical guidelines, protocols, and standard-of-care content.",
     }

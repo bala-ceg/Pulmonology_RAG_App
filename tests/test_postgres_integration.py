@@ -119,11 +119,11 @@ def test_langchain_tool():
     print("=" * 50)
     
     try:
-        from tools import PostgreSQL_Diagnosis_Search
+        from tools import SQL_Diagnosis_Search
         
         # Test the tool directly
-        print("\n🔧 Testing PostgreSQL_Diagnosis_Search tool...")
-        result = PostgreSQL_Diagnosis_Search("heart disease")
+        print("\n🔧 Testing SQL_Diagnosis_Search tool...")
+        result = SQL_Diagnosis_Search("heart disease")
         
         print(f"   Status: {'✅ SUCCESS' if 'Error' not in result else '❌ FAILED'}")
         print(f"   Result length: {len(result)} characters")

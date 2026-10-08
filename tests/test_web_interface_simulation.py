@@ -43,7 +43,7 @@ def test_web_interface_simulation():
         
         print(f"         Tool names: {', '.join(tool_names)}")
         
-        if 'PostgreSQL_Diagnosis_Search' in tool_names:
+        if 'SQL_Diagnosis_Search' in tool_names:
             print("Step 3: ✅ PostgreSQL tool found in agent")
         else:
             print("Step 3: ❌ PostgreSQL tool NOT found in agent")
@@ -84,12 +84,12 @@ def test_direct_tool_access():
     print("=" * 60)
     
     try:
-        from tools import PostgreSQL_Diagnosis_Search
+        from tools import SQL_Diagnosis_Search
         
         print("Step 1: ✅ Imported PostgreSQL tool directly")
         
         # Test the tool function directly
-        result = PostgreSQL_Diagnosis_Search("What diagnoses are available?")
+        result = SQL_Diagnosis_Search("What diagnoses are available?")
         print("Step 2: ✅ Direct tool call successful")
         print(f"         Result length: {len(str(result))} characters")
         print(f"         Result preview: {str(result)[:200]}...")

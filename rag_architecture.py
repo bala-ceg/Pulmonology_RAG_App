@@ -997,7 +997,7 @@ class MedicalQueryRouter:
         # Base priority order (applied before keyword signals):
         #   1. Pinecone_KB_Search        (PCES org KB — highest default priority)
         #   2. Internal_VectorDB         (user-uploaded / adhoc documents)
-        #   3. PostgreSQL_Diagnosis_Search (patient EHR / diagnosis DB)
+        #   3. SQL_Diagnosis_Search (patient EHR / diagnosis DB)
         #   4. ArXiv_Search              (medical research papers)
         #   5. Tavily_Search             (real-time web information)
         #   6. Wikipedia_Search          (general knowledge — last resort)
@@ -1011,7 +1011,8 @@ class MedicalQueryRouter:
         self.BASE_PRIORITY_SCORES: Dict[str, int] = {
             'Pinecone_KB_Search':          6,
             'Internal_VectorDB':           5,
-            'PostgreSQL_Diagnosis_Search': 4,
+            'SQL_Diagnosis_Search': 4,
+            'Abnormal_Vitals_Search':      4,
             'ArXiv_Search':                3,
             'Tavily_Search':               2,
             'Wikipedia_Search':            1,
@@ -1029,6 +1030,11 @@ class MedicalQueryRouter:
             'diagnosis records', 'medical records', 'diagnosis data',
             'diagnostic database', 'hospital database', 'clinical records',
             'diagnosis system', 'medical database', 'diagnosis lookup',
+        ]
+
+        self.vitals_keywords = [
+            'p_vitals', 'abnormal vitals', 'abnormal vital signs',
+            'abnormal_flag', 'abnormal_flag = y',
         ]
 
         # Medical research → ArXiv + Tavily (both activated together)
@@ -1097,7 +1103,7 @@ class MedicalQueryRouter:
         Base priority order (default when no strong signals):
           1. Pinecone_KB_Search          (PCES org KB)
           2. Internal_VectorDB           (user-uploaded adhoc documents)
-          3. PostgreSQL_Diagnosis_Search (patient EHR / diagnosis data)
+          3. SQL_Diagnosis_Search (patient EHR / diagnosis data)
           4. ArXiv_Search                (medical research papers)
           5. Tavily_Search               (real-time web)
           6. Wikipedia_Search            (general knowledge — last resort)
@@ -1115,15 +1121,15 @@ class MedicalQueryRouter:
             # ── PRIORITY 1: Patient history → PostgreSQL ─────────────────
             for kw in self.postgres_keywords:
                 if kw in query_lower:
-                    tool_scores['PostgreSQL_Diagnosis_Search'] += 3
+                    tool_scores['SQL_Diagnosis_Search'] += 3
 
             # Strong boost for explicit patient-history patterns
             if any(p in query_lower for p in ['patient history', 'patient record', 'my patient', 'ehr']):
-                tool_scores['PostgreSQL_Diagnosis_Search'] += 5
+                tool_scores['SQL_Diagnosis_Search'] += 5
 
             import re
             if re.search(r'd1\d{3}', query_lower) or 'code d1' in query_lower:
-                tool_scores['PostgreSQL_Diagnosis_Search'] += 5
+                tool_scores['SQL_Diagnosis_Search'] += 5
 
             # ── PRIORITY 2: Medical research → ArXiv + Tavily ────────────
             is_medical_research = any(kw in query_lower for kw in self.medical_research_keywords)
@@ -1197,13 +1203,15 @@ class MedicalQueryRouter:
             arxiv_relevance_score   = self._calculate_arxiv_relevance(query_lower)
             tavily_relevance_score  = self._calculate_tavily_relevance(query_lower)
             postgres_relevance_score = self._calculate_postgres_relevance(query_lower)
+            vitals_relevance_score = self._calculate_vitals_relevance(query_lower)
             pinecone_relevance_score = self._calculate_pinecone_relevance(query_lower)
 
             tool_scores['Internal_VectorDB']          += pdf_relevance_score
             tool_scores['Wikipedia_Search']           += wiki_relevance_score
             tool_scores['ArXiv_Search']               += arxiv_relevance_score
             tool_scores['Tavily_Search']              += tavily_relevance_score
-            tool_scores['PostgreSQL_Diagnosis_Search'] += postgres_relevance_score
+            tool_scores['SQL_Diagnosis_Search'] += postgres_relevance_score
+            tool_scores['Abnormal_Vitals_Search'] += vitals_relevance_score
             tool_scores['Pinecone_KB_Search']         += pinecone_relevance_score
 
             # Session content boost / penalty
@@ -1300,8 +1308,11 @@ class MedicalQueryRouter:
                 reasons.append("Query seeks definitions or general explanations")
             reasons.append("Wikipedia selected for general knowledge")
 
-        elif primary_tool == 'PostgreSQL_Diagnosis_Search':
+        elif primary_tool == 'SQL_Diagnosis_Search':
             reasons.append("Patient history / EHR / diagnosis-code query — routing to SQL")
+
+        elif primary_tool == 'Abnormal_Vitals_Search':
+            reasons.append("Abnormal vitals query — routing to p_vitals with abnormal_flag = 'Y'")
 
         elif primary_tool == 'Pinecone_KB_Search':
             reasons.append("Department-specific or organisation-protocol query — routing to PCES KB")
@@ -1460,6 +1471,21 @@ class MedicalQueryRouter:
             score += 4
             
         return min(score, 10)  # Cap at 10 points (higher than others for database queries)
+
+    def _calculate_vitals_relevance(self, query_lower: str) -> int:
+        """Calculate relevance score for abnormal p_vitals queries."""
+        score = 0
+        for indicator in self.vitals_keywords:
+            if indicator in query_lower:
+                score += 3
+
+        if 'abnormal' in query_lower and any(term in query_lower for term in ['vital', 'vitals', 'blood pressure', 'pulse', 'temperature', 'spo2', 'oxygen']):
+            score += 6
+
+        if 'p_vitals' in query_lower or 'abnormal_flag' in query_lower:
+            score += 6
+
+        return min(score, 12)
 
     def _calculate_pinecone_relevance(self, query_lower: str) -> int:
         """Calculate relevance score for Pinecone PCES KB based on query terms."""

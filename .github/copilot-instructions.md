@@ -96,7 +96,7 @@ Each query also gets a per-session vector DB for conversation context.
 | `ArXiv_Search` | "Latest research", recent papers, scientific evidence |
 | `Tavily_Search` | Real-time / current medical information |
 | `Internal_VectorDB` | User's uploaded documents / specific files |
-| `PostgreSQL_Diagnosis_Search` | Structured diagnosis data from `pces_ehr_ccm` |
+| `SQL_Diagnosis_Search` | Structured diagnosis data from `pces_ehr_ccm` |
 
 `guarded_retrieve()` in `tools.py` post-filters results by similarity threshold (0.35) and falls back to Wikipedia when local results are low-confidence.
 

@@ -125,7 +125,7 @@ User Query
 | `ArXiv_Search` | Latest research, recent papers, scientific evidence | `arxiv` library |
 | `Tavily_Search` | Real-time / current medical information | Tavily API |
 | `Internal_VectorDB` | User's uploaded documents / specific files | ChromaDB similarity search |
-| `PostgreSQL_Diagnosis_Search` | Structured diagnosis data | `pces_ehr_ccm.p_diagnosis` table |
+| `SQL_Diagnosis_Search` | Structured diagnosis data | `pces_ehr_ccm.p_diagnosis` table |
 
 All tools use a `guarded_retrieve()` wrapper with a similarity threshold of **0.35** and a Wikipedia fallback for low-confidence local results.
 
@@ -319,7 +319,15 @@ The app runs on `http://localhost:3000` by default.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/login` | Authenticate against `pces_users` table. Returns `{success, username, pces_role}` |
+| `POST` | `/api/login` | Authenticate against `p_party` with username, password, and tenant_id; verify `p_party_tenant` membership and establish a signed login session. Returns party and tenant details. |
+| `POST` | `/api/logout` | Clear the authenticated login session. |
+| `GET` | `/api/patients/first20` | List only patients associated with the authenticated tenant through `p_party_tenant`; login required. Local `/api/patient/search` uses the same tenant filter. |
+
+Set `SECRET_KEY` to a strong, stable secret shared by all Flask workers so login
+cookies remain valid across restarts and workers. Without it, a random
+per-process key is generated for local development; existing users must log in
+again to establish a server-verified tenant session. External CCM/EHR searches
+retain their existing separate source behavior.
 
 ### Query & RAG
 

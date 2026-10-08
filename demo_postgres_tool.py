@@ -7,7 +7,7 @@ This script demonstrates the PostgreSQL tool functionality with real data.
 """
 
 from postgres_tool import PostgreSQLTool, enhanced_postgres_search
-from tools import PostgreSQL_Diagnosis_Search
+from tools import SQL_Diagnosis_Search
 
 def demo_postgres_tool():
     """Demonstrate the PostgreSQL tool functionality"""
@@ -37,7 +37,7 @@ def demo_postgres_tool():
     
     # Test 4: Using the LangChain tool directly
     print("\n4️⃣ Using LangChain tool for generic 'diagnosis' search...")
-    langchain_result = PostgreSQL_Diagnosis_Search("diagnosis")
+    langchain_result = SQL_Diagnosis_Search("diagnosis")
     print(f"Result:\n{langchain_result}")
     
     print("\n🎉 PostgreSQL Tool Demo Complete!")
