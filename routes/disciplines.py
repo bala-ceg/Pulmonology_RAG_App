@@ -671,11 +671,19 @@ def login():
 
                     cursor.execute(
                         """
-                        SELECT tenant_id, tenant_code, tenant_name
+                        SELECT
+                            p_party_tenant.tenant_id,
+                            p_tenant.tenant_code,
+                            p_tenant.tenant_name
                         FROM p_party_tenant
-                        JOIN p_tenant USING (tenant_id)
-                        WHERE party_id = %s
+                        JOIN p_tenant
+                          ON p_tenant.tenant_id = p_party_tenant.tenant_id
+                        WHERE p_party_tenant.party_id = %s
                           AND CAST(p_party_tenant.tenant_id AS TEXT) = %s
+                          AND COALESCE(p_party_tenant.is_active, TRUE) = TRUE
+                          AND COALESCE(p_tenant.is_active, TRUE) = TRUE
+                          AND p_party_tenant.status = 'ACTIVE'
+                          AND p_tenant.status = 'ACTIVE'
                         LIMIT 1
                         """,
                         (provider_party_id, tenant_id),
@@ -693,89 +701,21 @@ def login():
                 "message": "The selected hospital is not assigned to this account",
             }), 403
 
-        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username or email or username
+        # Login was authenticated directly against p_party, so preserve the
+        # party_type returned by that row. There is no need to re-resolve the
+        # same EHR party or derive party_type from an undefined role_tokens set.
+        full_name = (
+            f"{first_name or ''} {last_name or ''}".strip()
+            or db_username
+            or email
+            or username
+        )
         selected_tenant_id, tenant_code, tenant_name = tenant_row
+
         session["pces_identity"] = {
             "party_id": str(provider_party_id),
             "tenant_id": str(selected_tenant_id),
         }
-        if "OFFICE_ADMIN" in role_tokens:
-            party_type = "OFFICE_ADMIN"
-        elif "NURSE" in role_tokens:
-            party_type = "NURSE"
-        else:
-            party_type = "DOCTOR"
-
-        # Resolve the EHR UUID. Nurse emails are not unique in the current
-        # p_party data, so nurse matching uses email + first name + normalized
-        # last name (trailing commas ignored). Doctors keep the previous
-        # email-only fallback to avoid breaking existing accounts.
-        ehr_party_id: str | None = None
-        if email and party_type in {"DOCTOR", "NURSE"}:
-            try:
-                with _ehr_conn() as ehr_conn:
-                    with ehr_conn.cursor() as ehr_cur:
-                        ehr_cur.execute(
-                            """
-                            SELECT party_id
-                            FROM ehr_ccm_schema.p_party
-                            WHERE party_type = %s
-                              AND LOWER(email) = LOWER(%s)
-                              AND LOWER(TRIM(COALESCE(first_name, ''))) =
-                                  LOWER(TRIM(%s))
-                              AND LOWER(RTRIM(TRIM(COALESCE(last_name, '')), ',')) =
-                                  LOWER(RTRIM(TRIM(%s), ','))
-                              AND COALESCE(is_active, TRUE) = TRUE
-                            ORDER BY updated_at DESC NULLS LAST,
-                                     created_at DESC NULLS LAST
-                            LIMIT 1
-                            """,
-                            (
-                                party_type,
-                                email,
-                                first_name or "",
-                                last_name or "",
-                            ),
-                        )
-                        party_row = ehr_cur.fetchone()
-
-                        if party_row:
-                            ehr_party_id = str(party_row[0])
-                        elif party_type == "DOCTOR":
-                            ehr_cur.execute(
-                                """
-                                SELECT party_id
-                                FROM ehr_ccm_schema.p_party
-                                WHERE party_type = 'DOCTOR'
-                                  AND LOWER(email) = LOWER(%s)
-                                  AND COALESCE(is_active, TRUE) = TRUE
-                                ORDER BY updated_at DESC NULLS LAST,
-                                         created_at DESC NULLS LAST
-                                LIMIT 1
-                                """,
-                                (email,),
-                            )
-                            party_row = ehr_cur.fetchone()
-                            if party_row:
-                                ehr_party_id = str(party_row[0])
-            except Exception as exc:
-                logger.warning("Unable to resolve EHR party_id for %s: %s", db_username, exc)
-
-        full_name = f"{first_name or ''} {last_name or ''}".strip() or db_username
-
-        hospital_name: str = "Default PCES"
-        try:
-            with _db_conn() as _hconn:
-                with _hconn.cursor() as _hcur:
-                    _hcur.execute(
-                        "SELECT organization_name FROM pces_affiliates "
-                        "WHERE org_code = 'PCES101' LIMIT 1"
-                    )
-                    _hrow = _hcur.fetchone()
-                    if _hrow and _hrow[0]:
-                        hospital_name = _hrow[0]
-        except Exception:
-            pass
         logger.info(
             "PCES login successful party_id=%s first_name=%r middle_name=%r "
             "last_name=%r pces_role=%r party_type=%r tenant_id=%s "
@@ -1119,14 +1059,23 @@ def logout():
     return jsonify({"success": True})
 
 
-def _patient_tenant_condition() -> str:
-    return """
+def _party_tenant_condition(party_alias: str = "pp") -> str:
+    """SQL EXISTS clause that scopes a p_party alias to the logged-in tenant."""
+    return f"""
         EXISTS (
-            SELECT 1 FROM p_party_tenant pt
-            WHERE pt.party_id = pp.party_id
+            SELECT 1
+            FROM p_party_tenant pt
+            WHERE pt.party_id = {party_alias}.party_id
               AND CAST(pt.tenant_id AS TEXT) = %s
+              AND COALESCE(pt.is_active, TRUE) = TRUE
+              AND pt.status = 'ACTIVE'
         )
     """
+
+
+def _patient_tenant_condition() -> str:
+    """Backward-compatible helper for patient queries using alias pp."""
+    return _party_tenant_condition("pp")
 
 
 @disciplines_bp.route("/api/disciplines", methods=["GET"])
@@ -1425,37 +1374,46 @@ def get_first_20_patients():
 @disciplines_bp.route("/api/doctors/first20", methods=["GET"])
 @handle_route_errors
 def get_first_20_doctors():
+    """Return active doctors assigned to the logged-in tenant."""
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to view doctors"}), 401
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
-                  SELECT
-                   pp.party_id,
-                   pp.first_name,
-                   pp.middle_name,
-                   pp.last_name,
-                   pp.date_of_birth,
-                   pp.phone,
-                   pp.email,
-                   pa.address_id,
-                   pa.line1,
-                   pa.line2,
-                   pa.city,
-                   pa.state,
-                   pa.postal_code
-                   FROM p_party pp
-                   LEFT JOIN p_address pa
-                  ON pa.party_id = pp.party_id
-                 AND pa.is_active = true
-                 WHERE pp.party_type = 'DOCTOR'
-                 AND pp.is_active = true
-                ORDER BY pp.last_name, pp.first_name
-                LIMIT 20;
-                """)
+                cursor.execute(
+                    f"""
+                    SELECT
+                        pp.party_id,
+                        pp.first_name,
+                        pp.middle_name,
+                        pp.last_name,
+                        pp.date_of_birth,
+                        pp.phone,
+                        pp.email,
+                        pa.address_id,
+                        pa.line1,
+                        pa.line2,
+                        pa.city,
+                        pa.state,
+                        pa.postal_code
+                    FROM p_party pp
+                    LEFT JOIN p_address pa
+                      ON pa.party_id = pp.party_id
+                     AND pa.is_active = true
+                    WHERE pp.party_type = 'DOCTOR'
+                      AND pp.is_active = true
+                      AND {_party_tenant_condition("pp")}
+                    ORDER BY pp.last_name, pp.first_name
+                    LIMIT 20
+                    """,
+                    (identity["tenant_id"],),
+                )
 
                 rows = cursor.fetchall()
 
-                doctors = []
+        doctors = []
 
         for row in rows:
             (
@@ -1475,9 +1433,7 @@ def get_first_20_doctors():
             ) = row
 
             full_name = " ".join(
-                x for x in
-                [first_name, middle_name, last_name]
-                if x
+                x for x in [first_name, middle_name, last_name] if x
             )
 
             doctors.append({
@@ -1500,7 +1456,7 @@ def get_first_20_doctors():
         return jsonify(doctors)
 
     except Exception as exc:
-        logger.error("Unable to retrieve first 20 doctors: %s", exc)
+        logger.exception("Unable to retrieve first 20 tenant doctors: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 
@@ -1577,15 +1533,18 @@ def get_first_20_nurses():
 )
 @handle_route_errors
 def get_patient_doctors(patient_id: str):
-    """
-    Return doctors associated with the selected patient
-    through p_encounter.
-    """
+    """Return doctors related to a patient, restricted to the logged-in tenant."""
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to view patient-doctor relationships"}), 401
+
+    tenant_id = identity["tenant_id"]
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT
                         D.party_id AS provider_id,
                         D.first_name,
@@ -1599,9 +1558,15 @@ def get_patient_doctors(patient_id: str):
                     JOIN p_party D
                         ON E.provider_id = D.party_id
                     WHERE P.party_id = %s
+                      AND P.party_type = 'PATIENT'
+                      AND D.party_type = 'DOCTOR'
+                      AND COALESCE(P.is_active, TRUE) = TRUE
+                      AND COALESCE(D.is_active, TRUE) = TRUE
+                      AND {_party_tenant_condition("P")}
+                      AND {_party_tenant_condition("D")}
                     ORDER BY E.encounter_date DESC
                     """,
-                    (patient_id,)
+                    (patient_id, tenant_id, tenant_id),
                 )
 
                 rows = cursor.fetchall()
@@ -1619,9 +1584,7 @@ def get_patient_doctors(patient_id: str):
             ) = row
 
             full_name = " ".join(
-                x for x in
-                [first_name, middle_name, last_name]
-                if x
+                x for x in [first_name, middle_name, last_name] if x
             )
 
             doctors.append({
@@ -1631,24 +1594,18 @@ def get_patient_doctors(patient_id: str):
                 "last_name": last_name or "",
                 "full_name": full_name,
                 "encounter_type": encounter_type or "",
-                "encounter_dt":
-                    str(encounter_date)
-                    if encounter_date
-                    else ""
+                "encounter_dt": str(encounter_date) if encounter_date else ""
             })
 
         return jsonify(doctors)
 
     except Exception as exc:
         logger.exception(
-            "Unable to retrieve doctors for patient %s: %s",
+            "Unable to retrieve tenant doctors for patient %s: %s",
             patient_id,
-            exc
+            exc,
         )
-
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 # ============================================================
@@ -1661,15 +1618,18 @@ def get_patient_doctors(patient_id: str):
 )
 @handle_route_errors
 def get_doctor_patients(doctor_id: str):
-    """
-    Return distinct patients associated with the selected
-    doctor through p_encounter.
-    """
+    """Return patients related to a doctor, restricted to the logged-in tenant."""
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to view doctor-patient relationships"}), 401
+
+    tenant_id = identity["tenant_id"]
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT DISTINCT
                         P.party_id AS patient_id,
                         P.first_name,
@@ -1684,12 +1644,18 @@ def get_doctor_patients(doctor_id: str):
                     JOIN p_party P
                         ON E.patient_id = P.party_id
                     WHERE D.party_id = %s
+                      AND D.party_type = 'DOCTOR'
+                      AND P.party_type = 'PATIENT'
+                      AND COALESCE(D.is_active, TRUE) = TRUE
+                      AND COALESCE(P.is_active, TRUE) = TRUE
+                      AND {_party_tenant_condition("D")}
+                      AND {_party_tenant_condition("P")}
                     ORDER BY
                         P.last_name,
                         P.first_name
                     LIMIT 20
                     """,
-                    (doctor_id,)
+                    (doctor_id, tenant_id, tenant_id),
                 )
 
                 rows = cursor.fetchall()
@@ -1708,9 +1674,7 @@ def get_doctor_patients(doctor_id: str):
             ) = row
 
             full_name = " ".join(
-                x for x in
-                [first_name, middle_name, last_name]
-                if x
+                x for x in [first_name, middle_name, last_name] if x
             )
 
             patients.append({
@@ -1728,14 +1692,12 @@ def get_doctor_patients(doctor_id: str):
 
     except Exception as exc:
         logger.exception(
-            "Unable to retrieve patients for doctor %s: %s",
+            "Unable to retrieve tenant patients for doctor %s: %s",
             doctor_id,
-            exc
+            exc,
         )
+        return jsonify({"error": str(exc)}), 500
 
-        return jsonify({
-            "error": str(exc)
-        }), 500
 
 # ============================================================
 # My Schedule - Doctor / Nurse
@@ -2871,12 +2833,24 @@ def _upsert_party_address(cursor, party_id: str, data: dict) -> None:
         ),
     )
 def _create_party(party_type: str):
+    """Create a patient/doctor and map the new party to the logged-in tenant."""
+    identity = session.get("pces_identity")
+    if not identity or not identity.get("tenant_id"):
+        return jsonify({
+            "success": False,
+            "error": "Please log in and select an organization before inserting records."
+        }), 401
+
     data = _entity_payload()
     validation_error = _validate_entity_payload(data)
     if validation_error:
         return validation_error
 
     party_id = str(uuid.uuid4())
+    party_tenant_id = str(uuid.uuid4())
+    tenant_id = str(identity["tenant_id"])
+    actor_party_id = str(identity.get("party_id") or "")
+    created_by = actor_party_id[:100] if actor_party_id else "PCES_UI"
 
     try:
         with _ehr_conn() as conn:
@@ -2894,7 +2868,7 @@ def _create_party(party_type: str):
                         email,
                         is_active
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                     """,
                     (
                         party_id,
@@ -2910,15 +2884,60 @@ def _create_party(party_type: str):
 
                 _upsert_party_address(cursor, party_id, data)
 
-        logger.info("Created %s party_id=%s", party_type, party_id)
+                cursor.execute(
+                    """
+                    INSERT INTO p_party_tenant (
+                        party_tenant_id,
+                        party_id,
+                        tenant_id,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s,
+                        %s,
+                        %s,
+                        'ACTIVE',
+                        NOW(),
+                        %s,
+                        TRUE,
+                        1
+                    )
+                    """,
+                    (
+                        party_tenant_id,
+                        party_id,
+                        tenant_id,
+                        created_by,
+                    ),
+                )
+
+        logger.info(
+            "Created %s party_id=%s and mapped to tenant_id=%s party_tenant_id=%s",
+            party_type,
+            party_id,
+            tenant_id,
+            party_tenant_id,
+        )
+
         return jsonify({
             "success": True,
             "message": f"{party_type.title()} created successfully.",
             "party_id": party_id,
+            "tenant_id": tenant_id,
+            "party_tenant_id": party_tenant_id,
         }), 201
 
     except Exception as exc:
-        logger.exception("Unable to create %s: %s", party_type, exc)
+        logger.exception(
+            "Unable to create %s for tenant %s: %s",
+            party_type,
+            tenant_id,
+            exc,
+        )
         return jsonify({
             "success": False,
             "error": str(exc),
@@ -3203,6 +3222,10 @@ def search_doctors_advanced():
     Returns records in the same shape as /api/doctors/first20 so the
     existing Doctor and Doctor-Patient source-list renderers can be reused.
     """
+    identity = session.get("pces_identity")
+    if not identity:
+        return jsonify({"error": "Please log in to search doctors"}), 401
+
     first  = (request.args.get("first",  "") or "").strip()
     last   = (request.args.get("last",   "") or "").strip()
     middle = (request.args.get("middle", "") or "").strip()
@@ -3214,8 +3237,12 @@ def search_doctors_advanced():
         return jsonify([])
 
     try:
-        conditions = ["pp.party_type = 'DOCTOR'", "pp.is_active = true"]
-        params: list = []
+        conditions = [
+            "pp.party_type = 'DOCTOR'",
+            "pp.is_active = true",
+            _party_tenant_condition("pp"),
+        ]
+        params: list = [identity["tenant_id"]]
 
         if first:
             conditions.append("LOWER(pp.first_name) LIKE %s")
