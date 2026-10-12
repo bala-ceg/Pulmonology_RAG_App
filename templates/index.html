@@ -5989,9 +5989,31 @@ let selectedSchedulingNurseName = '';
 let selectedSchedulingHospitalId = null;
 let selectedSchedulingHospitalName = '';
 
+
+// Hide the shared Patient History / Medical Problem footer while any of the
+// six Patient / Doctor Data applets is active.
+function hideSharedClinicalFooterForDataApplets() {
+    const medicalHistory =
+        document.querySelector('.medical-history-panel');
+
+    if (medicalHistory) {
+        medicalHistory.style.display = 'none';
+    }
+
+    const problemRow =
+        document.querySelector('.problem-row');
+
+    if (problemRow) {
+        problemRow.style.display = 'none';
+    }
+}
+
+
 async function loadRelationshipMode(mode) {
 
     hideTenantManagementPanel();
+
+    hideSharedClinicalFooterForDataApplets();
 
     hidePatientEncounterPanel();
 
@@ -6096,19 +6118,9 @@ async function loadEntityDatasetForRelationship(type) {
         chatAiRow.style.display = 'none';
     }
 
-    // Restore the shared lower clinical UI when returning from My Schedule
-    // or Encounter to Patient / Doctor / relationship applets.
-    const legacyMedicalHistory =
-        document.querySelector('.medical-history-panel');
-    if (legacyMedicalHistory) {
-        legacyMedicalHistory.style.display = '';
-    }
-
-    const problemRow =
-        document.querySelector('.problem-row');
-    if (problemRow) {
-        problemRow.style.display = '';
-    }
+    // Patient / Doctor Data applets do not show Patient History
+    // or the Medical Problem footer.
+    hideSharedClinicalFooterForDataApplets();
 
     panel.style.display = 'flex';
 
@@ -6646,19 +6658,9 @@ if (relationshipArea) {
         chatAiRow.style.display = 'none';
     }
 
-    // Restore the shared lower clinical UI when returning from My Schedule
-    // or Encounter to Patient / Doctor / relationship applets.
-    const legacyMedicalHistory =
-        document.querySelector('.medical-history-panel');
-    if (legacyMedicalHistory) {
-        legacyMedicalHistory.style.display = '';
-    }
-
-    const problemRow =
-        document.querySelector('.problem-row');
-    if (problemRow) {
-        problemRow.style.display = '';
-    }
+    // Patient / Doctor Data applets do not show Patient History
+    // or the Medical Problem footer.
+    hideSharedClinicalFooterForDataApplets();
 
 
     // Show Patient / Doctor panel
@@ -7134,19 +7136,8 @@ async function loadSchedulingPanel() {
         chatAiRow.style.display = 'none';
     }
 
-    // Scheduling should keep the shared lower clinical UI visible.
-    // This restores it if My Schedule or Encounter previously hid it.
-    const legacyMedicalHistory =
-        document.querySelector('.medical-history-panel');
-    if (legacyMedicalHistory) {
-        legacyMedicalHistory.style.display = '';
-    }
-
-    const problemRow =
-        document.querySelector('.problem-row');
-    if (problemRow) {
-        problemRow.style.display = '';
-    }
+    // Scheduling also hides Patient History and Medical Problem.
+    hideSharedClinicalFooterForDataApplets();
 
     if (entityPanel) {
         entityPanel.style.display = 'none';
@@ -8414,12 +8405,8 @@ async function loadDoctorSchedule() {
 
     if (entityPanel) entityPanel.style.display = 'none';
 
-    // My Schedule has its own Medical History section.
-    const legacyMedicalHistory = document.querySelector('.medical-history-panel');
-    if (legacyMedicalHistory) legacyMedicalHistory.style.display = 'none';
-
-    const problemRow = document.querySelector('.problem-row');
-    if (problemRow) problemRow.style.display = 'none';
+    // My Schedule hides the shared Patient History / Medical Problem footer.
+    hideSharedClinicalFooterForDataApplets();
 
     if (schedulePanel) schedulePanel.style.display = 'flex';
 
