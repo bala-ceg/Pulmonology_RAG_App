@@ -329,6 +329,45 @@ per-process key is generated for local development; existing users must log in
 again to establish a server-verified tenant session. External CCM/EHR searches
 retain their existing separate source behavior.
 
+### Shared PCES browser context
+
+The main UI exposes `window.PCES_CONTEXT` and `window.PCES_CONTEXT_API`:
+
+```js
+window.PCES_CONTEXT_API.get();
+// {
+//   g_doctor_ID: "<logged-in party_id>",
+//   g_patient_ID: null,
+//   g_tenant_ID: "<selected tenant_id>",
+//   g_lab_ID: null
+// }
+```
+
+Login initializes the doctor and tenant IDs and clears the patient and lab IDs.
+Patient and lab screens should update the context through the API:
+
+```js
+window.PCES_CONTEXT_API.setPatientId(patientId);
+window.PCES_CONTEXT_API.setLabId(labId);
+```
+
+All updates are persisted in `sessionStorage` under `pces_context` and emit a
+`pces-context-changed` event. A separate same-origin service opened from the
+main UI can update patient/lab context with:
+
+```js
+window.opener.postMessage({
+  type: "PCES_CONTEXT_UPDATE",
+  updates: { g_patient_ID: patientId, g_lab_ID: labId }
+}, window.location.origin);
+```
+
+The receiving page must be the PCES main UI. For a different approved origin,
+add it to `window.PCES_CONTEXT_ALLOWED_ORIGINS` before posting messages. The
+other service should never overwrite `g_doctor_ID` or `g_tenant_ID`; those are
+set by the authenticated login. Backend services must continue receiving and
+validating IDs server-side rather than trusting browser globals.
+
 ### Query & RAG
 
 | Method | Path | Description |
