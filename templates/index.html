@@ -12292,7 +12292,7 @@ ${data.conclusion}
                 return;
             }
             const matches = loginTenants
-                .filter(tenant => tenant.tenant_name.toLowerCase().includes(normalizedSearch))
+                .filter(tenant => tenant.tenant_name.toLowerCase().startsWith(normalizedSearch))
                 .slice(0, 20);
 
             results.replaceChildren();
