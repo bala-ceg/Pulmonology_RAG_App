@@ -5922,6 +5922,7 @@
                 PCES_CONTEXT_STORAGE_KEY,
                 JSON.stringify(window.PCES_CONTEXT)
             );
+            console.log('[PCES Context]', {...window.PCES_CONTEXT});
             window.dispatchEvent(new CustomEvent('pces-context-changed', {
                 detail: {...window.PCES_CONTEXT}
             }));
@@ -5966,6 +5967,7 @@
             ),
             g_lab_ID: normalizePcesContextValue(_savedPcesContext.g_lab_ID)
         };
+        console.log('[PCES Context] initialized', {...window.PCES_CONTEXT});
 
         window.PCES_CONTEXT_API = Object.freeze({
             get: () => ({...window.PCES_CONTEXT}),
@@ -6007,6 +6009,7 @@
                 event.data.type !== 'PCES_CONTEXT_UPDATE') {
                 return;
             }
+            console.log('[PCES Context] update received from service', event.data.updates);
             updatePcesContext(event.data.updates || {});
         });
 
