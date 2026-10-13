@@ -5580,9 +5580,114 @@
 
         // Session-scoped state — restored from sessionStorage if available
         // Guard against "null" / "undefined" strings stored by older code paths
+        const PCES_CONTEXT_STORAGE_KEY = 'pces_context';
+        const PCES_CONTEXT_FIELDS = ['g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID'];
+
+        function normalizePcesContextValue(value) {
+            if (value === undefined || value === null || value === '' ||
+                value === 'null' || value === 'undefined') {
+                return null;
+            }
+            return String(value);
+        }
+
+        function persistPcesContext() {
+            sessionStorage.setItem(
+                PCES_CONTEXT_STORAGE_KEY,
+                JSON.stringify(window.PCES_CONTEXT)
+            );
+            window.dispatchEvent(new CustomEvent('pces-context-changed', {
+                detail: {...window.PCES_CONTEXT}
+            }));
+        }
+
+        function updatePcesContext(updates = {}) {
+            PCES_CONTEXT_FIELDS.forEach(field => {
+                if (Object.prototype.hasOwnProperty.call(updates, field)) {
+                    window.PCES_CONTEXT[field] = normalizePcesContextValue(updates[field]);
+                }
+            });
+            persistPcesContext();
+            return {...window.PCES_CONTEXT};
+        }
+
+        function resetPcesContext() {
+            return updatePcesContext({
+                g_doctor_ID: null,
+                g_patient_ID: null,
+                g_tenant_ID: null,
+                g_lab_ID: null
+            });
+        }
+
+        const _savedPcesContext = (() => {
+            try {
+                return JSON.parse(sessionStorage.getItem(PCES_CONTEXT_STORAGE_KEY) || '{}');
+            } catch (_) {
+                return {};
+            }
+        })();
+
+        window.PCES_CONTEXT = {
+            g_doctor_ID: normalizePcesContextValue(
+                _savedPcesContext.g_doctor_ID || sessionStorage.getItem('pces_doctor_id')
+            ),
+            g_patient_ID: normalizePcesContextValue(
+                _savedPcesContext.g_patient_ID || sessionStorage.getItem('pces_patient_id')
+            ),
+            g_tenant_ID: normalizePcesContextValue(
+                _savedPcesContext.g_tenant_ID || sessionStorage.getItem('pces_tenant_id')
+            ),
+            g_lab_ID: normalizePcesContextValue(_savedPcesContext.g_lab_ID)
+        };
+
+        window.PCES_CONTEXT_API = Object.freeze({
+            get: () => ({...window.PCES_CONTEXT}),
+            update: updatePcesContext,
+            setPatientId: patientId => updatePcesContext({g_patient_ID: patientId}),
+            setLabId: labId => updatePcesContext({g_lab_ID: labId}),
+            clearPatient: () => updatePcesContext({g_patient_ID: null}),
+            clearLab: () => updatePcesContext({g_lab_ID: null})
+        });
+
+        Object.defineProperties(window, {
+            g_doctor_ID: {
+                configurable: true,
+                get: () => window.PCES_CONTEXT.g_doctor_ID
+            },
+            g_patient_ID: {
+                configurable: true,
+                get: () => window.PCES_CONTEXT.g_patient_ID,
+                set: value => updatePcesContext({g_patient_ID: value})
+            },
+            g_tenant_ID: {
+                configurable: true,
+                get: () => window.PCES_CONTEXT.g_tenant_ID
+            },
+            g_lab_ID: {
+                configurable: true,
+                get: () => window.PCES_CONTEXT.g_lab_ID,
+                set: value => updatePcesContext({g_lab_ID: value})
+            }
+        });
+
+        // A trusted same-origin service can update patient/lab context by
+        // posting {type: 'PCES_CONTEXT_UPDATE', updates: {...}}.
+        window.addEventListener('message', event => {
+            const allowedOrigins = window.PCES_CONTEXT_ALLOWED_ORIGINS || [];
+            const trustedOrigin = event.origin === window.location.origin ||
+                allowedOrigins.includes(event.origin);
+            if (!trustedOrigin || !event.data ||
+                event.data.type !== 'PCES_CONTEXT_UPDATE') {
+                return;
+            }
+            updatePcesContext(event.data.updates || {});
+        });
+
         const _rawPatientId = sessionStorage.getItem('pces_patient_id');
-        window.selectedPatientId  = (_rawPatientId && _rawPatientId !== 'null' && _rawPatientId !== 'undefined')
-                                    ? _rawPatientId : null;
+        window.selectedPatientId = window.PCES_CONTEXT.g_patient_ID ||
+            ((_rawPatientId && _rawPatientId !== 'null' && _rawPatientId !== 'undefined')
+                ? _rawPatientId : null);
         window.currentPatientName = sessionStorage.getItem('pces_patient_name') || '';
         window.adhocRagReady      = false;
         console.log('[PCES Session] init — patient=%s name=%s', window.selectedPatientId, window.currentPatientName);
@@ -9507,6 +9612,7 @@ function toggleEhrAi() {
             if (data.patient_id) {
                 window.selectedPatientId = data.patient_id;
                 sessionStorage.setItem('pces_patient_id', data.patient_id);
+                window.PCES_CONTEXT_API.setPatientId(data.patient_id);
             }
             if (data.full_name) {
                 window.currentPatientName = data.full_name;
@@ -9520,6 +9626,7 @@ function toggleEhrAi() {
         }
 
         function clearPatientInfoBar() {
+            window.PCES_CONTEXT_API.clearPatient();
             const section = document.getElementById('patient-info-section');
             if (!section) return;
             const nameEl = document.getElementById('pi-name');
@@ -12419,6 +12526,15 @@ ${data.conclusion}
                 sessionStorage.setItem('pces_tenant_code', data.tenant_code || '');
                 sessionStorage.setItem('pces_tenant_name', data.tenant_name || '');
                 sessionStorage.setItem('pces_hospital_name', data.tenant_name || '');
+                sessionStorage.removeItem('pces_patient_id');
+                sessionStorage.removeItem('pces_patient_name');
+                sessionStorage.removeItem('pces_patient_org');
+                updatePcesContext({
+                    g_doctor_ID: data.party_id,
+                    g_patient_ID: null,
+                    g_tenant_ID: data.tenant_id,
+                    g_lab_ID: null
+                });
 
                 msg.className = 'login-msg success';
                 msg.textContent = `Welcome, ${data.full_name || data.username}!`;
@@ -12643,6 +12759,7 @@ ${data.conclusion}
             }
             // Clear auth state
             _pcesAuthed = false;
+            resetPcesContext();
             ['pces_auth','pces_username','pces_party_id','pces_party_type',
              'pces_party_first_name','pces_party_middle_name','pces_party_last_name',
              'pces_doctor_name','pces_doctor_id','pces_doctor_department',
