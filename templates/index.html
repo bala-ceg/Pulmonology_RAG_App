@@ -5907,7 +5907,11 @@
         // Session-scoped state — restored from sessionStorage if available
         // Guard against "null" / "undefined" strings stored by older code paths
         const PCES_CONTEXT_STORAGE_KEY = 'pces_context';
-        const PCES_CONTEXT_FIELDS = ['g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID'];
+        const PCES_CONTEXT_FIELDS = [
+            'g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID',
+            'g_nurse_id', 'g_med_assist_id', 'g_user_id',
+            'g_temp1_id', 'g_temp2_id', 'g_temp3_id'
+        ];
 
         function normalizePcesContextValue(value) {
             if (value === undefined || value === null || value === '' ||
@@ -5943,7 +5947,13 @@
                 g_doctor_ID: null,
                 g_patient_ID: null,
                 g_tenant_ID: null,
-                g_lab_ID: null
+                g_lab_ID: null,
+                g_nurse_id: null,
+                g_med_assist_id: null,
+                g_user_id: null,
+                g_temp1_id: null,
+                g_temp2_id: null,
+                g_temp3_id: null
             });
         }
 
@@ -5965,7 +5975,13 @@
             g_tenant_ID: normalizePcesContextValue(
                 _savedPcesContext.g_tenant_ID || sessionStorage.getItem('pces_tenant_id')
             ),
-            g_lab_ID: normalizePcesContextValue(_savedPcesContext.g_lab_ID)
+            g_lab_ID: normalizePcesContextValue(_savedPcesContext.g_lab_ID),
+            g_nurse_id: normalizePcesContextValue(_savedPcesContext.g_nurse_id),
+            g_med_assist_id: normalizePcesContextValue(_savedPcesContext.g_med_assist_id),
+            g_user_id: normalizePcesContextValue(_savedPcesContext.g_user_id),
+            g_temp1_id: normalizePcesContextValue(_savedPcesContext.g_temp1_id),
+            g_temp2_id: normalizePcesContextValue(_savedPcesContext.g_temp2_id),
+            g_temp3_id: normalizePcesContextValue(_savedPcesContext.g_temp3_id)
         };
         console.log('[PCES Context] initialized', {...window.PCES_CONTEXT});
 
