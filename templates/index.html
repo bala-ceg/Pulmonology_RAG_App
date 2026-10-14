@@ -13070,8 +13070,10 @@ ${data.conclusion}
                 sessionStorage.removeItem('pces_patient_id');
                 sessionStorage.removeItem('pces_patient_name');
                 sessionStorage.removeItem('pces_patient_org');
+                const loggedInPartyType = String(data.party_type || '').trim().toUpperCase();
                 updatePcesContext({
-                    g_doctor_ID: data.party_id,
+                    g_doctor_ID: loggedInPartyType === 'DOCTOR' ? data.party_id : null,
+                    g_nurse_id: loggedInPartyType === 'NURSE' ? data.party_id : null,
                     g_patient_ID: null,
                     g_tenant_ID: data.tenant_id,
                     g_lab_ID: null
