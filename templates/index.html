@@ -13074,6 +13074,7 @@ ${data.conclusion}
                 updatePcesContext({
                     g_doctor_ID: loggedInPartyType === 'DOCTOR' ? data.party_id : null,
                     g_nurse_id: loggedInPartyType === 'NURSE' ? data.party_id : null,
+                    g_user_id: loggedInPartyType === 'OFFICE_ADMIN' ? data.party_id : null,
                     g_patient_ID: null,
                     g_tenant_ID: data.tenant_id,
                     g_lab_ID: null
