@@ -339,7 +339,13 @@ window.PCES_CONTEXT_API.get();
 //   g_doctor_ID: "<logged-in party_id>",
 //   g_patient_ID: null,
 //   g_tenant_ID: "<selected tenant_id>",
-//   g_lab_ID: null
+//   g_lab_ID: null,
+//   g_nurse_id: null,
+//   g_med_assist_id: null,
+//   g_user_id: null,
+//   g_temp1_id: null,
+//   g_temp2_id: null,
+//   g_temp3_id: null
 // }
 ```
 
