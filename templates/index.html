@@ -5910,7 +5910,7 @@
         const PCES_CONTEXT_STORAGE_KEY = 'pces_context';
         const PCES_CONTEXT_FIELDS = [
             'g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID',
-            'g_nurse_id', 'g_med_assist_id', 'g_user_id',
+            'g_nurse_id', 'g_med_assist_id', 'g_office_admin_id', 'g_user_id',
             'g_temp1_id', 'g_temp2_id', 'g_temp3_id'
         ];
 
@@ -5951,6 +5951,7 @@
                 g_lab_ID: null,
                 g_nurse_id: null,
                 g_med_assist_id: null,
+                g_office_admin_id: null,
                 g_user_id: null,
                 g_temp1_id: null,
                 g_temp2_id: null,
@@ -5979,6 +5980,7 @@
             g_lab_ID: normalizePcesContextValue(_savedPcesContext.g_lab_ID),
             g_nurse_id: normalizePcesContextValue(_savedPcesContext.g_nurse_id),
             g_med_assist_id: normalizePcesContextValue(_savedPcesContext.g_med_assist_id),
+            g_office_admin_id: normalizePcesContextValue(_savedPcesContext.g_office_admin_id),
             g_user_id: normalizePcesContextValue(_savedPcesContext.g_user_id),
             g_temp1_id: normalizePcesContextValue(_savedPcesContext.g_temp1_id),
             g_temp2_id: normalizePcesContextValue(_savedPcesContext.g_temp2_id),
@@ -13075,7 +13077,8 @@ ${data.conclusion}
                 updatePcesContext({
                     g_doctor_ID: loggedInPartyType === 'DOCTOR' ? data.party_id : null,
                     g_nurse_id: loggedInPartyType === 'NURSE' ? data.party_id : null,
-                    g_med_assist_id: loggedInPartyType === 'OFFICE_ADMIN' ? data.party_id : null,
+                    g_med_assist_id: null,
+                    g_office_admin_id: loggedInPartyType === 'OFFICE_ADMIN' ? data.party_id : null,
                     g_user_id: data.party_id,
                     g_patient_ID: null,
                     g_tenant_ID: data.tenant_id,
