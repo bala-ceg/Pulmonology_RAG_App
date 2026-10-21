@@ -53,6 +53,14 @@ class Config:
     PG_TOOL_PASSWORD: str | None = os.getenv("PG_TOOL_PASSWORD")
 
     # ------------------------------------------------------------------
+    # Microsoft Entra External ID (optional until enabled in deployment)
+    # ------------------------------------------------------------------
+    ENTRA_CLIENT_ID: str | None = os.getenv("ENTRA_CLIENT_ID")
+    ENTRA_CLIENT_SECRET: str | None = os.getenv("ENTRA_CLIENT_SECRET")
+    ENTRA_AUTHORITY: str | None = os.getenv("ENTRA_AUTHORITY")
+    ENTRA_REDIRECT_URI: str | None = os.getenv("ENTRA_REDIRECT_URI")
+
+    # ------------------------------------------------------------------
     # LLM & Embeddings
     # ------------------------------------------------------------------
     OPENAI_API_KEY: str | None = os.getenv("openai_api_key")
