@@ -1,8 +1,8 @@
 """Trusted mapping from Microsoft Entra directory identity to an active PCES account.
 
-The schema migration in docs/entra-external-id-phases-1-5.md adds the
-entra_tenant_id and entra_object_id columns. Email/name matching is deliberately
-not used for account linking.
+The migration in docs/entra-external-id-phases-1-5.md adds the immutable
+directory tenant/object identifiers. Email and display-name matching are never
+used for account linking.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def _connect():
 
 
 def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
-    """Resolve a directory tenant + immutable object ID to one active PCES tenant membership."""
+    """Resolve a directory tenant + object ID to exactly one active PCES membership."""
     if not tenant_id or not object_id:
         raise EntraIdentityError("Required directory identity claims are missing")
 
@@ -43,8 +43,24 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT pp.party_id, pp.party_type,
-                       COALESCE(pp.pces_role, pp.role, pp.party_type) AS pces_role,
+                SELECT LOWER(column_name)
+                FROM information_schema.columns
+                WHERE table_name = 'p_party'
+                """
+            )
+            columns = {row[0] for row in cur.fetchall()}
+            role_column = next(
+                (name for name in ("pces_role", "role", "specialty", "department") if name in columns),
+                None,
+            )
+            if not {"party_id", "party_type", "entra_tenant_id", "entra_object_id"} <= columns:
+                raise EntraConfigurationError(
+                    "p_party is missing required Entra identity mapping columns"
+                )
+            role_expr = sql.Identifier(role_column) if role_column else sql.Identifier("party_type")
+            query = sql.SQL(
+                """
+                SELECT pp.party_id, pp.party_type, COALESCE({role_col}, pp.party_type) AS pces_role,
                        pt.tenant_id
                 FROM p_party AS pp
                 JOIN p_party_tenant AS pt ON pt.party_id = pp.party_id
@@ -59,18 +75,21 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                   AND pp.party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
                 ORDER BY pt.tenant_id
                 LIMIT 2
-                """,
-                (tenant_id, object_id),
-            )
+                """
+            ).format(role_col=role_expr)
+            cur.execute(query, (tenant_id, object_id))
             rows = cur.fetchall()
+    except EntraConfigurationError:
+        raise
     except psycopg.Error as exc:
-        # Avoid leaking SQL, connection details, or database schema in the response.
         raise EntraConfigurationError("Unable to query the PCES identity mapping") from exc
 
     if not rows:
         raise EntraIdentityError("No active PCES identity mapping exists")
     if len(rows) != 1:
-        raise EntraIdentityError("Identity has multiple active tenant memberships; explicit tenant selection is required")
+        raise EntraIdentityError(
+            "Identity has multiple active tenant memberships; explicit tenant selection is required"
+        )
 
     party_id, party_type, pces_role, active_tenant_id = rows[0]
     return {
