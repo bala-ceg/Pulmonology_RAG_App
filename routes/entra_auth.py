@@ -7,10 +7,8 @@ in docs/entra-external-id-phases-1-5.md have been applied and verified.
 from __future__ import annotations
 
 import secrets
-from urllib.parse import urlparse
-
 import msal
-from flask import Blueprint, current_app, jsonify, redirect, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, request, session
 
 from config import Config
 from services.entra_identity_service import (
@@ -57,7 +55,7 @@ def entra_login():
             redirect_uri=Config.ENTRA_REDIRECT_URI,
             prompt="select_account",
         )
-    except (ValueError, msal.MsalError):
+    except Exception:
         current_app.logger.exception("Unable to start Entra authorization flow")
         session.pop("entra_oauth_state", None)
         return jsonify({"success": False, "error": "Unable to start sign-in"}), 500
