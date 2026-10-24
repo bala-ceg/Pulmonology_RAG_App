@@ -1,4 +1,4 @@
-"""Microsoft Entra External ID authentication endpoints.
+""""Microsoft Entra External ID authentication endpoints.
 
 This blueprint is additive during the phased migration. Do not enable Entra
 sign-in in production until the database migration and environment variables
@@ -50,7 +50,8 @@ def entra_login():
     session["entra_login_next"] = "/"
     try:
         auth_url = _client().get_authorization_request_url(
-            scopes=["openid", "profile", "email"],
+            # MSAL adds the reserved OIDC scopes (openid, profile, offline_access).
+            scopes=["email"],
             state=state,
             redirect_uri=Config.ENTRA_REDIRECT_URI,
             prompt="select_account",
@@ -83,15 +84,20 @@ def entra_callback():
     try:
         result = _client().acquire_token_by_authorization_code(
             code,
-            scopes=["openid", "profile", "email"],
+            # Keep this aligned with the initial request; don't pass reserved OIDC scopes.
+            scopes=["email"],
             redirect_uri=Config.ENTRA_REDIRECT_URI,
         )
-    except (ValueError, msal.MsalError):
+    except Exception:
         current_app.logger.exception("Entra authorization-code exchange failed")
         session.clear()
         return jsonify({"success": False, "error": "Sign-in failed"}), 401
 
     if result.get("error") or not isinstance(result.get("id_token_claims"), dict):
+        current_app.logger.warning(
+            "Entra token exchange failed: %s",
+            result.get("error_description") or result.get("error") or "ID token claims missing",
+        )
         session.clear()
         return jsonify({"success": False, "error": "Microsoft identity could not be verified"}), 401
 
