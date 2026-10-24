@@ -1,4 +1,4 @@
-""""Microsoft Entra External ID authentication endpoints.
+"""Microsoft Entra External ID authentication endpoints.
 
 This blueprint is additive during the phased migration. Do not enable Entra
 sign-in in production until the database migration and environment variables
