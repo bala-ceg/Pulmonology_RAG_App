@@ -1,10 +1,13 @@
-"""Trusted mapping from Microsoft Entra directory identity to an active PCES account.
+"""Trusted mapping from Microsoft Entra identity to an active PCES account.
 
-The migration in docs/entra-external-id-phases-1-5.md adds the immutable
-directory tenant/object identifiers. Email and display-name matching are never
-used for account linking.
+This deployment uses one configured Entra External ID tenant. The token tenant
+ID is checked against the configured authority, while the existing
+p_party.entra_object_id column maps the user to a PCES party. Email and display
+name are never used for account linking.
 """
 from __future__ import annotations
+
+from urllib.parse import urlparse
 
 import psycopg
 from psycopg import sql
@@ -34,10 +37,32 @@ def _connect():
     return psycopg.connect(**kwargs)
 
 
+def _configured_tenant_id() -> str:
+    """Extract the expected directory tenant GUID from the configured authority."""
+    authority = Config.ENTRA_AUTHORITY
+    if not authority:
+        raise EntraConfigurationError("Microsoft Entra authority is not configured")
+    path_parts = [part for part in urlparse(authority).path.split("/") if part]
+    if not path_parts:
+        raise EntraConfigurationError(
+            "The configured Entra authority must include the tenant identifier"
+        )
+    return path_parts[-1].strip().lower()
+
+
 def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
-    """Resolve a directory tenant + object ID to exactly one active PCES membership."""
+    """Resolve a verified identity in the configured Entra tenant to one active PCES membership.
+
+    The database stores only entra_object_id. Because this deployment is
+    configured for a single Entra tenant, the incoming tid claim is checked
+    against the tenant identifier in ENTRA_AUTHORITY before querying by oid.
+    """
     if not tenant_id or not object_id:
         raise EntraIdentityError("Required directory identity claims are missing")
+
+    expected_tenant_id = _configured_tenant_id()
+    if tenant_id.strip().lower() != expected_tenant_id:
+        raise EntraIdentityError("Identity was issued by an unexpected Entra tenant")
 
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -53,9 +78,9 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                 (name for name in ("pces_role", "role", "specialty", "department") if name in columns),
                 None,
             )
-            if not {"party_id", "party_type", "entra_tenant_id", "entra_object_id"} <= columns:
+            if not {"party_id", "party_type", "entra_object_id"} <= columns:
                 raise EntraConfigurationError(
-                    "p_party is missing required Entra identity mapping columns"
+                    "p_party is missing required identity mapping columns"
                 )
             role_expr = sql.Identifier(role_column) if role_column else sql.Identifier("party_type")
             query = sql.SQL(
@@ -65,8 +90,7 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                 FROM p_party AS pp
                 JOIN p_party_tenant AS pt ON pt.party_id = pp.party_id
                 JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
-                WHERE pp.entra_tenant_id = %s
-                  AND pp.entra_object_id = %s
+                WHERE pp.entra_object_id = %s
                   AND COALESCE(pp.is_active, TRUE) = TRUE
                   AND COALESCE(pt.is_active, TRUE) = TRUE
                   AND pt.status = 'ACTIVE'
@@ -77,7 +101,7 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                 LIMIT 2
                 """
             ).format(role_col=role_expr)
-            cur.execute(query, (tenant_id, object_id))
+            cur.execute(query, (object_id,))
             rows = cur.fetchall()
     except EntraConfigurationError:
         raise
