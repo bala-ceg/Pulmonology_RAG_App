@@ -1,8 +1,9 @@
 """Microsoft Entra External ID authentication endpoints.
 
-This blueprint is additive during the phased migration. Do not enable Entra
-sign-in in production until the database migration and environment variables
-in docs/entra-external-id-phases-1-5.md have been applied and verified.
+This blueprint is additive during the phased migration. The identity resolver
+uses the existing p_party.entra_object_id and validates the token tenant against
+the configured single-tenant authority. Environment-backed testing and the
+application-wide authorization audit are still required before production use.
 """
 from __future__ import annotations
 
