@@ -41,19 +41,9 @@ Provider-wide logout, PKCE/state behavior against the actual External ID user fl
 
 ## Phase 4 — Identity mapping
 
-A database administrator must review the schema and apply an approved migration equivalent to:
+The current implementation does not require an `entra_tenant_id` column. It validates the token's `tid` claim against the tenant identifier in the configured `ENTRA_AUTHORITY`, then maps the verified `oid` claim to the existing `p_party.entra_object_id` column. This is appropriate only for the configured single-tenant deployment. If multiple Entra tenants must be supported, revisit the design and store the tenant/object pair (with a suitable uniqueness constraint).
 
-```sql
-ALTER TABLE p_party
-  ADD COLUMN IF NOT EXISTS entra_tenant_id TEXT,
-  ADD COLUMN IF NOT EXISTS entra_object_id TEXT;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_p_party_entra_identity
-  ON p_party (entra_tenant_id, entra_object_id)
-  WHERE entra_tenant_id IS NOT NULL AND entra_object_id IS NOT NULL;
-```
-
-Before applying, confirm the actual schema/search path and whether the table is schema-qualified in this deployment. Populate the mapping only from an independently verified directory object ID. Never automatically link by email, UPN, or display name. Accounts without an explicit mapping are denied.
+The existing `p_party.entra_object_id` mapping must be populated only from an independently verified directory object ID and linked to the correct existing PCES party. Never automatically link by email, UPN, or display name. Accounts without an explicit mapping are denied. Verify that each object ID maps to at most one eligible PCES party; the resolver denies users with multiple active PCES tenant memberships.
 
 The current resolver requires exactly one active hospital membership. Users with multiple active memberships are denied until a deliberate hospital-selection step is implemented and validated against the server-side membership table.
 
@@ -73,6 +63,7 @@ This phase does not complete the application-wide authorization audit. Before ro
 
 - No Entra tenant, client ID, secret, authority, redirect URI, or live EHR schema was provided; sign-in cannot be exercised here.
 - The legacy `/api/login` route remains enabled for backwards compatibility during phased migration.
-- The resolver assumes `p_party` has `pces_role` or `role`; verify the deployed schema and adjust the query if neither column exists.
+- The resolver uses `p_party.entra_object_id` and the configured single-tenant authority; multi-tenant identity mapping is not supported by this implementation.
+- The resolver chooses `pces_role`, `role`, `specialty`, or `department` if present, otherwise falls back to `party_type`; verify that this matches deployed role semantics.
 - Route-level tenant authorization is not globally enforced by this change.
 - No automated tests or production sign-in test have been run from this connector.
