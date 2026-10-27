@@ -59,6 +59,9 @@ class Config:
     ENTRA_CLIENT_SECRET: str | None = os.getenv("ENTRA_CLIENT_SECRET")
     ENTRA_AUTHORITY: str | None = os.getenv("ENTRA_AUTHORITY")
     ENTRA_REDIRECT_URI: str | None = os.getenv("ENTRA_REDIRECT_URI")
+    # JSON allowlist: verified Entra Object ID -> existing PCES party UUID.
+    # Never populate from email or untrusted client input.
+    ENTRA_PCES_PROVISIONING_MAP: str | None = os.getenv("ENTRA_PCES_PROVISIONING_MAP")
 
     # ------------------------------------------------------------------
     # LLM & Embeddings
