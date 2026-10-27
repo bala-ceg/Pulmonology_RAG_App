@@ -158,6 +158,9 @@ def entra_link_request_code():
         # Do not reveal whether the submitted address matched a PCES account
         # through a different response when mail delivery is unavailable.
         current_app.logger.exception("Email verification could not be started")
+        # Use a deliberately nonexistent challenge so the response remains
+        # generic; the user can return to the request form and retry later.
+        session["entra_email_challenge_id"] = "00000000-0000-0000-0000-000000000000"
         return _link_page(
             "verify",
             notice="If the email matches an active PCES account with a previously verified email and active hospital membership, a code has been sent. Check your inbox.",
@@ -168,6 +171,16 @@ def entra_link_request_code():
         "verify",
         notice="If the email matches an active PCES account with a previously verified email and active hospital membership, a code has been sent. Check your inbox.",
     ), 200
+
+
+@entra_auth_bp.get("/link/restart")
+def entra_link_restart():
+    """Return to the email form without discarding the verified Entra identity."""
+    if not session.get("entra_pending_link") or not session.get("entra_link_csrf"):
+        session.clear()
+        return jsonify({"success": False, "error": "Linking session expired; restart sign-in"}), 400
+    session.pop("entra_email_challenge_id", None)
+    return _link_page("request"), 200
 
 
 @entra_auth_bp.post("/link/verify")
