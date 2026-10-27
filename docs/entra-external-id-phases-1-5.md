@@ -43,7 +43,7 @@ Provider-wide logout, PKCE/state behavior against the actual External ID user fl
 
 The current implementation does not require an `entra_tenant_id` column. It validates the token's `tid` claim against the tenant identifier in the configured `ENTRA_AUTHORITY`, then maps the verified `oid` claim to the existing `p_party.entra_object_id` column. This is appropriate only for the configured single-tenant deployment. If multiple Entra tenants must be supported, revisit the design and store the tenant/object pair (with a suitable uniqueness constraint).
 
-The existing `p_party.entra_object_id` mapping must be populated only from an independently verified directory object ID and linked to the correct existing PCES party. Never automatically link by email, UPN, or display name. Accounts without an explicit mapping are denied. Verify that each object ID maps to at most one eligible PCES party; the resolver denies users with multiple active PCES tenant memberships.
+The existing `p_party.entra_object_id` mapping must be populated only from an independently verified directory object ID and linked to the correct existing PCES party. Never automatically link by email, UPN, or display name. First-time provisioning is allowed only when `ENTRA_PCES_PROVISIONING_MAP` explicitly allowlists the verified Entra Object ID to an existing PCES party UUID; otherwise unmapped accounts are denied. Configure this environment variable as JSON, for example `{"<verified-object-id>":"<existing-party-uuid>"}`. Treat it as an administrator-controlled secret/configuration value, and remove the entry after successful provisioning if desired. Verify that each object ID maps to at most one eligible PCES party; the resolver denies users with multiple active PCES tenant memberships.
 
 The current resolver requires exactly one active hospital membership. Users with multiple active memberships are denied until a deliberate hospital-selection step is implemented and validated against the server-side membership table.
 
@@ -66,4 +66,5 @@ This phase does not complete the application-wide authorization audit. Before ro
 - The resolver uses `p_party.entra_object_id` and the configured single-tenant authority; multi-tenant identity mapping is not supported by this implementation.
 - The resolver chooses `pces_role`, `role`, `specialty`, or `department` if present, otherwise falls back to `party_type`; verify that this matches deployed role semantics.
 - Route-level tenant authorization is not globally enforced by this change.
+- The allowlisted first-time provisioning path has not yet been tested against the deployed VM or live Entra flow.
 - No automated tests or production sign-in test have been run from this connector.
