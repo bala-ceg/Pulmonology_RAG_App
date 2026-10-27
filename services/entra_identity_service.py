@@ -50,7 +50,7 @@ def _validate_tenant(tenant_id: str) -> None:
 
 def _table_columns(cur, table_name: str) -> set[str]:
     cur.execute(
-        "SELECT LOWER(column_name) FROM information_schema.columns WHERE table_name = %s",
+        "SELECT LOWER(column_name) FROM information_schema.columns WHERE table_name = %s AND table_schema = current_schema()",
         (table_name,),
     )
     return {row[0] for row in cur.fetchall()}
