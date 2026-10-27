@@ -4509,7 +4509,7 @@
             <div class="sidebar-bottom">
                 <div class="ehr-ai-box">
                     <button id="ehr-ai-toggle-btn" class="section-btn" onclick="toggleEhrAi()">EHR / AI</button>
-                    <button id="medical-imaging-services-btn" class="section-btn" type="button" title="Medical Imaging Services entry point">Medical Imaging Services</button>
+                    <button id="medical-imaging-services-btn" class="section-btn" type="button" title="Image Services entry point">Image Services</button>
                     <button class="section-btn" onclick="openChatYodha()">Chat Services</button>
                 </div>
             </div>
@@ -5912,6 +5912,7 @@
         const PCES_CONTEXT_FIELDS = [
             'g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID',
             'g_nurse_id', 'g_med_assist_id', 'g_office_admin_id', 'g_user_id',
+            'g_doctor_name', 'g_patient_name', 'g_hospital_name',
             'g_temp1_id', 'g_temp2_id', 'g_temp3_id'
         ];
 
@@ -5954,6 +5955,9 @@
                 g_med_assist_id: null,
                 g_office_admin_id: null,
                 g_user_id: null,
+                g_doctor_name: null,
+                g_patient_name: null,
+                g_hospital_name: null,
                 g_temp1_id: null,
                 g_temp2_id: null,
                 g_temp3_id: null
@@ -5983,6 +5987,9 @@
             g_med_assist_id: normalizePcesContextValue(_savedPcesContext.g_med_assist_id),
             g_office_admin_id: normalizePcesContextValue(_savedPcesContext.g_office_admin_id),
             g_user_id: normalizePcesContextValue(_savedPcesContext.g_user_id),
+            g_doctor_name: normalizePcesContextValue(_savedPcesContext.g_doctor_name || sessionStorage.getItem('pces_doctor_name')),
+            g_patient_name: normalizePcesContextValue(_savedPcesContext.g_patient_name || sessionStorage.getItem('pces_patient_name')),
+            g_hospital_name: normalizePcesContextValue(_savedPcesContext.g_hospital_name || sessionStorage.getItem('pces_hospital_name')),
             g_temp1_id: normalizePcesContextValue(_savedPcesContext.g_temp1_id),
             g_temp2_id: normalizePcesContextValue(_savedPcesContext.g_temp2_id),
             g_temp3_id: normalizePcesContextValue(_savedPcesContext.g_temp3_id)
@@ -10162,6 +10169,7 @@ function toggleEhrAi() {
             if (data.full_name) {
                 window.currentPatientName = data.full_name;
                 sessionStorage.setItem('pces_patient_name', data.full_name);
+                updatePcesContext({g_patient_name: data.full_name});
             }
             updateMedicalHistoryEmptyState(Boolean(window.selectedPatientId));
             if (data.patient_id) loadMedicalHistory(data.patient_id);
@@ -10181,6 +10189,7 @@ function toggleEhrAi() {
             window.currentPatientName = '';
             sessionStorage.removeItem('pces_patient_id');
             sessionStorage.removeItem('pces_patient_name');
+            updatePcesContext({g_patient_name: null});
             sessionStorage.removeItem('pces_patient_org');
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = '—';
@@ -13081,6 +13090,9 @@ ${data.conclusion}
                     g_med_assist_id: null,
                     g_office_admin_id: loggedInPartyType === 'OFFICE_ADMIN' ? data.party_id : null,
                     g_user_id: data.party_id,
+                    g_doctor_name: data.full_name || data.username,
+                    g_patient_name: null,
+                    g_hospital_name: data.tenant_name || null,
                     g_patient_ID: null,
                     g_tenant_ID: data.tenant_id,
                     g_lab_ID: null
