@@ -1,4 +1,4 @@
-"""Microsoft Entra External ID authentication and existing-account linking."""
+"""Microsoft Entra External ID authentication and verified-email account linking."""
 from __future__ import annotations
 
 import secrets
@@ -9,9 +9,9 @@ from config import Config
 from services.entra_identity_service import (
     EntraConfigurationError,
     EntraIdentityError,
-    link_existing_pces_account,
     resolve_pces_identity,
 )
+from services.entra_email_verification import request_email_code, verify_email_code
 
 entra_auth_bp = Blueprint("entra_auth_bp", __name__, url_prefix="/auth/entra")
 
@@ -44,6 +44,16 @@ def _set_authenticated_session(identity: dict, issuer_tenant: str, object_id: st
     }
 
 
+def _link_page(stage: str, error: str | None = None, notice: str | None = None):
+    return render_template(
+        "entra_link.html",
+        csrf_token=session.get("entra_link_csrf"),
+        stage=stage,
+        error=error,
+        notice=notice,
+    )
+
+
 @entra_auth_bp.get("/login")
 def entra_login():
     """Start the authorization-code flow with an unpredictable state value."""
@@ -65,7 +75,7 @@ def entra_login():
 
 @entra_auth_bp.get("/callback")
 def entra_callback():
-    """Validate OAuth state, then resolve or request verified linking to an existing PCES account."""
+    """Resolve a mapped identity or start verified-email account linking."""
     expected_state = session.pop("entra_oauth_state", None)
     returned_state = request.args.get("state")
     if not expected_state or not returned_state or not secrets.compare_digest(expected_state, returned_state):
@@ -103,16 +113,16 @@ def entra_callback():
     try:
         identity = resolve_pces_identity(issuer_tenant, object_id)
     except EntraIdentityError as exc:
-        # Only an entirely unmapped OID may enter account linking. Conflicting,
-        # inactive, or otherwise invalid identities must never get a link form.
-        if str(exc) != "No active identity mapping exists" and str(exc) != "No active PCES identity mapping exists":
+        # Only an entirely unmapped identity can start linking. Inactive and
+        # conflicting mappings must not be routed into account recovery.
+        if str(exc) != "No active PCES identity mapping exists":
             current_app.logger.warning("Entra identity mapping denied: %s", exc)
             session.clear()
             return jsonify({"success": False, "error": "This account is not provisioned for PCES access"}), 403
         session.clear()
         session["entra_pending_link"] = {"tenant_id": issuer_tenant, "object_id": object_id}
         session["entra_link_csrf"] = secrets.token_urlsafe(32)
-        return render_template("entra_link.html", csrf_token=session["entra_link_csrf"]), 200
+        return _link_page("request"), 200
     except EntraConfigurationError:
         current_app.logger.exception("Entra identity mapping is not configured")
         session.clear()
@@ -122,9 +132,9 @@ def entra_callback():
     return redirect("/")
 
 
-@entra_auth_bp.post("/link")
-def entra_link_existing_account():
-    """Link only after successful verification of the existing PCES credentials and tenant."""
+@entra_auth_bp.post("/link/request")
+def entra_link_request_code():
+    """Request a one-time code sent only to an already-verified PCES email."""
     pending = session.get("entra_pending_link")
     expected_csrf = session.get("entra_link_csrf")
     supplied_csrf = request.form.get("csrf_token", "")
@@ -132,21 +142,55 @@ def entra_link_existing_account():
         session.clear()
         return jsonify({"success": False, "error": "Linking session expired; restart sign-in"}), 400
 
-    username = (request.form.get("username") or "").strip()
-    password = request.form.get("password") or ""
-    pces_tenant_id = (request.form.get("pces_tenant_id") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    tenant_id = (request.form.get("pces_tenant_id") or "").strip()
     try:
-        identity = link_existing_pces_account(
-            pending["tenant_id"], pending["object_id"], username, password, pces_tenant_id,
+        challenge_id = request_email_code(
+            pending["tenant_id"], pending["object_id"], email, tenant_id,
         )
     except EntraIdentityError as exc:
-        current_app.logger.warning("Existing PCES account linking denied: %s", exc)
-        # Keep the pending identity and CSRF token so the user can retry; do not log credentials.
-        return render_template("entra_link.html", csrf_token=expected_csrf,
-                               error="We couldn't verify that PCES account. Check your credentials and hospital, then try again."), 403
+        # Rate limiting is safe to disclose; account-match outcomes are not.
+        if "Too many verification requests" in str(exc):
+            return _link_page("request", error="Too many requests. Wait a little before trying again."), 429
+        current_app.logger.warning("Entra email verification request rejected: %s", exc)
+        return _link_page("request", error="Unable to start verification. Check the details and try again."), 400
     except EntraConfigurationError:
-        current_app.logger.exception("PCES account linking is not configured")
-        return jsonify({"success": False, "error": "Account linking is temporarily unavailable"}), 503
+        current_app.logger.exception("Email verification could not be started")
+        return _link_page("request", error="Email verification is temporarily unavailable."), 503
+
+    session["entra_email_challenge_id"] = challenge_id
+    return _link_page(
+        "verify",
+        notice="If the email matches an active PCES account with a previously verified email and active hospital membership, a code has been sent. Check your inbox.",
+    ), 200
+
+
+@entra_auth_bp.post("/link/verify")
+def entra_link_verify_code():
+    """Consume a one-time email code and link the pending Entra identity."""
+    pending = session.get("entra_pending_link")
+    expected_csrf = session.get("entra_link_csrf")
+    supplied_csrf = request.form.get("csrf_token", "")
+    challenge_id = session.get("entra_email_challenge_id")
+    if (not pending or not expected_csrf or not supplied_csrf or not challenge_id
+            or not secrets.compare_digest(expected_csrf, supplied_csrf)):
+        session.clear()
+        return jsonify({"success": False, "error": "Linking session expired; restart sign-in"}), 400
+
+    try:
+        identity = verify_email_code(
+            challenge_id, (request.form.get("code") or "").strip(),
+            pending["tenant_id"], pending["object_id"],
+        )
+    except EntraIdentityError:
+        return _link_page(
+            "verify",
+            error="The code is invalid or expired, or this account cannot be linked. Request a new code and try again.",
+            notice=None,
+        ), 400
+    except EntraConfigurationError:
+        current_app.logger.exception("Email code verification failed")
+        return _link_page("verify", error="Verification is temporarily unavailable."), 503
 
     issuer_tenant, object_id = pending["tenant_id"], pending["object_id"]
     _set_authenticated_session(identity, issuer_tenant, object_id)
