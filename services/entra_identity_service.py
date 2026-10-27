@@ -26,6 +26,7 @@ def _connect():
         "user": Config.PG_TOOL_USER or Config.DB_USER,
         "password": Config.PG_TOOL_PASSWORD or Config.DB_PASSWORD,
         "connect_timeout": Config.DB_CONNECT_TIMEOUT,
+        "options": "-c search_path=ehr_ccm_schema,public",
     }
     if not all(kwargs.get(key) for key in ("host", "dbname", "user", "password")):
         raise EntraConfigurationError("EHR PostgreSQL connection is not configured")
