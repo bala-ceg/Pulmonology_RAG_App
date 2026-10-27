@@ -155,8 +155,13 @@ def entra_link_request_code():
         current_app.logger.warning("Entra email verification request rejected: %s", exc)
         return _link_page("request", error="Unable to start verification. Check the details and try again."), 400
     except EntraConfigurationError:
+        # Do not reveal whether the submitted address matched a PCES account
+        # through a different response when mail delivery is unavailable.
         current_app.logger.exception("Email verification could not be started")
-        return _link_page("request", error="Email verification is temporarily unavailable."), 503
+        return _link_page(
+            "verify",
+            notice="If the email matches an active PCES account with a previously verified email and active hospital membership, a code has been sent. Check your inbox.",
+        ), 200
 
     session["entra_email_challenge_id"] = challenge_id
     return _link_page(
