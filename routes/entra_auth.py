@@ -1,9 +1,7 @@
-"""Microsoft Entra External ID authentication endpoints.
+""""Microsoft Entra External ID authentication endpoints.
 
-This blueprint is additive during the phased migration. The identity resolver
-uses the existing p_party.entra_object_id and validates the token tenant against
-the configured single-tenant authority. Environment-backed testing and the
-application-wide authorization audit are still required before production use.
+First-time mapping is supported only through the administrator-maintained
+ENTRA_PCES_PROVISIONING_MAP allowlist. Unmapped identities are otherwise denied.
 """
 from __future__ import annotations
 
@@ -15,6 +13,7 @@ from config import Config
 from services.entra_identity_service import (
     EntraConfigurationError,
     EntraIdentityError,
+    provision_allowlisted_identity,
     resolve_pces_identity,
 )
 
@@ -51,7 +50,6 @@ def entra_login():
     session["entra_login_next"] = "/"
     try:
         auth_url = _client().get_authorization_request_url(
-            # MSAL adds the reserved OIDC scopes (openid, profile, offline_access).
             scopes=["email"],
             state=state,
             redirect_uri=Config.ENTRA_REDIRECT_URI,
@@ -66,7 +64,7 @@ def entra_login():
 
 @entra_auth_bp.get("/callback")
 def entra_callback():
-    """Validate OAuth state, exchange the code, and map the trusted identity."""
+    """Validate OAuth state, exchange code, then resolve/provision approved identity."""
     expected_state = session.pop("entra_oauth_state", None)
     returned_state = request.args.get("state")
     if not expected_state or not returned_state or not secrets.compare_digest(expected_state, returned_state):
@@ -85,7 +83,6 @@ def entra_callback():
     try:
         result = _client().acquire_token_by_authorization_code(
             code,
-            # Keep this aligned with the initial request; don't pass reserved OIDC scopes.
             scopes=["email"],
             redirect_uri=Config.ENTRA_REDIRECT_URI,
         )
@@ -110,6 +107,9 @@ def entra_callback():
         return jsonify({"success": False, "error": "Required directory identity claims are missing"}), 403
 
     try:
+        # This function writes only when the exact OID -> party ID pair has
+        # been pre-approved in ENTRA_PCES_PROVISIONING_MAP. No email matching.
+        provision_allowlisted_identity(issuer_tenant, object_id)
         identity = resolve_pces_identity(issuer_tenant, object_id)
     except EntraIdentityError as exc:
         current_app.logger.warning("Entra identity mapping denied: %s", exc)
@@ -120,7 +120,6 @@ def entra_callback():
         session.clear()
         return jsonify({"success": False, "error": "Identity mapping is not configured"}), 503
 
-    # Regenerate session state after successful authentication.
     session.clear()
     session["pces_identity"] = {
         "party_id": str(identity["party_id"]),
@@ -143,7 +142,7 @@ def entra_logout():
 
 @entra_auth_bp.get("/status")
 def entra_status():
-    """Return only a minimal authentication status; never expose token material."""
+    """Return minimal authentication status without exposing token material."""
     identity = session.get("pces_identity")
     return jsonify({
         "authenticated": bool(identity),
