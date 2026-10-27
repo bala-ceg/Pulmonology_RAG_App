@@ -22,6 +22,7 @@ button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;backgr
 <label for="code">One-time verification code</label><input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required autofocus>
 <button type="submit">Verify and link account</button>
 </form>
+<p class="hint"><a href="{{ url_for('entra_auth_bp.entra_link_restart') }}">Request a new code</a></p>
 {% else %}
 <form method="post" action="{{ url_for('entra_auth_bp.entra_link_request_code') }}" autocomplete="on">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
