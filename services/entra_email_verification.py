@@ -191,7 +191,7 @@ def verify_email_code(challenge_id: str, code: str, entra_tenant_id: str, object
     try:
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(
-                """SELECT party_id, tenant_id, entra_tenant_id, entra_object_id,
+                """SELECT party_id, tenant_id, entra_tenant_id, entra_object_id, email_hash,
                           code_hash, expires_at, attempts, consumed_at
                    FROM entra_email_link_challenges
                    WHERE challenge_id = %s FOR UPDATE""",
@@ -200,7 +200,7 @@ def verify_email_code(challenge_id: str, code: str, entra_tenant_id: str, object
             row = cur.fetchone()
             if not row:
                 raise EntraIdentityError("Invalid or expired verification code")
-            party_id, tenant_id, saved_tid, saved_oid, code_hash, expires_at, attempts, consumed_at = row
+            party_id, tenant_id, saved_tid, saved_oid, email_hash, code_hash, expires_at, attempts, consumed_at = row
             if (not party_id or not tenant_id or consumed_at is not None
                     or expires_at <= datetime.now(timezone.utc)
                     or int(attempts) >= MAX_VERIFY_ATTEMPTS
@@ -218,12 +218,18 @@ def verify_email_code(challenge_id: str, code: str, entra_tenant_id: str, object
                 raise EntraIdentityError("Invalid or expired verification code")
 
             cur.execute(
-                """SELECT party_id, party_type, entra_object_id, is_active, deleted_at
+                """SELECT party_id, party_type, entra_object_id, is_active, deleted_at,
+                          email, email_verified_at
                    FROM p_party WHERE party_id = %s FOR UPDATE""", (party_id,)
             )
             party = cur.fetchone()
-            if not party or not party[3] or party[4] is not None:
-                raise EntraIdentityError("PCES account is no longer active")
+            if (not party or not party[3] or party[4] is not None
+                    or party[1] not in ("DOCTOR", "NURSE", "OFFICE_ADMIN")
+                    or not party[6] or not party[5]
+                    or not hmac.compare_digest(
+                        str(email_hash), _digest("email:" + str(party[5]).strip().casefold())
+                    )):
+                raise EntraIdentityError("PCES account is no longer eligible for linking")
             if party[2] and str(party[2]).casefold() != object_id.casefold():
                 raise EntraIdentityError("PCES account is already linked to another Microsoft identity")
             cur.execute(
