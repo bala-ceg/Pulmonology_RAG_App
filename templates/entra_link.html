@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify and link your PCES account</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#172033;margin:0;min-height:100vh;display:grid;place-items:center}
+main{background:#fff;width:min(92vw,440px);box-sizing:border-box;padding:28px;border:1px solid #e1e6ef;border-radius:14px;box-shadow:0 8px 30px #15213b12}
+h1{font-size:1.45rem;margin:0 0 10px}p{line-height:1.5;color:#4b5565}label{display:block;font-weight:600;font-size:.92rem;margin:16px 0 6px}
+input,select{box-sizing:border-box;width:100%;padding:11px 12px;border:1px solid #c9d2df;border-radius:8px;font:inherit;background:#fff}
+button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;background:#174ea6;color:white;font:inherit;font-weight:650;cursor:pointer}
+.error{padding:10px 12px;border-radius:8px;background:#fff1f0;color:#a61b1b}.notice{padding:10px 12px;border-radius:8px;background:#eef5ff;color:#174078}.hint{font-size:.85rem;color:#687386}
+</style></head>
+<body><main>
+<h1>{% if stage == "verify" %}Check your email{% else %}Link your existing PCES account{% endif %}</h1>
+<p>{% if stage == "verify" %}Enter the six-digit code sent to the email address already verified for your PCES account. The code expires in 10 minutes and can be used once.{% else %}To link your Microsoft sign-in, enter the email address already verified in PCES and select the hospital assigned to your account. We will send a one-time code only if the details match an eligible PCES account.{% endif %}</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if stage == "verify" %}
+<form method="post" action="{{ url_for('entra_auth_bp.entra_link_verify_code') }}" autocomplete="off">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="code">One-time verification code</label><input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required autofocus>
+<button type="submit">Verify and link account</button>
+</form>
+<p class="hint"><a href="{{ url_for('entra_auth_bp.entra_link_restart') }}">Request a new code</a></p>
+{% else %}
+<form method="post" action="{{ url_for('entra_auth_bp.entra_link_request_code') }}" autocomplete="on">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="email">Email registered and verified in PCES</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+<label for="pces_tenant_id">Hospital / tenant</label><select id="pces_tenant_id" name="pces_tenant_id" required><option value="">Loading hospitals…</option></select>
+<p class="hint">For security, we show the same confirmation whether or not an account matches. Your PCES password is not requested.</p>
+<button type="submit">Send verification code</button>
+</form>
+{% endif %}
+</main>
+{% if stage != "verify" %}
+<script>
+(async function(){
+ const select=document.getElementById("pces_tenant_id");
+ try{
+  const response=await fetch("/api/tenants",{credentials:"same-origin",headers:{"Accept":"application/json"}});
+  if(!response.ok) throw new Error("Hospital list unavailable");
+  const tenants=await response.json();select.replaceChildren();
+  const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Select your hospital";select.appendChild(placeholder);
+  for(const tenant of tenants){const option=document.createElement("option");option.value=String(tenant.tenant_id);option.textContent=String(tenant.tenant_name||tenant.tenant_code||"Hospital");select.appendChild(option);}
+  if(!tenants.length)placeholder.textContent="No hospitals available";
+ }catch(_){select.replaceChildren();const option=document.createElement("option");option.value="";option.textContent="Could not load hospitals. Refresh and try again.";select.appendChild(option);}
+})();
+</script>
+{% endif %}
+</body></html>
