@@ -1,13 +1,14 @@
 """Trusted mapping from Microsoft Entra identity to an active PCES account.
 
-This deployment uses one configured Entra External ID tenant. The token tenant
-ID is checked against the configured authority, while the existing
-p_party.entra_object_id column maps the user to a PCES party. Email and display
-name are never used for account linking.
+A first-time mapping is permitted only when an administrator explicitly
+allowlists the verified Entra object ID to an existing PCES party ID in
+ENTRA_PCES_PROVISIONING_MAP. Email and display name are never used for linking.
 """
 from __future__ import annotations
 
+import json
 from urllib.parse import urlparse
+from uuid import UUID
 
 import psycopg
 from psycopg import sql
@@ -50,19 +51,130 @@ def _configured_tenant_id() -> str:
     return path_parts[-1].strip().lower()
 
 
-def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
-    """Resolve a verified identity in the configured Entra tenant to one active PCES membership.
+def _validate_tenant(tenant_id: str) -> None:
+    if not tenant_id or tenant_id.strip().lower() != _configured_tenant_id():
+        raise EntraIdentityError("Identity was issued by an unexpected Entra tenant")
 
-    The database stores only entra_object_id. Because this deployment is
-    configured for a single Entra tenant, the incoming tid claim is checked
-    against the tenant identifier in ENTRA_AUTHORITY before querying by oid.
+
+def provision_allowlisted_identity(tenant_id: str, object_id: str) -> bool:
+    """Persist a first-time mapping only for an administrator-approved OID->party ID.
+
+    Configure ENTRA_PCES_PROVISIONING_MAP as JSON:
+    {"<verified-Entra-object-id>": "<existing-PCES-party-id>"}
+    This mapping must be provisioned by an administrator through a trusted channel.
+    Returns True if a mapping was created, False if this OID is not allowlisted.
     """
     if not tenant_id or not object_id:
         raise EntraIdentityError("Required directory identity claims are missing")
+    _validate_tenant(tenant_id)
 
-    expected_tenant_id = _configured_tenant_id()
-    if tenant_id.strip().lower() != expected_tenant_id:
-        raise EntraIdentityError("Identity was issued by an unexpected Entra tenant")
+    raw_map = getattr(Config, "ENTRA_PCES_PROVISIONING_MAP", None) or "{}"
+    try:
+        allowlist = json.loads(raw_map)
+        if not isinstance(allowlist, dict):
+            raise ValueError("expected JSON object")
+        normalized = {str(k).strip().lower(): str(v).strip() for k, v in allowlist.items()}
+        party_id = normalized.get(object_id.strip().lower())
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise EntraConfigurationError(
+            "ENTRA_PCES_PROVISIONING_MAP must be a JSON object mapping OIDs to party IDs"
+        ) from exc
+
+    if not party_id:
+        return False
+
+    try:
+        object_id = str(UUID(object_id))
+        party_id = str(UUID(party_id))
+    except ValueError as exc:
+        raise EntraConfigurationError(
+            "Provisioning map contains an invalid Object ID or party ID"
+        ) from exc
+
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT party_id, party_type, entra_object_id, is_active, deleted_at
+                FROM p_party
+                WHERE party_id = %s
+                FOR UPDATE
+                """,
+                (party_id,),
+            )
+            party = cur.fetchone()
+            if not party:
+                raise EntraIdentityError("Allowlisted PCES party does not exist")
+
+            existing_party_id, party_type, existing_oid, is_active, deleted_at = party
+            if deleted_at is not None or is_active is False:
+                raise EntraIdentityError("Allowlisted PCES party is inactive or deleted")
+            if party_type not in ("DOCTOR", "NURSE", "OFFICE_ADMIN"):
+                raise EntraIdentityError("PCES party type is not eligible for Entra access")
+            if existing_oid and str(existing_oid).lower() != object_id.lower():
+                raise EntraIdentityError("PCES party already has a different Entra mapping")
+
+            cur.execute(
+                """
+                SELECT party_id
+                FROM p_party
+                WHERE LOWER(entra_object_id) = LOWER(%s)
+                  AND party_id <> %s
+                LIMIT 1
+                """,
+                (object_id, party_id),
+            )
+            if cur.fetchone():
+                raise EntraIdentityError("Entra Object ID is already mapped to another PCES party")
+
+            cur.execute(
+                """
+                SELECT pt.tenant_id
+                FROM p_party_tenant AS pt
+                JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
+                WHERE pt.party_id = %s
+                  AND COALESCE(pt.is_active, TRUE) = TRUE
+                  AND pt.status = 'ACTIVE'
+                  AND COALESCE(t.is_active, TRUE) = TRUE
+                  AND t.status = 'ACTIVE'
+                """,
+                (party_id,),
+            )
+            memberships = cur.fetchall()
+            if len(memberships) != 1:
+                raise EntraIdentityError(
+                    "Provisioning requires exactly one active PCES tenant membership"
+                )
+
+            if existing_oid and str(existing_oid).lower() == object_id.lower():
+                return True
+
+            cur.execute(
+                """
+                UPDATE p_party
+                SET entra_object_id = %s
+                WHERE party_id = %s
+                  AND entra_object_id IS NULL
+                  AND deleted_at IS NULL
+                  AND is_active = TRUE
+                RETURNING party_id
+                """,
+                (object_id, party_id),
+            )
+            if not cur.fetchone():
+                raise EntraIdentityError("PCES identity mapping changed during provisioning")
+        return True
+    except (EntraConfigurationError, EntraIdentityError):
+        raise
+    except psycopg.Error as exc:
+        raise EntraConfigurationError("Unable to provision the PCES identity mapping") from exc
+
+
+def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
+    """Resolve a verified identity to exactly one active PCES tenant membership."""
+    if not tenant_id or not object_id:
+        raise EntraIdentityError("Required directory identity claims are missing")
+    _validate_tenant(tenant_id)
 
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -70,7 +182,7 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                 """
                 SELECT LOWER(column_name)
                 FROM information_schema.columns
-                WHERE table_name = 'p_party'
+                WHERE table_schema = current_schema() AND table_name = 'p_party'
                 """
             )
             columns = {row[0] for row in cur.fetchall()}
@@ -92,6 +204,7 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
                 JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
                 WHERE pp.entra_object_id = %s
                   AND COALESCE(pp.is_active, TRUE) = TRUE
+                  AND pp.deleted_at IS NULL
                   AND COALESCE(pt.is_active, TRUE) = TRUE
                   AND pt.status = 'ACTIVE'
                   AND COALESCE(t.is_active, TRUE) = TRUE
