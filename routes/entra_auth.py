@@ -1,4 +1,4 @@
-""""Microsoft Entra External ID authentication endpoints.
+"""Microsoft Entra External ID authentication endpoints.
 
 First-time mapping is supported only through the administrator-maintained
 ENTRA_PCES_PROVISIONING_MAP allowlist. Unmapped identities are otherwise denied.
