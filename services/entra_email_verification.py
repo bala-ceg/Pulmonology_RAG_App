@@ -110,7 +110,7 @@ def request_email_code(
 
             columns = {row[0] for row in cur.execute(
                 """SELECT LOWER(column_name) FROM information_schema.columns
-                   WHERE table_name = 'p_party'"""
+                   WHERE table_name = 'p_party' AND table_schema = current_schema()"""
             ).fetchall()}
             # Fail closed: the database must explicitly record that the email
             # was verified through a trusted PCES process.
@@ -256,7 +256,7 @@ def verify_email_code(challenge_id: str, code: str, entra_tenant_id: str, object
             )
             columns = {r[0] for r in cur.execute(
                 """SELECT LOWER(column_name) FROM information_schema.columns
-                   WHERE table_name = 'p_party'"""
+                   WHERE table_name = 'p_party' AND table_schema = current_schema()"""
             ).fetchall()}
             role_column = next((c for c in ("pces_role", "role", "specialty", "department") if c in columns), None)
             role_expr = sql.Identifier(role_column) if role_column else sql.Identifier("party_type")
