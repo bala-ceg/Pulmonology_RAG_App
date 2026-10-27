@@ -212,6 +212,9 @@ def verify_email_code(challenge_id: str, code: str, entra_tenant_id: str, object
                     """UPDATE entra_email_link_challenges SET attempts = attempts + 1
                        WHERE challenge_id = %s""", (challenge_id,)
                 )
+                # Commit the failed-attempt counter before raising; otherwise the
+                # connection context would roll it back with the exception.
+                conn.commit()
                 raise EntraIdentityError("Invalid or expired verification code")
 
             cur.execute(
