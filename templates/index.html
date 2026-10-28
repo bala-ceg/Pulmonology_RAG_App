@@ -13771,13 +13771,94 @@ function resetTenantSearch() {
             if (popup) popup.style.display = 'none';
         });
 
-        // Show doctor name on page load if already authenticated; sync button state
-        if (_pcesAuthed) {
-            showLoggedInDoctor();
-        } else {
+        // Rehydrate UI state from the server-side PCES session.
+        // sessionStorage is display state only; the server validates identity and membership.
+        async function bootstrapPcesSession() {
+            try {
+                const response = await fetch('/auth/entra/session', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: {'Accept': 'application/json'}
+                });
+                if (!response.ok) {
+                    if (response.status === 401) clearPcesBrowserAuthState();
+                    _pcesAuthed = false;
+                    _updateAuthButtons(false);
+                    _updateSendBtn();
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.success || !data.party_id || !data.tenant_id) {
+                    clearPcesBrowserAuthState();
+                    _pcesAuthed = false;
+                    _updateAuthButtons(false);
+                    _updateSendBtn();
+                    return;
+                }
+
+                _pcesAuthed = true;
+                sessionStorage.setItem('pces_auth', 'true');
+                sessionStorage.setItem('pces_username', data.username || '');
+                sessionStorage.setItem('pces_party_id', data.party_id || '');
+                sessionStorage.setItem('pces_party_type', data.party_type || '');
+                sessionStorage.setItem('pces_party_first_name', data.first_name || '');
+                sessionStorage.setItem('pces_party_middle_name', data.middle_name || '');
+                sessionStorage.setItem('pces_party_last_name', data.last_name || '');
+                sessionStorage.setItem('pces_doctor_name', data.full_name || data.username || '');
+                sessionStorage.setItem('pces_doctor_id', data.party_id || '');
+                sessionStorage.setItem('pces_doctor_department', data.department || '');
+                sessionStorage.setItem('pces_doctor_email', data.email || '');
+                sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
+                sessionStorage.setItem('pces_tenant_id', data.tenant_id || '');
+                sessionStorage.setItem('pces_tenant_code', data.tenant_code || '');
+                sessionStorage.setItem('pces_tenant_name', data.tenant_name || '');
+                sessionStorage.setItem('pces_hospital_name', data.hospital_name || data.tenant_name || '');
+                ['pces_patient_id', 'pces_patient_name', 'pces_patient_org'].forEach(k => sessionStorage.removeItem(k));
+
+                const partyType = String(data.party_type || '').trim().toUpperCase();
+                updatePcesContext({
+                    g_doctor_ID: partyType === 'DOCTOR' ? data.party_id : null,
+                    g_nurse_id: partyType === 'NURSE' ? data.party_id : null,
+                    g_med_assist_id: null,
+                    g_office_admin_id: partyType === 'OFFICE_ADMIN' ? data.party_id : null,
+                    g_user_id: data.party_id,
+                    g_doctor_name: data.full_name || data.username || '',
+                    g_patient_name: null,
+                    g_hospital_name: data.hospital_name || data.tenant_name || null,
+                    g_patient_ID: null,
+                    g_tenant_ID: data.tenant_id,
+                    g_lab_ID: null
+                });
+                showLoggedInDoctor();
+                _updateSendBtn();
+            } catch (error) {
+                console.error('[PCES] Unable to restore server session:', error);
+                _pcesAuthed = false;
+                _updateAuthButtons(false);
+                _updateSendBtn();
+            }
+        }
+
+        function clearPcesBrowserAuthState() {
+            [
+                'pces_auth', 'pces_username', 'pces_party_id', 'pces_party_type',
+                'pces_party_first_name', 'pces_party_middle_name', 'pces_party_last_name',
+                'pces_doctor_name', 'pces_doctor_id', 'pces_doctor_department',
+                'pces_doctor_email', 'pces_doctor_role', 'pces_tenant_id',
+                'pces_tenant_code', 'pces_tenant_name', 'pces_hospital_name',
+                'pces_patient_id', 'pces_patient_name', 'pces_patient_org'
+            ].forEach(k => sessionStorage.removeItem(k));
+            resetPcesContext();
+            const badge = document.getElementById('logged-in-doctor');
+            if (badge) badge.style.display = 'none';
             const loginBtn = document.getElementById('header-login-btn');
             if (loginBtn) loginBtn.style.display = 'inline-block';
         }
+
+        // Always trust the server session, not stale browser storage, after page load.
+        bootstrapPcesSession();
 
         // Restore patient selection from sessionStorage on page load
         if (window.selectedPatientId && window.currentPatientName) {
