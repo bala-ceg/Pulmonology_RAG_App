@@ -11,6 +11,7 @@ from services.entra_identity_service import (
     EntraIdentityError,
     resolve_pces_identity,
     select_active_pces_membership,
+    get_pces_profile_for_membership,
 )
 from services.entra_email_verification import request_email_code, verify_email_code
 
@@ -46,6 +47,26 @@ def _set_authenticated_session(identity: dict, issuer_tenant: str, object_id: st
         "entra_tenant_id": issuer_tenant,
         "entra_object_id": object_id,
     }
+
+
+
+@entra_auth_bp.get("/session")
+def entra_session():
+    """Return the UI profile for a valid PCES Flask session and active hospital membership."""
+    identity = session.get("pces_identity")
+    if not isinstance(identity, dict) or not identity.get("party_id") or not identity.get("tenant_id"):
+        return jsonify({"success": False, "message": "Not authenticated"}), 401
+
+    try:
+        profile = get_pces_profile_for_membership(identity["party_id"], identity["tenant_id"])
+    except EntraIdentityError:
+        session.pop("pces_identity", None)
+        return jsonify({"success": False, "message": "PCES session or hospital membership is no longer active"}), 401
+    except EntraConfigurationError:
+        current_app.logger.exception("Unable to validate PCES session profile")
+        return jsonify({"success": False, "message": "Unable to validate session"}), 503
+
+    return jsonify(profile), 200
 
 
 def _hospital_selection_page(memberships: list[dict], error: str | None = None):
