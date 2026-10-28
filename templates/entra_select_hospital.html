@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Select your hospital | PCES</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#172033;margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{background:#fff;width:min(100%,480px);padding:28px;border:1px solid #e1e6ef;border-radius:14px;box-shadow:0 8px 30px #15213b12}
+h1{font-size:1.45rem;margin:0 0 10px}
+p{line-height:1.5;color:#4b5565}
+label{display:block;font-weight:650;font-size:.95rem;margin:18px 0 7px}
+select{width:100%;padding:12px;border:1px solid #c9d2df;border-radius:8px;font:inherit;background:#fff}
+button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;background:#174ea6;color:#fff;font:inherit;font-weight:650;cursor:pointer}
+button:focus-visible,select:focus-visible{outline:3px solid #91b8f3;outline-offset:2px}
+.error{padding:10px 12px;border-radius:8px;background:#fff1f0;color:#a61b1b}
+.hint{font-size:.88rem;color:#687386}
+</style>
+</head>
+<body>
+<main>
+<h1>Select your hospital</h1>
+<p>You have access to more than one hospital. Select the hospital you are working with before opening PCES clinical functionality.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="{{ url_for('entra_auth_bp.entra_select_hospital') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="tenant_id">Hospital</label>
+<select id="tenant_id" name="tenant_id" required autofocus>
+<option value="">Choose a hospital</option>
+{% for membership in memberships %}
+<option value="{{ membership.tenant_id }}">{{ membership.tenant_name }}</option>
+{% endfor %}
+</select>
+<p class="hint">Your selection is validated against your current active PCES hospital memberships.</p>
+<button type="submit">Continue to PCES</button>
+</form>
+</main>
+</body>
+</html>
