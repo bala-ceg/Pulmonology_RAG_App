@@ -6,7 +6,7 @@ from routes import entra_auth
 
 
 def _client():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder="../templates")
     app.config.update(TESTING=True, SECRET_KEY="test-session-secret-" + ("x" * 40))
     app.register_blueprint(entra_auth.entra_auth_bp)
     return app.test_client()
