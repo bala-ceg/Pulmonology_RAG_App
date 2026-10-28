@@ -226,7 +226,7 @@ def select_active_pces_membership(party_id: str, tenant_id: str) -> dict:
 
 
 
-def get_pces_profile_for_membership(party_id: str, tenant_id: str) -> dict:
+def get_pces_profile_for_membership(party_id: str, tenant_id: str, expected_object_id: str | None = None) -> dict:
     """Return a minimal UI profile only when the party has an active selected hospital."""
     try:
         party_id = str(UUID(party_id))
@@ -262,7 +262,7 @@ def get_pces_profile_for_membership(party_id: str, tenant_id: str) -> dict:
                 JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
                 WHERE p.party_id = %s
                   AND CAST(t.tenant_id AS TEXT) = %s
-                  AND p.entra_object_id IS NOT NULL
+                  AND (%s IS NULL OR LOWER(CAST(p.entra_object_id AS TEXT)) = LOWER(%s))
                   AND COALESCE(p.is_active, TRUE) = TRUE
                   AND p.deleted_at IS NULL
                   AND p.party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
@@ -280,7 +280,7 @@ def get_pces_profile_for_membership(party_id: str, tenant_id: str) -> dict:
                 email_expr=party_expr("email"),
                 code_expr=tenant_expr("tenant_code"),
                 name_expr=tenant_expr("tenant_name"),
-            ), (party_id, tenant_id))
+            ), (party_id, tenant_id, expected_object_id, expected_object_id))
             rows = cur.fetchall()
     except (EntraConfigurationError, EntraIdentityError):
         raise
