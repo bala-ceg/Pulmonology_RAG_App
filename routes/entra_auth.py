@@ -10,6 +10,7 @@ from services.entra_identity_service import (
     EntraConfigurationError,
     EntraIdentityError,
     resolve_pces_identity,
+    select_active_pces_membership,
 )
 from services.entra_email_verification import request_email_code, verify_email_code
 
@@ -32,6 +33,9 @@ def _client() -> msal.ConfidentialClientApplication:
 
 
 def _set_authenticated_session(identity: dict, issuer_tenant: str, object_id: str) -> None:
+    """Create a PCES session only after a hospital membership is selected."""
+    if not identity.get("tenant_id"):
+        raise EntraIdentityError("A hospital must be selected before creating a PCES session")
     session.clear()
     session["pces_identity"] = {
         "party_id": str(identity["party_id"]),
@@ -42,6 +46,15 @@ def _set_authenticated_session(identity: dict, issuer_tenant: str, object_id: st
         "entra_tenant_id": issuer_tenant,
         "entra_object_id": object_id,
     }
+
+
+def _hospital_selection_page(memberships: list[dict], error: str | None = None):
+    return render_template(
+        "entra_select_hospital.html",
+        memberships=memberships,
+        csrf_token=session.get("entra_hospital_csrf"),
+        error=error,
+    )
 
 
 def _link_page(stage: str, error: str | None = None, notice: str | None = None):
@@ -128,7 +141,63 @@ def entra_callback():
         session.clear()
         return jsonify({"success": False, "error": "Identity mapping is not configured"}), 503
 
+    memberships = identity.get("memberships") or []
+    if len(memberships) > 1:
+        # Keep only the verified identity and PCES party in the pending
+        # selection state. No clinical session exists until selection succeeds.
+        session.clear()
+        session["entra_pending_hospital"] = {
+            "party_id": identity["party_id"],
+            "party_type": identity["party_type"],
+            "pces_role": identity["pces_role"],
+            "entra_tenant_id": issuer_tenant,
+            "entra_object_id": object_id,
+        }
+        session["entra_hospital_csrf"] = secrets.token_urlsafe(32)
+        return _hospital_selection_page(memberships), 200
+
+    if len(memberships) == 1:
+        identity["tenant_id"] = memberships[0]["tenant_id"]
     _set_authenticated_session(identity, issuer_tenant, object_id)
+    return redirect("/")
+
+
+@entra_auth_bp.post("/select-hospital")
+def entra_select_hospital():
+    """Validate and establish the user's selected active hospital."""
+    pending = session.get("entra_pending_hospital")
+    expected_csrf = session.get("entra_hospital_csrf")
+    supplied_csrf = request.form.get("csrf_token", "")
+    if (not pending or not expected_csrf or not supplied_csrf
+            or not secrets.compare_digest(expected_csrf, supplied_csrf)):
+        session.clear()
+        return jsonify({"success": False, "error": "Hospital selection expired; restart sign-in"}), 400
+
+    selected_tenant_id = (request.form.get("tenant_id") or "").strip()
+    try:
+        membership = select_active_pces_membership(pending["party_id"], selected_tenant_id)
+    except EntraIdentityError:
+        # Re-query membership so the page only offers currently active hospitals.
+        from services.entra_identity_service import get_active_pces_memberships
+        try:
+            memberships = get_active_pces_memberships(pending["party_id"])
+        except EntraConfigurationError:
+            current_app.logger.exception("Unable to reload hospital memberships")
+            session.clear()
+            return jsonify({"success": False, "error": "Hospital selection is temporarily unavailable"}), 503
+        return _hospital_selection_page(memberships, "Select an active hospital assigned to your account."), 400
+    except EntraConfigurationError:
+        current_app.logger.exception("Unable to validate selected hospital")
+        session.clear()
+        return jsonify({"success": False, "error": "Hospital selection is temporarily unavailable"}), 503
+
+    identity = {
+        "party_id": pending["party_id"],
+        "party_type": pending["party_type"],
+        "pces_role": pending["pces_role"],
+        "tenant_id": membership["tenant_id"],
+    }
+    _set_authenticated_session(identity, pending["entra_tenant_id"], pending["entra_object_id"])
     return redirect("/")
 
 
