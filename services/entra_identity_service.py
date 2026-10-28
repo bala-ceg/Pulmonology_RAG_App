@@ -262,7 +262,7 @@ def get_pces_profile_for_membership(party_id: str, tenant_id: str, expected_obje
                 JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
                 WHERE p.party_id = %s
                   AND CAST(t.tenant_id AS TEXT) = %s
-                  AND (%s IS NULL OR LOWER(CAST(p.entra_object_id AS TEXT)) = LOWER(%s))
+                  AND (CAST(%s AS TEXT) IS NULL OR LOWER(CAST(p.entra_object_id AS TEXT)) = LOWER(CAST(%s AS TEXT)))
                   AND COALESCE(p.is_active, TRUE) = TRUE
                   AND p.deleted_at IS NULL
                   AND p.party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
