@@ -3042,12 +3042,13 @@ def search_patients_advanced():
     dob    = (request.args.get("dob",    "") or "").strip()
     phone  = (request.args.get("phone",  "") or "").strip()
     email  = (request.args.get("email",  "") or "").strip()
+    hospital_name = (request.args.get("hospital_name", "") or "").strip()
     source = (request.args.get("source", "PCES_BASE") or "PCES_BASE").strip()
     # Treat PCES101 (the org_code for the default row) the same as PCES_BASE
     _LOCAL_SOURCES = {"PCES_BASE", "PCES101", "DEFAULT"}
     is_local = source.upper() in _LOCAL_SOURCES
 
-    if not any([first, last, middle, dob, phone, email]):
+    if not any([first, last, middle, dob, phone, email, hospital_name]):
         return jsonify([])
 
     # ── Case 2: external CCM/EHR API (e.g. Contoso101 → Old VM) ─────────────
@@ -3066,6 +3067,11 @@ def search_patients_advanced():
                         source_label = _srow[0]
         except Exception:
             pass  # keep source_label as org_code fallback
+
+        # If a hospital name was entered, require it to match the selected
+        # external source's registered organization name before searching.
+        if hospital_name and hospital_name.casefold() not in source_label.casefold():
+            return jsonify([])
 
         try:
             results = ccm_ehr_client.search_patients(
@@ -3123,6 +3129,20 @@ def search_patients_advanced():
         if email:
             conditions.append("LOWER(pp.email) LIKE %s")
             params.append(f"%{email.lower()}%")
+        if hospital_name:
+            conditions.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM p_party_tenant hpt
+                    JOIN p_tenant ht ON ht.tenant_id = hpt.tenant_id
+                    WHERE hpt.party_id = pp.party_id
+                      AND CAST(hpt.tenant_id AS TEXT) = %s
+                      AND COALESCE(hpt.is_active, TRUE) = TRUE
+                      AND hpt.status = 'ACTIVE'
+                      AND LOWER(ht.tenant_name) LIKE %s
+                )
+            """)
+            params.extend([identity["tenant_id"], f"%{hospital_name.lower()}%"])
 
         where = " AND ".join(conditions)
         sql_q = f"""
