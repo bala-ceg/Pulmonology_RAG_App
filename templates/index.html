@@ -15748,7 +15748,7 @@ async function savePcesUser() {
                     headers: {'Accept': 'application/json'}
                 });
                 if (!response.ok) {
-                    if (response.status === 401) clearPcesBrowserAuthState();
+                    clearPcesBrowserAuthState();
                     _pcesAuthed = false;
                     _updateAuthButtons(false);
                     _updateSendBtn();
@@ -15801,6 +15801,7 @@ async function savePcesUser() {
                 _updateSendBtn();
             } catch (error) {
                 console.error('[PCES] Unable to restore server session:', error);
+                clearPcesBrowserAuthState();
                 _pcesAuthed = false;
                 _updateAuthButtons(false);
                 _updateSendBtn();
