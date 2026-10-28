@@ -225,6 +225,92 @@ def select_active_pces_membership(party_id: str, tenant_id: str) -> dict:
     return selected
 
 
+
+def get_pces_profile_for_membership(party_id: str, tenant_id: str) -> dict:
+    """Return a minimal UI profile only when the party has an active selected hospital."""
+    try:
+        party_id = str(UUID(party_id))
+        tenant_id = str(UUID(tenant_id))
+    except (TypeError, ValueError) as exc:
+        raise EntraIdentityError("Invalid PCES identity or hospital identifier") from exc
+
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            party_columns = _table_columns(cur, "p_party")
+            tenant_columns = _table_columns(cur, "p_tenant")
+            required = {"party_id", "party_type", "entra_object_id", "is_active", "deleted_at"}
+            if not required <= party_columns:
+                raise EntraConfigurationError("p_party is missing required identity columns")
+
+            role_column = next(
+                (name for name in ("pces_role", "role", "specialty", "department")
+                 if name in party_columns),
+                None,
+            )
+            def party_expr(name: str, fallback: str = "NULL"):
+                return sql.Identifier(name) if name in party_columns else sql.SQL(fallback)
+
+            def tenant_expr(name: str):
+                return sql.SQL("t.{}").format(sql.Identifier(name)) if name in tenant_columns else sql.SQL("NULL")
+
+            cur.execute(sql.SQL("""
+                SELECT p.party_id, p.party_type, {role_expr},
+                       {username_expr}, {first_expr}, {middle_expr}, {last_expr}, {email_expr},
+                       t.tenant_id, {code_expr}, {name_expr}
+                FROM p_party AS p
+                JOIN p_party_tenant AS pt ON pt.party_id = p.party_id
+                JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
+                WHERE p.party_id = %s
+                  AND CAST(t.tenant_id AS TEXT) = %s
+                  AND p.entra_object_id IS NOT NULL
+                  AND COALESCE(p.is_active, TRUE) = TRUE
+                  AND p.deleted_at IS NULL
+                  AND p.party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
+                  AND COALESCE(pt.is_active, TRUE) = TRUE
+                  AND pt.status = 'ACTIVE'
+                  AND COALESCE(t.is_active, TRUE) = TRUE
+                  AND t.status = 'ACTIVE'
+                LIMIT 2
+            """).format(
+                role_expr=sql.SQL("p.{}").format(sql.Identifier(role_column)) if role_column else sql.SQL("p.party_type"),
+                username_expr=party_expr("username"),
+                first_expr=party_expr("first_name"),
+                middle_expr=party_expr("middle_name"),
+                last_expr=party_expr("last_name"),
+                email_expr=party_expr("email"),
+                code_expr=tenant_expr("tenant_code"),
+                name_expr=tenant_expr("tenant_name"),
+            ), (party_id, tenant_id))
+            rows = cur.fetchall()
+    except (EntraConfigurationError, EntraIdentityError):
+        raise
+    except psycopg.Error as exc:
+        raise EntraConfigurationError("Unable to load the authenticated PCES profile") from exc
+
+    if len(rows) != 1:
+        raise EntraIdentityError("Authenticated identity or active hospital membership is no longer valid")
+
+    party, party_type, role, username, first, middle, last, email, selected_tenant, code, name = rows[0]
+    full_name = " ".join(part for part in (first, middle, last) if part) or username or email or str(party)
+    return {
+        "success": True,
+        "username": username or email or str(party),
+        "party_id": str(party),
+        "party_type": party_type,
+        "first_name": first or "",
+        "middle_name": middle or "",
+        "last_name": last or "",
+        "pces_role": role or party_type,
+        "full_name": full_name,
+        "email": email or "",
+        "department": role or "",
+        "tenant_id": str(selected_tenant),
+        "tenant_code": code or "",
+        "tenant_name": name or "",
+        "hospital_name": name or "",
+    }
+
+
 def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
     """Resolve a verified Entra identity and return all active hospital memberships."""
     if not tenant_id or not object_id:
