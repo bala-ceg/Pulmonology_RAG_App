@@ -168,8 +168,65 @@ def link_existing_pces_account(
         raise EntraConfigurationError("Unable to verify or link the PCES account") from exc
 
 
+def get_active_pces_memberships(party_id: str) -> list[dict]:
+    """Return all active hospital memberships for an existing PCES party."""
+    try:
+        party_id = str(UUID(party_id))
+    except (TypeError, ValueError) as exc:
+        raise EntraIdentityError("Invalid PCES party identifier") from exc
+
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            tenant_columns = _table_columns(cur, "p_tenant")
+            name_column = next(
+                (name for name in ("tenant_name", "display_name", "name", "tenant_code")
+                 if name in tenant_columns),
+                None,
+            )
+            display_expr = (
+                sql.SQL("t.{}").format(sql.Identifier(name_column))
+                if name_column else sql.SQL("CAST(t.tenant_id AS TEXT)")
+            )
+            cur.execute(sql.SQL("""
+                SELECT pt.tenant_id, {display_expr}
+                FROM p_party_tenant AS pt
+                JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
+                WHERE pt.party_id = %s
+                  AND COALESCE(pt.is_active, TRUE) = TRUE
+                  AND pt.status = 'ACTIVE'
+                  AND COALESCE(t.is_active, TRUE) = TRUE
+                  AND t.status = 'ACTIVE'
+                ORDER BY pt.tenant_id
+            """).format(display_expr=display_expr), (party_id,))
+            rows = cur.fetchall()
+    except EntraConfigurationError:
+        raise
+    except psycopg.Error as exc:
+        raise EntraConfigurationError("Unable to query active hospital memberships") from exc
+
+    return [
+        {"tenant_id": str(row[0]), "tenant_name": str(row[1] or row[0])}
+        for row in rows
+    ]
+
+
+def select_active_pces_membership(party_id: str, tenant_id: str) -> dict:
+    """Validate a submitted hospital selection against current active membership."""
+    try:
+        party_id = str(UUID(party_id))
+        tenant_id = str(UUID(tenant_id))
+    except (TypeError, ValueError) as exc:
+        raise EntraIdentityError("Invalid hospital selection") from exc
+
+    memberships = get_active_pces_memberships(party_id)
+    selected = next((item for item in memberships if item["tenant_id"] == tenant_id), None)
+    if selected is None:
+        raise EntraIdentityError("Selected hospital is not active for this PCES account")
+    return selected
+
+
 def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
-    """Resolve a verified Entra identity to exactly one active PCES membership."""
+    """Resolve a verified Entra identity and return all active hospital memberships."""
     if not tenant_id or not object_id:
         raise EntraIdentityError("Required directory identity claims are missing")
     _validate_tenant(tenant_id)
@@ -181,28 +238,24 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
     try:
         with _connect() as conn, conn.cursor() as cur:
             columns = _table_columns(cur, "p_party")
-            role_column = next((c for c in ("pces_role", "role", "specialty", "department") if c in columns), None)
+            role_column = next(
+                (c for c in ("pces_role", "role", "specialty", "department") if c in columns),
+                None,
+            )
             if not {"party_id", "party_type", "entra_object_id"} <= columns:
                 raise EntraConfigurationError("p_party is missing required identity mapping columns")
-            role_expr = sql.Identifier(role_column) if role_column else sql.Identifier("party_type")
-            query = sql.SQL("""
-                SELECT pp.party_id, pp.party_type, COALESCE({role_col}, pp.party_type) AS pces_role,
-                       pt.tenant_id
-                FROM p_party AS pp
-                JOIN p_party_tenant AS pt ON pt.party_id = pp.party_id
-                JOIN p_tenant AS t ON t.tenant_id = pt.tenant_id
-                WHERE pp.entra_object_id = %s
-                  AND COALESCE(pp.is_active, TRUE) = TRUE
-                  AND pp.deleted_at IS NULL
-                  AND COALESCE(pt.is_active, TRUE) = TRUE
-                  AND pt.status = 'ACTIVE'
-                  AND COALESCE(t.is_active, TRUE) = TRUE
-                  AND t.status = 'ACTIVE'
-                  AND pp.party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
-                ORDER BY pt.tenant_id
+            role_expr = (
+                sql.Identifier(role_column) if role_column else sql.Identifier("party_type")
+            )
+            cur.execute(sql.SQL("""
+                SELECT party_id, party_type, COALESCE({role_col}, party_type) AS pces_role
+                FROM p_party
+                WHERE entra_object_id = %s
+                  AND COALESCE(is_active, TRUE) = TRUE
+                  AND deleted_at IS NULL
+                  AND party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
                 LIMIT 2
-            """).format(role_col=role_expr)
-            cur.execute(query, (object_id,))
+            """).format(role_col=role_expr), (object_id,))
             rows = cur.fetchall()
     except EntraConfigurationError:
         raise
@@ -212,7 +265,21 @@ def resolve_pces_identity(tenant_id: str, object_id: str) -> dict:
     if not rows:
         raise EntraIdentityError("No active PCES identity mapping exists")
     if len(rows) != 1:
-        raise EntraIdentityError("Identity has multiple active tenant memberships; explicit tenant selection is required")
-    party_id, party_type, pces_role, active_tenant_id = rows[0]
-    return {"party_id": str(party_id), "party_type": party_type,
-            "pces_role": pces_role, "tenant_id": str(active_tenant_id)}
+        raise EntraIdentityError("Entra identity is linked to multiple PCES accounts")
+
+    party_id, party_type, pces_role = rows[0]
+    memberships = get_active_pces_memberships(str(party_id))
+    if not memberships:
+        raise EntraIdentityError("No active PCES hospital membership exists")
+
+    identity = {
+        "party_id": str(party_id),
+        "party_type": party_type,
+        "pces_role": pces_role or party_type,
+        "memberships": memberships,
+    }
+    # Backwards compatibility for account-linking callers that expect a single
+    # tenant_id. Do not choose one automatically when multiple memberships exist.
+    if len(memberships) == 1:
+        identity["tenant_id"] = memberships[0]["tenant_id"]
+    return identity
