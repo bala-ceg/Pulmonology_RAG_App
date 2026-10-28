@@ -57,8 +57,19 @@ def entra_session():
     if not isinstance(identity, dict) or not identity.get("party_id") or not identity.get("tenant_id"):
         return jsonify({"success": False, "message": "Not authenticated"}), 401
 
+    if identity.get("auth_provider") == "entra_external_id" and not identity.get("entra_object_id"):
+        session.pop("pces_identity", None)
+        return jsonify({"success": False, "message": "Invalid Entra session"}), 401
+
     try:
-        profile = get_pces_profile_for_membership(identity["party_id"], identity["tenant_id"])
+        expected_object_id = (
+            identity.get("entra_object_id")
+            if identity.get("auth_provider") == "entra_external_id"
+            else None
+        )
+        profile = get_pces_profile_for_membership(
+            identity["party_id"], identity["tenant_id"], expected_object_id=expected_object_id
+        )
     except EntraIdentityError:
         session.pop("pces_identity", None)
         return jsonify({"success": False, "message": "PCES session or hospital membership is no longer active"}), 401
