@@ -10210,7 +10210,7 @@ function toggleEhrAi() {
             if (overlay) {
                 overlay.classList.add('open');
                 // Reset form & results
-                ['psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
+                ['psm-hospital','psm-first','psm-last','psm-middle','psm-dob'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });
@@ -10338,18 +10338,20 @@ function toggleEhrAi() {
         }
 
         async function runPatientSearch() {
+            const hospitalName = (document.getElementById('psm-hospital').value || '').trim();
             const first  = (document.getElementById('psm-first').value  || '').trim();
             const last   = (document.getElementById('psm-last').value   || '').trim();
             const middle = (document.getElementById('psm-middle').value || '').trim();
             const dob    = (document.getElementById('psm-dob').value    || '').trim();
             const source = (document.getElementById('psm-source-select')?.value || 'PCES_BASE');
 
-            if (!first && !last && !middle && !dob) {
+            if (!hospitalName && !first && !last && !middle && !dob) {
                 alert('Please enter at least one search field.');
                 return;
             }
 
             const params = new URLSearchParams();
+            if (hospitalName) params.set('hospital_name', hospitalName);
             if (first)  params.set('first',  first);
             if (last)   params.set('last',   last);
             if (middle) params.set('middle', middle);
@@ -13819,6 +13821,10 @@ function resetTenantSearch() {
         <div class="psm-form">
           <div id="psm-auth-error" class="psm-auth-error">
             ⚠️ CCM/EHR token missing or expired — contact admin to update <code>CCM_EHR_TOKEN</code>.
+          </div>
+          <div class="psm-field">
+            <label>Hospital Name</label>
+            <input type="text" id="psm-hospital" placeholder="e.g. City General Hospital">
           </div>
           <div class="psm-field">
             <label>First Name</label>
