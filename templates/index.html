@@ -4576,6 +4576,17 @@
                                     <div class="doctor-popup-value" id="popup-patient-name">—</div>
                                 </div>
                             </div>
+                            <div class="doctor-popup-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:8px;">
+                                <span class="doctor-popup-icon">👤</span>
+                                <div style="flex:1;">
+                                    <div class="doctor-popup-label">Profile</div>
+                                    <div class="doctor-popup-value">Security</div>
+                                    <button type="button" onclick="openPasswordHelpModal(event)"
+                                        style="margin-top:6px;padding:6px 10px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font-size:12px;font-weight:600;">
+                                        🔐 Change / reset password
+                                    </button>
+                                </div>
+                            </div>
                             <div class="doctor-popup-row" onclick="logout()" style="cursor:pointer;border-top:1px solid #eee;margin-top:6px;padding-top:6px;">
                                 <span class="doctor-popup-icon">🚪</span>
                                 <div>
@@ -4586,6 +4597,35 @@
                     </div>
                 </div>
             </div>
+            <!-- Microsoft-hosted password reset guidance. PCES never collects the new password. -->
+            <div id="pces-password-help-overlay" role="dialog" aria-modal="true"
+                 aria-labelledby="pces-password-help-title"
+                 style="display:none;position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px;">
+                <div style="background:#fff;color:#24292f;border-radius:12px;max-width:480px;width:100%;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.25);">
+                    <h2 id="pces-password-help-title" style="margin:0 0 12px;font-size:20px;">Change / reset password</h2>
+                    <p style="line-height:1.55;margin:0 0 12px;">
+                        Your PCES password is managed securely by Microsoft. To choose a new password:
+                    </p>
+                    <ol style="padding-left:22px;line-height:1.6;margin:0 0 16px;">
+                        <li>Sign out of PCES.</li>
+                        <li>Continue to the Microsoft sign-in page.</li>
+                        <li>Select <strong>Forgot password?</strong></li>
+                        <li>Verify the code sent to your registered email and set your new password.</li>
+                    </ol>
+                    <p style="font-size:13px;color:#57606a;line-height:1.5;margin:0 0 18px;">
+                        Password entry and email verification happen on Microsoft's hosted pages.
+                        PCES does not collect or store your new password. Your hospital memberships are not changed.
+                    </p>
+                    <div id="pces-password-help-error" role="alert" style="display:none;color:#b42318;font-size:13px;margin-bottom:12px;"></div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
+                        <button type="button" onclick="closePasswordHelpModal()"
+                            style="padding:9px 14px;border:1px solid #d0d7de;border-radius:7px;background:#fff;cursor:pointer;">Cancel</button>
+                        <button type="button" id="pces-password-continue-btn" onclick="startPasswordReset()"
+                            style="padding:9px 14px;border:0;border-radius:7px;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer;">Sign out and continue</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Allergy bar: CLINICAL AI RESPONSE label (left) + Known Allergies (right) -->
             <div class="allergy-bar">
                 <span class="response-label">CLINICAL AI RESPONSE</span>
@@ -13716,7 +13756,7 @@ function resetTenantSearch() {
             } catch (error) {
                 console.error('[PCES] Unable to log out:', error);
                 alert('Unable to log out. Please try again.');
-                return;
+                return false;
             }
             // Clear auth state
             _pcesAuthed = false;
@@ -13753,6 +13793,41 @@ function resetTenantSearch() {
             // Reset patient problem text
             const problemText = document.getElementById('problem-text');
             if (problemText) problemText.textContent = 'Patient problem not mentioned';
+            return true;
+        }
+
+        function openPasswordHelpModal(event) {
+            if (event) event.stopPropagation();
+            const popup = document.getElementById('doctor-popup');
+            if (popup) popup.style.display = 'none';
+            const overlay = document.getElementById('pces-password-help-overlay');
+            const error = document.getElementById('pces-password-help-error');
+            if (error) { error.textContent = ''; error.style.display = 'none'; }
+            if (overlay) overlay.style.display = 'flex';
+        }
+
+        function closePasswordHelpModal() {
+            const overlay = document.getElementById('pces-password-help-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        async function startPasswordReset() {
+            const button = document.getElementById('pces-password-continue-btn');
+            const error = document.getElementById('pces-password-help-error');
+            if (button) { button.disabled = true; button.textContent = 'Signing out…'; }
+            if (error) { error.textContent = ''; error.style.display = 'none'; }
+            try {
+                // Reuse the existing PCES logout process before starting a fresh Microsoft sign-in.
+                const signedOut = await logout();
+                if (!signedOut) throw new Error('PCES could not complete sign-out. Please try again.');
+                window.location.assign('/auth/entra/login?prompt=login');
+            } catch (err) {
+                if (error) {
+                    error.textContent = err.message || 'Unable to start password reset. Please try again.';
+                    error.style.display = 'block';
+                }
+                if (button) { button.disabled = false; button.textContent = 'Sign out and continue'; }
+            }
         }
 
         function toggleDoctorPopup(e) {
