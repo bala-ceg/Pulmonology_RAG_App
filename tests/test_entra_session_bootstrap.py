@@ -86,3 +86,33 @@ def test_session_bootstrap_clears_invalid_identity(monkeypatch):
     assert response.status_code == 401
     with client.session_transaction() as state:
         assert "pces_identity" not in state
+
+
+def test_password_reset_login_forces_interactive_prompt(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def get_authorization_request_url(self, **kwargs):
+            captured.update(kwargs)
+            return "https://login.microsoftonline.test/authorize"
+
+    monkeypatch.setattr(entra_auth, "_configured", lambda: True)
+    monkeypatch.setattr(entra_auth, "_client", lambda: FakeClient())
+    response = _client().get("/auth/entra/login?prompt=login")
+    assert response.status_code == 302
+    assert captured["prompt"] == "login"
+
+
+def test_normal_login_keeps_account_picker_prompt(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def get_authorization_request_url(self, **kwargs):
+            captured.update(kwargs)
+            return "https://login.microsoftonline.test/authorize"
+
+    monkeypatch.setattr(entra_auth, "_configured", lambda: True)
+    monkeypatch.setattr(entra_auth, "_client", lambda: FakeClient())
+    response = _client().get("/auth/entra/login")
+    assert response.status_code == 302
+    assert captured["prompt"] == "select_account"
