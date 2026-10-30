@@ -107,9 +107,13 @@ def entra_login():
     state = secrets.token_urlsafe(32)
     session["entra_oauth_state"] = state
     try:
+        requested_prompt = (request.args.get("prompt") or "").strip().lower()
+        # Password-reset entry point forces an interactive credential screen.
+        # Keep the default account-picker behavior for ordinary sign-in.
+        prompt = "login" if requested_prompt == "login" else "select_account"
         auth_url = _client().get_authorization_request_url(
             scopes=["email"], state=state, redirect_uri=Config.ENTRA_REDIRECT_URI,
-            prompt="select_account",
+            prompt=prompt,
         )
     except Exception:
         current_app.logger.exception("Unable to start Entra authorization flow")
