@@ -221,13 +221,13 @@ def review_request(approver_id: str, tenant_id: str, request_id: str,
         cur.execute("""
             INSERT INTO p_party (
                 party_id, party_type, name, first_name, middle_name, last_name,
-                date_of_birth, phone, email, entra_object_id,
+                date_of_birth, phone, email, entra_object_id, pces_role,
                 is_active, created_at, created_by, version_no
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                       TRUE, NOW(), %s, 1)
         """, (
             party_id, role, full_name, first, middle, last, dob, phone,
-            email, str(oid), approver_id,
+            email, str(oid), role, approver_id,
         ))
         cur.execute("""
             INSERT INTO p_party_tenant (
