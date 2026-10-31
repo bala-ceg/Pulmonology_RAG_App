@@ -169,8 +169,17 @@ def entra_callback():
             session.clear()
             return jsonify({"success": False, "error": "This account is not provisioned for PCES access"}), 403
         session.clear()
+        # Preserve the existing-account linking option while offering a separate
+        # self-registration path for genuinely new Doctor/Nurse identities.
         session["entra_pending_link"] = {"tenant_id": issuer_tenant, "object_id": object_id}
         session["entra_link_csrf"] = secrets.token_urlsafe(32)
+        session["entra_pending_signup"] = {
+            "tenant_id": issuer_tenant,
+            "object_id": object_id,
+            # Entra email claims are treated as unverified contact data only.
+            "email": str(claims.get("email") or claims.get("preferred_username") or "").strip() or None,
+        }
+        session["entra_signup_csrf"] = secrets.token_urlsafe(32)
         return _link_page("request"), 200
     except EntraConfigurationError:
         current_app.logger.exception("Entra identity mapping is not configured")
