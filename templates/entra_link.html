@@ -29,6 +29,7 @@ button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;backgr
 <label for="email">Email registered and verified in PCES</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
 <label for="pces_tenant_id">Hospital / tenant</label><select id="pces_tenant_id" name="pces_tenant_id" required><option value="">Loading hospitals…</option></select>
 <p class="hint">For security, we show the same confirmation whether or not an account matches. Your PCES password is not requested.</p>
+<p class="hint">New to PCES? <a href="{{ url_for('entra_signup_bp.signup_page') }}">Register as a Doctor or Nurse</a>. Office Admin accounts must be provisioned by PCES administrators.</p>
 <button type="submit">Send verification code</button>
 </form>
 {% endif %}
