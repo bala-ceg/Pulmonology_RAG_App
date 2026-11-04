@@ -29,16 +29,19 @@ def _admin(cur, party_id):
                    AND COALESCE(is_active,TRUE)=TRUE AND deleted_at IS NULL""", (party_id,))
     if not cur.fetchone(): raise OnboardingError("PCES_ADMIN access required")
 
-def list_hospitals():
+def list_hospitals(admin_id):
+    admin_id=_uuid(admin_id, 'PCES Admin party ID')
     with _connect() as conn, conn.cursor() as cur:
+        _admin(cur, admin_id)
         cur.execute("""SELECT tenant_id,tenant_name,tenant_code FROM p_tenant
                        WHERE status='ACTIVE' AND COALESCE(is_active,TRUE)=TRUE
                        ORDER BY tenant_name,tenant_id""")
         return [{"tenant_id":str(r[0]),"hospital_name":r[1] or "","tenant_code":r[2] or ""} for r in cur.fetchall()]
 
-def list_users(tenant_id, limit=20, offset=0):
+def list_users(admin_id, tenant_id, limit=20, offset=0):
     tenant_id=_uuid(tenant_id,"hospital ID"); limit=max(1,min(int(limit),100)); offset=max(0,int(offset))
     with _connect() as conn, conn.cursor() as cur:
+        _admin(cur, _uuid(admin_id, 'PCES Admin party ID'))
         cur.execute("""SELECT p.party_id,p.first_name,p.middle_name,p.last_name,p.party_type,p.pces_role,
                               p.email,p.username,p.entra_object_id,p.on_board,p.on_board_date,p.created_at
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
@@ -54,7 +57,7 @@ def list_users(tenant_id, limit=20, offset=0):
              "on_boarded":bool(r[9]),"on_board_date":r[10].isoformat() if r[10] else None,
              "created_at":r[11].isoformat() if r[11] else None} for r in rows]
 
-def search_users(tenant_id,last_name="",party_type="",email=""):
+def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
     tenant_id=_uuid(tenant_id,"hospital ID"); party_type=party_type.strip().upper()
     if party_type and party_type not in {"DOCTOR","NURSE"}: raise OnboardingError("Party type must be DOCTOR or NURSE")
     clauses=["pt.tenant_id=%s","pt.status='ACTIVE'","COALESCE(pt.is_active,TRUE)=TRUE",
