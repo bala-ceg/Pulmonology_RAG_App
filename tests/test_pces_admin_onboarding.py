@@ -19,7 +19,7 @@ def test_users_requires_admin():
 
 def test_hospital_lookup(monkeypatch):
     from routes import pces_admin
-    monkeypatch.setattr(pces_admin,"list_hospitals",lambda:[{"tenant_id":"t1","hospital_name":"St Luke"}])
+    monkeypatch.setattr(pces_admin,"list_hospitals",lambda admin_id:[{"tenant_id":"t1","hospital_name":"St Luke"}])
     response=client(ADMIN).get("/api/pces-admin/hospitals")
     assert response.status_code==200
     assert response.get_json()["hospitals"][0]["hospital_name"]=="St Luke"
@@ -27,7 +27,7 @@ def test_hospital_lookup(monkeypatch):
 def test_users_default_to_20(monkeypatch):
     from routes import pces_admin
     seen={}
-    def fake(tenant_id,limit,offset):
+    def fake(admin_id,tenant_id,limit,offset):
         seen.update(tenant_id=tenant_id,limit=limit,offset=offset); return []
     monkeypatch.setattr(pces_admin,"list_users",fake)
     response=client(ADMIN).get("/api/pces-admin/users?tenant_id=00000000-0000-0000-0000-000000000001")
