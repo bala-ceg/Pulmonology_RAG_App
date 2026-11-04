@@ -60,6 +60,12 @@ class Config:
     ENTRA_AUTHORITY: str | None = os.getenv("ENTRA_AUTHORITY")
     ENTRA_REDIRECT_URI: str | None = os.getenv("ENTRA_REDIRECT_URI")
 
+    PCES_PROVISIONING_CLIENT_ID: str | None = os.getenv("PCES_PROVISIONING_CLIENT_ID")
+    PCES_PROVISIONING_CLIENT_SECRET: str | None = os.getenv("PCES_PROVISIONING_CLIENT_SECRET")
+    PCES_DIRECTORY_TENANT_ID: str | None = os.getenv("PCES_DIRECTORY_TENANT_ID")
+    PCES_DIRECTORY_DOMAIN: str | None = os.getenv("PCES_DIRECTORY_DOMAIN")
+    PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "https://pces.example.com")
+
     # SMTP used for one-time PCES account-link verification codes.
     SMTP_HOST: str | None = os.getenv("SMTP_HOST")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
