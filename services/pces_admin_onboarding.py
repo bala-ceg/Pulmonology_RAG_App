@@ -1,7 +1,7 @@
 """PCES Admin onboarding: hospital users, Microsoft Graph provisioning and notification."""
 from __future__ import annotations
-import secrets, smtplib, string
-from email.message import EmailMessage
+import secrets, string
+from urllib.parse import quote
 from uuid import UUID, uuid4
 import msal, psycopg, requests
 from config import Config
@@ -146,16 +146,35 @@ def provision_entra_user(user):
     return str(UUID(oid)),password
 
 def _send_email(email,username,password):
+    """Send onboarding instructions through Microsoft Graph application auth."""
     cfg=Config
-    if not cfg.SMTP_HOST or not cfg.SMTP_FROM_EMAIL: raise OnboardingError("SMTP email configuration is incomplete")
-    msg=EmailMessage(); msg["Subject"]="Your PCES account is ready"; msg["From"]=cfg.SMTP_FROM_EMAIL; msg["To"]=email
-    msg.set_content("Your PCES account has been created.\n\nUsername: "+username+
-      "\nTemporary password: "+password+"\nSign-in URL: "+cfg.PCES_SIGNIN_URL+
-      "\n\nSign in and change your temporary password when prompted.")
-    with smtplib.SMTP(cfg.SMTP_HOST,cfg.SMTP_PORT,timeout=30) as smtp:
-        if cfg.SMTP_USE_TLS: smtp.starttls()
-        if cfg.SMTP_USERNAME: smtp.login(cfg.SMTP_USERNAME,cfg.SMTP_PASSWORD or "")
-        smtp.send_message(msg)
+    sender=(cfg.PCES_ONBOARDING_FROM_EMAIL or "").strip()
+    if not sender:
+        raise OnboardingError("PCES_ONBOARDING_FROM_EMAIL is not configured")
+    if not all((cfg.PCES_PROVISIONING_CLIENT_ID,cfg.PCES_PROVISIONING_CLIENT_SECRET,cfg.PCES_DIRECTORY_TENANT_ID)):
+        raise OnboardingError("Microsoft Graph email configuration is incomplete")
+    app=msal.ConfidentialClientApplication(cfg.PCES_PROVISIONING_CLIENT_ID,
+        authority="https://login.microsoftonline.com/"+cfg.PCES_DIRECTORY_TENANT_ID,
+        client_credential=cfg.PCES_PROVISIONING_CLIENT_SECRET)
+    token=app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    access=token.get("access_token")
+    if not access:
+        raise OnboardingError("Unable to obtain Microsoft Graph email token")
+    body=("Your PCES account has been created.\\n\\nUsername: "+username+
+      "\\nTemporary password: "+password+"\\nSign-in URL: "+cfg.PCES_SIGNIN_URL+
+      "\\n\\nSign in and change your temporary password when prompted.")
+    payload={"message":{"subject":"Your PCES account is ready",
+      "body":{"contentType":"Text","content":body},
+      "toRecipients":[{"emailAddress":{"address":email}}]},
+      "saveToSentItems":False}
+    url="https://graph.microsoft.com/v1.0/users/"+quote(sender,safe="")+"/sendMail"
+    try:
+        response=requests.post(url,headers={"Authorization":"Bearer "+access,
+          "Content-Type":"application/json"},json=payload,timeout=30)
+    except requests.RequestException as exc:
+        raise OnboardingError("Microsoft Graph email request failed") from exc
+    if response.status_code != 202:
+        raise OnboardingError("Microsoft Graph email delivery request failed: HTTP "+str(response.status_code))
 
 def onboard_user(admin_id,party_id):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID")
@@ -176,6 +195,13 @@ def onboard_user(admin_id,party_id):
                        updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1
                        WHERE party_id=%s AND entra_object_id IS NULL RETURNING party_id""",(oid,admin_id,party_id))
         if not cur.fetchone(): raise OnboardingError("Entra account created but PCES mapping save failed; reconcile before retrying")
-    _send_email(email,username,password)
+    try:
+        _send_email(email,username,password)
+        email_sent=True
+    except OnboardingError:
+        # Provisioning is complete even if notification delivery needs a retry.
+        email_sent=False
     return {"party_id":party_id,"entra_object_id":oid,"on_boarded":True,
-            "message":"Entra account provisioned and onboarding email sent"}
+            "email_sent":email_sent,
+            "message":"Entra account provisioned; onboarding email sent" if email_sent
+                      else "Entra account provisioned; onboarding email delivery needs retry"}
