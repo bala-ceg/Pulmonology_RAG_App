@@ -66,6 +66,7 @@ def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
     for col,val in (("p.last_name",last_name),("p.party_type",party_type),("p.email",email)):
         if val.strip(): clauses.append("LOWER(COALESCE("+col+",'')) LIKE LOWER(%s)"); params.append("%"+val.strip()+"%")
     with _connect() as conn, conn.cursor() as cur:
+        _admin(cur, _uuid(admin_id, "PCES Admin party ID"))
         cur.execute("""SELECT p.party_id,p.first_name,p.middle_name,p.last_name,p.party_type,p.pces_role,
                               p.email,p.username,p.entra_object_id
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
@@ -95,7 +96,7 @@ def create_user(admin_id,tenant_id,data):
           (party_id,kind," ".join(x for x in (first,middle,last) if x),first,middle or None,last,email,username,role,admin_id))
         cur.execute("""INSERT INTO p_party_tenant
           (party_tenant_id,party_id,tenant_id,status,created_at,created_by,is_active,version_no)
-          VALUES (%s,%s,%s,'ACTIVE',NOW(),TRUE,1)""",(membership_id,party_id,tenant_id))
+          VALUES (%s,%s,%s,'ACTIVE',NOW(),%s,TRUE,1)""",(membership_id,party_id,tenant_id,admin_id))
     return {"party_id":party_id,"party_tenant_id":membership_id,"tenant_id":tenant_id,"on_boarded":False}
 
 def update_user(admin_id,party_id,data):
