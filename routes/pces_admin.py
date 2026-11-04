@@ -17,7 +17,7 @@ def _denied(): return jsonify({"success":False,"error":"PCES_ADMIN access requir
 @pces_admin_bp.get("/hospitals")
 def hospitals():
     if not _admin_id(): return _denied()
-    try: return jsonify({"success":True,"hospitals":list_hospitals()})
+    try: return jsonify({"success":True,"hospitals":list_hospitals(_admin_id())})
     except Exception:
         current_app.logger.exception("Unable to list hospitals")
         return jsonify({"success":False,"error":"Unable to load hospitals"}),503
@@ -26,7 +26,7 @@ def hospitals():
 def users():
     if not _admin_id(): return _denied()
     try:
-        items=list_users(request.args.get("tenant_id",""),request.args.get("limit",20,type=int),request.args.get("offset",0,type=int))
+        items=list_users(_admin_id(),request.args.get("tenant_id",""),request.args.get("limit",20,type=int),request.args.get("offset",0,type=int))
         return jsonify({"success":True,"users":items,"count":len(items)})
     except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
     except Exception:
@@ -37,7 +37,7 @@ def users():
 def users_search():
     if not _admin_id(): return _denied()
     try:
-        items=search_users(request.args.get("tenant_id",""),request.args.get("last_name",""),request.args.get("party_type",""),request.args.get("email",""))
+        items=search_users(_admin_id(),request.args.get("tenant_id",""),request.args.get("last_name",""),request.args.get("party_type",""),request.args.get("email",""))
         return jsonify({"success":True,"users":items,"count":len(items)})
     except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
     except Exception:
