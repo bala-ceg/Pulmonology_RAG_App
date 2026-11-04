@@ -603,11 +603,8 @@ def login():
     password = data.get("password") or ""
     tenant_id = str(data.get("tenant_id") or "").strip()
 
-    if not username or not password or not tenant_id:
-        return jsonify({
-            "success": False,
-            "message": "Username, password, and hospital are required",
-        }), 400
+    if not username or not password:
+        return jsonify({"success": False, "message": "Username and password are required"}), 400
 
     try:
         with _ehr_conn() as conn:
@@ -645,7 +642,7 @@ def login():
                         last_name,
                         email
                     FROM p_party
-                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
+                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN', 'PCES_ADMIN')
                       AND COALESCE(is_active, TRUE) = TRUE
                       AND ({predicates})
                     LIMIT 1
@@ -695,6 +692,28 @@ def login():
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
+        # PCES_ADMIN is a global administrator and does not require a hospital membership.
+        if party_type == "PCES_ADMIN":
+            if str(pces_role or "").upper() != "PCES_ADMIN":
+                return jsonify({"success": False, "message": "Invalid administrator role"}), 403
+            session["pces_identity"] = {
+                "party_id": str(provider_party_id),
+                "party_type": "PCES_ADMIN",
+                "pces_role": "PCES_ADMIN",
+                "tenant_id": None,
+            }
+            return jsonify({
+                "success": True, "username": db_username,
+                "party_id": str(provider_party_id), "party_type": "PCES_ADMIN",
+                "pces_role": "PCES_ADMIN", "first_name": first_name or "",
+                "middle_name": middle_name or "", "last_name": last_name or "",
+                "email": email or "", "full_name": " ".join(x for x in (first_name, last_name) if x) or db_username or email or username,
+                "tenant_id": None, "tenant_code": "", "tenant_name": "", "hospital_name": "",
+            })
+
+        if not tenant_id:
+            return jsonify({"success": False, "message": "Hospital is required"}), 400
+
         if tenant_row is None:
             return jsonify({
                 "success": False,
@@ -715,6 +734,8 @@ def login():
         session["pces_identity"] = {
             "party_id": str(provider_party_id),
             "tenant_id": str(selected_tenant_id),
+            "party_type": party_type,
+            "pces_role": pces_role or party_type,
         }
         logger.info(
             "PCES login successful party_id=%s first_name=%r middle_name=%r "
