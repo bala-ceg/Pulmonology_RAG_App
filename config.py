@@ -65,6 +65,7 @@ class Config:
     PCES_DIRECTORY_TENANT_ID: str | None = os.getenv("PCES_DIRECTORY_TENANT_ID")
     PCES_DIRECTORY_DOMAIN: str | None = os.getenv("PCES_DIRECTORY_DOMAIN")
     PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "https://pces.example.com")
+    PCES_ONBOARDING_FROM_EMAIL: str | None = os.getenv("PCES_ONBOARDING_FROM_EMAIL")
 
     # SMTP used for one-time PCES account-link verification codes.
     SMTP_HOST: str | None = os.getenv("SMTP_HOST")
