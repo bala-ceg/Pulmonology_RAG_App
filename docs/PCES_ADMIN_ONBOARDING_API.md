@@ -53,9 +53,19 @@ Configure these server-side environment variables; never commit secrets:
 
 The provisioning application needs Microsoft Graph application permissions and admin consent to create External ID customer users. Validate the identities issuer/domain against the actual External ID directory configuration.
 
-## SMTP configuration
+## Microsoft Graph onboarding email
 
-For temporary VM testing, onboarding email uses the existing SMTP relay settings: SMTP_HOST, SMTP_PORT, SMTP_FROM_EMAIL, SMTP_USERNAME, SMTP_PASSWORD, SMTP_USE_TLS, and SMTP_USE_SSL. Configure SMTP_HOST to an approved reachable relay and SMTP_FROM_EMAIL to an authorized sender. The VM is not automatically an email provider; do not use an arbitrary From address. Microsoft Graph email sending is deferred until mailbox and Graph permissions are approved.
+Onboarding notifications are sent with Microsoft Graph using the same confidential client application configured for Entra user provisioning. Configure these server-side environment variables; never commit secrets:
+
+- PCES_PROVISIONING_CLIENT_ID
+- PCES_PROVISIONING_CLIENT_SECRET
+- PCES_DIRECTORY_TENANT_ID
+- PCES_ONBOARDING_FROM_EMAIL (the approved, provisioned sender mailbox)
+- PCES_SIGNIN_URL
+
+The application requires Microsoft Graph application permission Mail.Send with administrator consent. The sender mailbox must be approved for application sending; scope mailbox access with Exchange Online Application RBAC where supported by the tenant. The VM does not need a local SMTP service for this flow.
+
+The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password, Graph access token, or full Graph request payload.
 
 ## Tests
 
