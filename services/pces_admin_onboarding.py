@@ -1,6 +1,7 @@
 """PCES Admin onboarding: hospital users, Microsoft Graph provisioning and notification."""
 from __future__ import annotations
-import secrets, string
+import secrets, string, smtplib
+from email.message import EmailMessage
 from urllib.parse import quote
 from uuid import UUID, uuid4
 import msal, psycopg, requests
@@ -43,12 +44,12 @@ def list_users(admin_id, tenant_id, limit=20, offset=0):
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur, _uuid(admin_id, 'PCES Admin party ID'))
         cur.execute("""SELECT p.party_id,p.first_name,p.middle_name,p.last_name,p.party_type,p.pces_role,
-                              p.email,p.username,p.entra_object_id,p.on_board,p.on_board_date,p.created_at
+                              p.email,p.username,p.entra_object_id,pt.on_board,pt.on_board_date,p.created_at
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
                        WHERE pt.tenant_id=%s AND pt.status='ACTIVE' AND COALESCE(pt.is_active,TRUE)=TRUE
                          AND COALESCE(p.is_active,TRUE)=TRUE AND p.deleted_at IS NULL
                          AND p.party_type IN ('DOCTOR','NURSE')
-                       ORDER BY p.on_board_date DESC NULLS LAST,p.created_at DESC LIMIT %s OFFSET %s""",
+                       ORDER BY pt.on_board_date DESC NULLS LAST,p.created_at DESC LIMIT %s OFFSET %s""",
                     (tenant_id,limit,offset))
         rows=cur.fetchall()
     return [{"party_id":str(r[0]),"first_name":r[1] or "","middle_name":r[2] or "",
@@ -91,12 +92,12 @@ def create_user(admin_id,tenant_id,data):
         if not cur.fetchone(): raise OnboardingError("Selected hospital is not active")
         cur.execute("""INSERT INTO p_party
           (party_id,party_type,name,first_name,middle_name,last_name,email,username,pces_role,
-           is_active,created_at,created_by,version_no,on_board,on_board_date)
-          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW(),%s,1,FALSE,NULL)""",
+           is_active,created_at,created_by,version_no)
+          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW(),%s,1)""",
           (party_id,kind," ".join(x for x in (first,middle,last) if x),first,middle or None,last,email,username,role,admin_id))
         cur.execute("""INSERT INTO p_party_tenant
-          (party_tenant_id,party_id,tenant_id,status,created_at,created_by,is_active,version_no)
-          VALUES (%s,%s,%s,'ACTIVE',NOW(),%s,TRUE,1)""",(membership_id,party_id,tenant_id,admin_id))
+          (party_tenant_id,party_id,tenant_id,status,created_at,created_by,is_active,version_no,on_board,on_board_date)
+          VALUES (%s,%s,%s,'ACTIVE',NOW(),%s,TRUE,1,FALSE,NULL)""",(membership_id,party_id,tenant_id,admin_id))
     return {"party_id":party_id,"party_tenant_id":membership_id,"tenant_id":tenant_id,"on_boarded":False}
 
 def update_user(admin_id,party_id,data):
@@ -146,62 +147,72 @@ def provision_entra_user(user):
     return str(UUID(oid)),password
 
 def _send_email(email,username,password):
-    """Send onboarding instructions through Microsoft Graph application auth."""
+    """Send onboarding instructions through the VM's configured SMTP relay."""
     cfg=Config
-    sender=(cfg.PCES_ONBOARDING_FROM_EMAIL or "").strip()
-    if not sender:
-        raise OnboardingError("PCES_ONBOARDING_FROM_EMAIL is not configured")
-    if not all((cfg.PCES_PROVISIONING_CLIENT_ID,cfg.PCES_PROVISIONING_CLIENT_SECRET,cfg.PCES_DIRECTORY_TENANT_ID)):
-        raise OnboardingError("Microsoft Graph email configuration is incomplete")
-    app=msal.ConfidentialClientApplication(cfg.PCES_PROVISIONING_CLIENT_ID,
-        authority="https://login.microsoftonline.com/"+cfg.PCES_DIRECTORY_TENANT_ID,
-        client_credential=cfg.PCES_PROVISIONING_CLIENT_SECRET)
-    token=app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-    access=token.get("access_token")
-    if not access:
-        raise OnboardingError("Unable to obtain Microsoft Graph email token")
-    body=("Your PCES account has been created.\\n\\nUsername: "+username+
-      "\\nTemporary password: "+password+"\\nSign-in URL: "+cfg.PCES_SIGNIN_URL+
-      "\\n\\nSign in and change your temporary password when prompted.")
-    payload={"message":{"subject":"Your PCES account is ready",
-      "body":{"contentType":"Text","content":body},
-      "toRecipients":[{"emailAddress":{"address":email}}]},
-      "saveToSentItems":False}
-    url="https://graph.microsoft.com/v1.0/users/"+quote(sender,safe="")+"/sendMail"
+    host=(cfg.SMTP_HOST or "").strip()
+    sender=(getattr(cfg,"PCES_ONBOARDING_FROM_EMAIL",None) or cfg.SMTP_FROM_EMAIL or "").strip()
+    if not host or not sender:
+        raise OnboardingError("SMTP_HOST and PCES_ONBOARDING_FROM_EMAIL (or SMTP_FROM_EMAIL) must be configured")
+    message=EmailMessage()
+    message["Subject"]="Your PCES account is ready"
+    message["From"]=sender
+    message["To"]=email
+    message.set_content(
+        "Your PCES account has been created.\n\n"
+        "Username: "+username+"\n"
+        "Temporary password: "+password+"\n"
+        "Sign-in URL: "+cfg.PCES_SIGNIN_URL+"\n\n"
+        "Sign in and change your temporary password when prompted."
+    )
     try:
-        response=requests.post(url,headers={"Authorization":"Bearer "+access,
-          "Content-Type":"application/json"},json=payload,timeout=30)
-    except requests.RequestException as exc:
-        raise OnboardingError("Microsoft Graph email request failed") from exc
-    if response.status_code != 202:
-        raise OnboardingError("Microsoft Graph email delivery request failed: HTTP "+str(response.status_code))
+        if cfg.SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(host,cfg.SMTP_PORT,timeout=20) as smtp:
+                if cfg.SMTP_USERNAME and cfg.SMTP_PASSWORD:
+                    smtp.login(cfg.SMTP_USERNAME,cfg.SMTP_PASSWORD)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(host,cfg.SMTP_PORT,timeout=20) as smtp:
+                smtp.ehlo()
+                if cfg.SMTP_USE_TLS:
+                    smtp.starttls()
+                    smtp.ehlo()
+                if cfg.SMTP_USERNAME and cfg.SMTP_PASSWORD:
+                    smtp.login(cfg.SMTP_USERNAME,cfg.SMTP_PASSWORD)
+                smtp.send_message(message)
+    except (OSError,smtplib.SMTPException) as exc:
+        raise OnboardingError("SMTP onboarding email delivery failed") from exc
 
-def onboard_user(admin_id,party_id):
-    admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID")
+def onboard_user(admin_id,party_id,tenant_id):
+    admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
-        cur.execute("""SELECT first_name,middle_name,last_name,email,username,entra_object_id,party_type
-                       FROM p_party WHERE party_id=%s AND party_type IN ('DOCTOR','NURSE')
-                         AND COALESCE(is_active,TRUE)=TRUE AND deleted_at IS NULL FOR UPDATE""",(party_id,))
+        cur.execute("""SELECT p.first_name,p.middle_name,p.last_name,p.email,p.username,p.entra_object_id,p.party_type,pt.party_tenant_id
+                       FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
+                       WHERE p.party_id=%s AND pt.tenant_id=%s AND pt.status='ACTIVE'
+                         AND COALESCE(pt.is_active,TRUE)=TRUE AND p.party_type IN ('DOCTOR','NURSE')
+                         AND COALESCE(p.is_active,TRUE)=TRUE AND p.deleted_at IS NULL FOR UPDATE OF p,pt""",(party_id,tenant_id))
         row=cur.fetchone()
         if not row: raise OnboardingError("Doctor/Nurse record was not found")
-        first,middle,last,email,username,oid,kind=row
+        first,middle,last,email,username,oid,kind,party_tenant_id=row
         if not email or not username: raise OnboardingError("Email and username are required before onboarding")
         if oid: raise OnboardingError("An Entra account is already linked; reconcile before retrying")
     oid,password=provision_entra_user({"first_name":first,"middle_name":middle,"last_name":last,"email":email})
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
-        cur.execute("""UPDATE p_party SET entra_object_id=%s,on_board=TRUE,on_board_date=CURRENT_DATE,
-                       updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1
+        cur.execute("""UPDATE p_party SET entra_object_id=%s,updated_at=NOW(),updated_by=%s,
+                       version_no=COALESCE(version_no,1)+1
                        WHERE party_id=%s AND entra_object_id IS NULL RETURNING party_id""",(oid,admin_id,party_id))
         if not cur.fetchone(): raise OnboardingError("Entra account created but PCES mapping save failed; reconcile before retrying")
+        cur.execute("""UPDATE p_party_tenant SET on_board=TRUE,on_board_date=CURRENT_DATE,
+                       updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1
+                       WHERE party_tenant_id=%s""",(admin_id,party_tenant_id))
     try:
         _send_email(email,username,password)
         email_sent=True
-    except OnboardingError:
+    except Exception:
         # Provisioning is complete even if notification delivery needs a retry.
         email_sent=False
-    return {"party_id":party_id,"entra_object_id":oid,"on_boarded":True,
+    return {"party_id":party_id,"party_tenant_id":str(party_tenant_id),"tenant_id":tenant_id,"entra_object_id":oid,"on_boarded":True,
             "email_sent":email_sent,
             "message":"Entra account provisioned; onboarding email sent" if email_sent
                       else "Entra account provisioned; onboarding email delivery needs retry"}
