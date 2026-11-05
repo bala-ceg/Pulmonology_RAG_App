@@ -68,7 +68,8 @@ def users_update(party_id):
 @pces_admin_bp.post("/users/<party_id>/onboard")
 def users_onboard(party_id):
     if not _admin_id(): return _denied()
-    try: return jsonify({"success":True,**onboard_user(_admin_id(),party_id)})
+    tenant_id=(request.get_json(silent=True) or {}).get("tenant_id") or request.args.get("tenant_id","")
+    try: return jsonify({"success":True,**onboard_user(_admin_id(),party_id,tenant_id)})
     except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
     except Exception:
         current_app.logger.exception("Unable to onboard user")
