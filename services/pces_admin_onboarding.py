@@ -147,40 +147,39 @@ def provision_entra_user(user):
     return str(UUID(oid)),password
 
 def _send_email(email,username,password):
-    """Send onboarding instructions through the VM's configured SMTP relay."""
+    """Send onboarding instructions using Microsoft Graph application permissions."""
     cfg=Config
-    host=(cfg.SMTP_HOST or "").strip()
-    sender=(getattr(cfg,"PCES_ONBOARDING_FROM_EMAIL",None) or cfg.SMTP_FROM_EMAIL or "").strip()
-    if not host or not sender:
-        raise OnboardingError("SMTP_HOST and PCES_ONBOARDING_FROM_EMAIL (or SMTP_FROM_EMAIL) must be configured")
-    message=EmailMessage()
-    message["Subject"]="Your PCES account is ready"
-    message["From"]=sender
-    message["To"]=email
-    message.set_content(
-        "Your PCES account has been created.\n\n"
-        "Username: "+username+"\n"
-        "Temporary password: "+password+"\n"
-        "Sign-in URL: "+cfg.PCES_SIGNIN_URL+"\n\n"
+    sender=(getattr(cfg,"PCES_ONBOARDING_FROM_EMAIL",None) or "").strip()
+    if not sender:
+        raise OnboardingError("PCES_ONBOARDING_FROM_EMAIL must identify the approved sender mailbox")
+    if not all((cfg.PCES_PROVISIONING_CLIENT_ID,cfg.PCES_PROVISIONING_CLIENT_SECRET,cfg.PCES_DIRECTORY_TENANT_ID)):
+        raise OnboardingError("Microsoft Graph email configuration is incomplete")
+
+    app=msal.ConfidentialClientApplication(cfg.PCES_PROVISIONING_CLIENT_ID,
+        authority="https://login.microsoftonline.com/"+cfg.PCES_DIRECTORY_TENANT_ID,
+        client_credential=cfg.PCES_PROVISIONING_CLIENT_SECRET)
+    token=app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    access=token.get("access_token")
+    if not access:
+        raise OnboardingError("Unable to obtain Microsoft Graph email token")
+
+    body=(
+        "Your PCES account has been created.\\n\\n"
+        "Username: "+username+"\\n"
+        "Temporary password: "+password+"\\n"
+        "Sign-in URL: "+cfg.PCES_SIGNIN_URL+"\\n\\n"
         "Sign in and change your temporary password when prompted."
     )
-    try:
-        if cfg.SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(host,cfg.SMTP_PORT,timeout=20) as smtp:
-                if cfg.SMTP_USERNAME and cfg.SMTP_PASSWORD:
-                    smtp.login(cfg.SMTP_USERNAME,cfg.SMTP_PASSWORD)
-                smtp.send_message(message)
-        else:
-            with smtplib.SMTP(host,cfg.SMTP_PORT,timeout=20) as smtp:
-                smtp.ehlo()
-                if cfg.SMTP_USE_TLS:
-                    smtp.starttls()
-                    smtp.ehlo()
-                if cfg.SMTP_USERNAME and cfg.SMTP_PASSWORD:
-                    smtp.login(cfg.SMTP_USERNAME,cfg.SMTP_PASSWORD)
-                smtp.send_message(message)
-    except (OSError,smtplib.SMTPException) as exc:
-        raise OnboardingError("SMTP onboarding email delivery failed") from exc
+    response=requests.post(
+        "https://graph.microsoft.com/v1.0/users/"+quote(sender,safe="")+"/sendMail",
+        headers={"Authorization":"Bearer "+access,"Content-Type":"application/json"},
+        json={"message":{"subject":"Your PCES account is ready",
+                         "body":{"contentType":"Text","content":body},
+                         "toRecipients":[{"emailAddress":{"address":email}}]},
+              "saveToSentItems":True},
+        timeout=30)
+    if response.status_code != 202:
+        raise OnboardingError("Microsoft Graph onboarding email failed: HTTP "+str(response.status_code))
 
 def onboard_user(admin_id,party_id,tenant_id):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
