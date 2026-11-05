@@ -645,7 +645,7 @@ def login():
                         last_name,
                         email
                     FROM p_party
-                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN')
+                    WHERE party_type IN ('DOCTOR', 'NURSE', 'OFFICE_ADMIN', 'PCES_ADMIN')
                       AND COALESCE(is_active, TRUE) = TRUE
                       AND ({predicates})
                     LIMIT 1
