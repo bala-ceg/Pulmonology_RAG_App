@@ -18,7 +18,7 @@ This API implements the PCES Admin onboarding workflow in the approved onboardin
 | GET | /api/pces-admin/users/search?tenant_id=<uuid>&last_name=&party_type=&email= | Search hospital users |
 | POST | /api/pces-admin/users | Insert Doctor/Nurse and hospital membership |
 | PATCH | /api/pces-admin/users/<party_id> | Update only email and/or username |
-| POST | /api/pces-admin/users/<party_id>/onboard | Provision Entra identity, save OID, mark onboarded, email instructions |
+| POST | /api/pces-admin/users/<party_id>/onboard | Provision Entra identity for the selected hospital, save OID, mark that hospital membership onboarded, email instructions |
 
 ## Create user request
 
@@ -35,11 +35,11 @@ This API implements the PCES Admin onboarding workflow in the approved onboardin
 }
 ~~~
 
-The create operation inserts p_party and p_party_tenant in one database transaction. New records have on_board=false until Entra provisioning completes.
+The create operation inserts p_party and p_party_tenant in one database transaction. New hospital membership rows have p_party_tenant.on_board=false until Entra provisioning completes. The onboarding endpoint requires tenant_id in its JSON body (or query string) so the correct hospital membership is updated.
 
 ## Database migration
 
-Apply migrations/20261104_pces_admin_onboarding.sql to pces_ehr_ccm before using list/create/onboard operations. It adds p_party.on_board and p_party.on_board_date.
+The database administrator has added p_party_tenant.on_board (BOOLEAN, default FALSE) and p_party_tenant.on_board_date (DATE). The service reads and updates these membership-level fields; no p_party onboarding columns are required.
 
 ## Microsoft Graph configuration
 
@@ -55,7 +55,7 @@ The provisioning application needs Microsoft Graph application permissions and a
 
 ## SMTP configuration
 
-The onboarding email uses the existing SMTP settings: SMTP_HOST, SMTP_PORT, SMTP_FROM_EMAIL, SMTP_USERNAME, SMTP_PASSWORD, SMTP_USE_TLS.
+For temporary VM testing, onboarding email uses the existing SMTP relay settings: SMTP_HOST, SMTP_PORT, SMTP_FROM_EMAIL, SMTP_USERNAME, SMTP_PASSWORD, SMTP_USE_TLS, and SMTP_USE_SSL. Configure SMTP_HOST to an approved reachable relay and SMTP_FROM_EMAIL to an authorized sender. The VM is not automatically an email provider; do not use an arbitrary From address. Microsoft Graph email sending is deferred until mailbox and Graph permissions are approved.
 
 ## Tests
 
@@ -71,4 +71,4 @@ Route tests mock service boundaries and do not create Microsoft accounts. A sepa
 
 Entra user creation and PostgreSQL updates cannot be one distributed transaction. If Graph creates the user but saving the returned OID fails, reconcile the Entra object manually before retrying; do not blindly retry or create a duplicate. The current service reports this partial-failure state.
 
-The requested workflow emails a temporary password. This is security-sensitive: before production, consider a one-time activation/password-reset link instead of sending a reusable credential by email. Never log the password, Graph access token, or full Graph request payload.
+The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password, Graph access token, or full Graph request payload.
