@@ -3025,7 +3025,13 @@ def update_doctor(party_id: str):
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Advanced patient search — source-aware.
+    """Advanced patient search scoped to the authenticated user's hospital.
+
+    The login flow copies the selected hospital from the authenticated
+    PCES global context (g_tenant_ID) into session["pces_identity"]["tenant_id"].
+    Use that server-side session value as the authority; never trust a tenant
+    supplied by the search request. Return every patient associated with that
+    hospital, without restricting results to a particular doctor.
 
     Query params (at least one required):
       first, last, middle, dob (YYYY-MM-DD), phone, email
