@@ -1,8 +1,7 @@
 """PCES Admin onboarding: hospital users, Microsoft Graph provisioning and notification."""
 from __future__ import annotations
-import secrets, string, smtplib
+import secrets, string, smtplib, ssl
 from email.message import EmailMessage
-from urllib.parse import quote
 from uuid import UUID, uuid4
 import msal, psycopg, requests
 from config import Config
@@ -146,40 +145,51 @@ def provision_entra_user(user):
     if not oid: raise OnboardingError("Microsoft Entra did not return an object ID")
     return str(UUID(oid)),password
 
-def _send_email(email,username,password):
-    """Send onboarding instructions using Microsoft Graph application permissions."""
-    cfg=Config
-    sender=(getattr(cfg,"PCES_ONBOARDING_FROM_EMAIL",None) or "").strip()
-    if not sender:
-        raise OnboardingError("PCES_ONBOARDING_FROM_EMAIL must identify the approved sender mailbox")
-    if not all((cfg.PCES_PROVISIONING_CLIENT_ID,cfg.PCES_PROVISIONING_CLIENT_SECRET,cfg.PCES_DIRECTORY_TENANT_ID)):
-        raise OnboardingError("Microsoft Graph email configuration is incomplete")
+def _send_email(email, username, password):
+    """Send PCES onboarding instructions through the configured Bluehost mailbox."""
+    cfg = Config
+    host = (getattr(cfg, "PCES_SMTP_HOST", None) or "").strip()
+    username_smtp = (getattr(cfg, "PCES_SMTP_USERNAME", None) or "").strip()
+    password_smtp = getattr(cfg, "PCES_SMTP_PASSWORD", None)
+    port = int(getattr(cfg, "PCES_SMTP_PORT", 465))
+    timeout = int(getattr(cfg, "PCES_SMTP_TIMEOUT", 30))
 
-    app=msal.ConfidentialClientApplication(cfg.PCES_PROVISIONING_CLIENT_ID,
-        authority="https://login.microsoftonline.com/"+cfg.PCES_DIRECTORY_TENANT_ID,
-        client_credential=cfg.PCES_PROVISIONING_CLIENT_SECRET)
-    token=app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-    access=token.get("access_token")
-    if not access:
-        raise OnboardingError("Unable to obtain Microsoft Graph email token")
+    if not all((host, username_smtp, password_smtp)):
+        raise OnboardingError(
+            "Bluehost SMTP configuration is incomplete; set PCES_SMTP_HOST, "
+            "PCES_SMTP_USERNAME, and PCES_SMTP_PASSWORD"
+        )
+    if not email or not username or not password:
+        raise OnboardingError("Recipient email and onboarding credentials are required")
 
-    body=(
+    message = EmailMessage()
+    message["From"] = username_smtp
+    message["To"] = email
+    message["Subject"] = "Your PCES account is ready"
+    message.set_content(
         "Your PCES account has been created.\\n\\n"
-        "Username: "+username+"\\n"
-        "Temporary password: "+password+"\\n"
-        "Sign-in URL: "+cfg.PCES_SIGNIN_URL+"\\n\\n"
+        "Username: " + username + "\\n"
+        "Temporary password: " + password + "\\n"
+        "Sign-in URL: " + cfg.PCES_SIGNIN_URL + "\\n\\n"
         "Sign in and change your temporary password when prompted."
     )
-    response=requests.post(
-        "https://graph.microsoft.com/v1.0/users/"+quote(sender,safe="")+"/sendMail",
-        headers={"Authorization":"Bearer "+access,"Content-Type":"application/json"},
-        json={"message":{"subject":"Your PCES account is ready",
-                         "body":{"contentType":"Text","content":body},
-                         "toRecipients":[{"emailAddress":{"address":email}}]},
-              "saveToSentItems":True},
-        timeout=30)
-    if response.status_code != 202:
-        raise OnboardingError("Microsoft Graph onboarding email failed: HTTP "+str(response.status_code))
+
+    try:
+        with smtplib.SMTP_SSL(
+            host=host,
+            port=port,
+            context=ssl.create_default_context(),
+            timeout=timeout,
+        ) as smtp:
+            smtp.login(username_smtp, password_smtp)
+            refused = smtp.send_message(message)
+            if refused:
+                raise OnboardingError("Bluehost SMTP rejected one or more recipients")
+    except OnboardingError:
+        raise
+    except (OSError, smtplib.SMTPException) as exc:
+        # Do not include credentials, message bodies, or SMTP authentication data.
+        raise OnboardingError("Unable to send PCES onboarding email through Bluehost SMTP") from exc
 
 def onboard_user(admin_id,party_id,tenant_id):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
