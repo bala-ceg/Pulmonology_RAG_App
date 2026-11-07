@@ -65,7 +65,14 @@ class Config:
     PCES_DIRECTORY_TENANT_ID: str | None = os.getenv("PCES_DIRECTORY_TENANT_ID")
     PCES_DIRECTORY_DOMAIN: str | None = os.getenv("PCES_DIRECTORY_DOMAIN")
     PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "https://pces.example.com")
-    PCES_ONBOARDING_FROM_EMAIL: str | None = os.getenv("PCES_ONBOARDING_FROM_EMAIL")
+
+    # Bluehost SMTP dedicated to PCES Admin onboarding notifications.
+    # Kept separate from SMTP_* used by Entra account-link verification.
+    PCES_SMTP_HOST: str | None = os.getenv("PCES_SMTP_HOST")
+    PCES_SMTP_PORT: int = int(os.getenv("PCES_SMTP_PORT", "465"))
+    PCES_SMTP_USERNAME: str | None = os.getenv("PCES_SMTP_USERNAME")
+    PCES_SMTP_PASSWORD: str | None = os.getenv("PCES_SMTP_PASSWORD")
+    PCES_SMTP_TIMEOUT: int = int(os.getenv("PCES_SMTP_TIMEOUT", "30"))
 
     # SMTP used for one-time PCES account-link verification codes.
     SMTP_HOST: str | None = os.getenv("SMTP_HOST")
