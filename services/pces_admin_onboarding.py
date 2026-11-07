@@ -167,10 +167,10 @@ def _send_email(email, username, password):
     message["To"] = email
     message["Subject"] = "Your PCES account is ready"
     message.set_content(
-        "Your PCES account has been created.\\n\\n"
-        "Username: " + username + "\\n"
-        "Temporary password: " + password + "\\n"
-        "Sign-in URL: " + cfg.PCES_SIGNIN_URL + "\\n\\n"
+        "Your PCES account has been created.\n\n"
+        "Username: " + username + "\n"
+        "Temporary password: " + password + "\n"
+        "Sign-in URL: " + cfg.PCES_SIGNIN_URL + "\n\n"
         "Sign in and change your temporary password when prompted."
     )
 
