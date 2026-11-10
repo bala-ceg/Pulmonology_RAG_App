@@ -14839,6 +14839,11 @@ function hideClinicalPanelsForPcesAdmin() {
     const chatAiRow = document.querySelector('.chat-ai-row');
     if (chatAiRow) chatAiRow.style.display = 'none';
 
+    // Hospital and User Onboarding are administrative screens.
+    // Always hide the shared Clinical AI / Medical History / Patient Problem
+    // footer, including when these screens are opened immediately after reload.
+    hideSharedClinicalFooterForDataApplets();
+
     document.querySelectorAll('.entity-data-tab')
         .forEach(tab => tab.classList.remove('active'));
 
