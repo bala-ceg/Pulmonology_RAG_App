@@ -68,13 +68,14 @@ def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur, _uuid(admin_id, "PCES Admin party ID"))
         cur.execute("""SELECT p.party_id,p.first_name,p.middle_name,p.last_name,p.party_type,p.pces_role,
-                              p.email,p.username,p.entra_object_id
+                              p.email,p.username,p.entra_object_id,pt.on_board,pt.on_board_date
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
-                       WHERE """+" AND ".join(clauses)+" ORDER BY p.created_at DESC LIMIT 100",tuple(params))
+                       WHERE """+" AND ".join(clauses)+" ORDER BY pt.on_board_date DESC NULLS LAST,p.created_at DESC LIMIT 100",tuple(params))
         rows=cur.fetchall()
     return [{"party_id":str(r[0]),"first_name":r[1] or "","middle_name":r[2] or "",
              "last_name":r[3] or "","party_type":r[4],"pces_role":r[5] or "",
-             "email":r[6] or "","username":r[7] or "","entra_id":r[8] or ""} for r in rows]
+             "email":r[6] or "","username":r[7] or "","entra_id":r[8] or "",
+             "on_boarded":bool(r[9]),"on_board_date":r[10].isoformat() if r[10] else None} for r in rows]
 
 def create_user(admin_id,tenant_id,data):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
@@ -99,8 +100,9 @@ def create_user(admin_id,tenant_id,data):
           VALUES (%s,%s,%s,'ACTIVE',NOW(),%s,TRUE,1,FALSE,NULL)""",(membership_id,party_id,tenant_id,admin_id))
     return {"party_id":party_id,"party_tenant_id":membership_id,"tenant_id":tenant_id,"on_boarded":False}
 
-def update_user(admin_id,party_id,data):
+def update_user(admin_id,party_id,tenant_id,data):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID")
+    tenant_id=_uuid(tenant_id,"hospital ID")
     if not data or set(data)-{"email","username"}: raise OnboardingError("Only email and username can be updated")
     sets=[]; vals=[]
     for key in ("email","username"):
@@ -111,6 +113,10 @@ def update_user(admin_id,party_id,data):
     if not sets: raise OnboardingError("Provide email or username to update")
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
+        cur.execute("""SELECT 1 FROM p_party_tenant
+                       WHERE party_id=%s AND tenant_id=%s AND status='ACTIVE'
+                         AND COALESCE(is_active,TRUE)=TRUE""",(party_id,tenant_id))
+        if not cur.fetchone(): raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
         cur.execute("UPDATE p_party SET "+",".join(sets)+",updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1 WHERE party_id=%s AND party_type IN ('DOCTOR','NURSE') RETURNING party_id",
                     tuple(vals+[admin_id,party_id]))
         if not cur.fetchone(): raise OnboardingError("Doctor/Nurse record was not found")
