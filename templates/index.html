@@ -3172,6 +3172,28 @@
     background: #d7e7fb;
 }
 
+/* Patient-Doctor / Doctor-Patient bottom applet:
+   keep the relationship table header visible while its rows scroll. */
+#relationship-result-area {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#relationship-result-area .entity-table-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+#relationship-result-area .entity-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #deeaf5;
+}
+
 
 /* Detail section */
 .entity-detail-area {
@@ -3360,6 +3382,13 @@
 .entity-action-left {
     display: flex;
     gap: 10px;
+}
+
+.entity-action-title {
+    flex: 1;
+    text-align: center;
+    margin-bottom: 0;
+    align-self: center;
 }
 
 .entity-action-btn {
@@ -3970,6 +3999,112 @@
             height: 30px;
         }
 
+        .vitals-graph-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 12000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .vitals-graph-overlay.show {
+            display: flex;
+        }
+
+        .vitals-graph-modal {
+            width: min(1100px, 94vw);
+            max-height: 88vh;
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+        }
+
+        .vitals-graph-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #cfd8e3;
+            background: #eef4fb;
+        }
+
+        .vitals-graph-header h3 {
+            margin: 0;
+            font-size: 16px;
+            color: #1a3a5c;
+        }
+
+        .vitals-graph-close {
+            margin: 0;
+            min-width: 34px;
+            height: 30px;
+            padding: 0 9px;
+            font-size: 18px;
+        }
+
+        .vitals-graph-content {
+            padding: 14px 16px 18px;
+        }
+
+        .vitals-graph-subtitle {
+            text-align: center;
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 12px;
+        }
+
+        .vitals-graph-card {
+            border: 1px solid #ccd6e2;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 12px;
+            background: #fff;
+        }
+
+        .vitals-graph-card-title {
+            text-align: center;
+            font-weight: 700;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+
+        .vitals-graph-svg {
+            display: block;
+            width: 100%;
+            height: 220px;
+        }
+
+        .vitals-graph-empty {
+            text-align: center;
+            padding: 25px;
+            color: #666;
+        }
+
+        .vitals-graph-legend {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            flex-wrap: wrap;
+            margin-top: 5px;
+            font-size: 11px;
+        }
+
+        .vitals-graph-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .vitals-graph-legend-line {
+            width: 24px;
+            height: 3px;
+            display: inline-block;
+        }
+
         #my-schedule-vitals-area {
             border: 1px solid #222;
             background: #fff;
@@ -3998,6 +4133,49 @@
             border-radius: 3px;
             background: #eaf7e7;
             font-size: 12px;
+        }
+
+        /* Compact fixed-width descriptor columns in My Schedule vitals. */
+        #my-schedule-vitals-area .vital-type-col {
+            width: 30ch;
+            min-width: 30ch;
+            max-width: 30ch;
+        }
+
+        #my-schedule-vitals-area .uom-col {
+            width: 15ch;
+            min-width: 15ch;
+            max-width: 15ch;
+        }
+
+        #my-schedule-vitals-area .vitals-history-table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        #my-schedule-vitals-area .vitals-sno-col {
+            width: 7ch;
+            min-width: 7ch;
+            max-width: 7ch;
+        }
+
+        #my-schedule-vitals-area .vitals-date-col {
+            width: calc((100% - 52ch) / 5);
+            min-width: 105px;
+            text-align: center;
+        }
+
+        #my-schedule-vitals-area .my-schedule-vitals-graph-action {
+            display: flex;
+            justify-content: flex-end;
+            padding: 7px 10px 8px;
+            border-top: 1px solid #d7dde5;
+        }
+
+        #my-schedule-vitals-area .my-schedule-vitals-graph-action button {
+            margin: 0;
+            min-width: 120px;
+            height: 30px;
         }
 
         #my-schedule-vitals-area .vitals-entry-actions {
@@ -4145,7 +4323,117 @@
     background: #d7e7fb;
 }
 
-</style>
+
+        /* PCES Admin Services - Hospital / Tenant provisioning */
+        #pces-admin-hospital-panel {
+            flex-direction: column;
+            background: #fff;
+        }
+
+        .pces-admin-card {
+            border: 1px solid #222;
+            background: #fff;
+            padding: 12px;
+        }
+
+        .pces-admin-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .pces-admin-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pces-admin-form-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            gap: 8px 12px;
+        }
+
+        .pces-admin-field {
+            display: grid;
+            grid-template-columns: 110px minmax(0, 1fr);
+            align-items: center;
+            border: 1px solid #333;
+            min-height: 30px;
+        }
+
+        .pces-admin-field label {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 5px 8px;
+            border-right: 1px solid #333;
+            background: #f7f7f7;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .pces-admin-field input,
+        .pces-admin-field select {
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            padding: 5px 8px;
+            background: #fff;
+            font-size: 12px;
+        }
+
+        .pces-admin-field input[readonly] {
+            background: #f1f3f5;
+        }
+
+        .pces-admin-save-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .pces-admin-search-results {
+            margin-top: 10px;
+            border-top: 1px solid #d8e0e8;
+            padding-top: 8px;
+        }
+
+        .pces-admin-search-results tbody tr {
+            cursor: pointer;
+        }
+
+        .pces-admin-search-results tbody tr:hover {
+            background: #e8f0fc;
+        }
+
+        @media (max-width: 1100px) {
+            .pces-admin-form-grid {
+                grid-template-columns: repeat(2, minmax(220px, 1fr));
+            }
+        }
+
+    
+        /* PCES Admin - Hospital User Management */
+        .pces-user-admin-card { border:1px solid #222; background:#fff; padding:12px; }
+        .pces-user-admin-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+        .pces-user-admin-search-row, .pces-user-admin-actions, .pces-user-search-toolbar { display:flex; align-items:center; gap:8px; }
+        .pces-user-admin-search-row input, .pces-user-search-toolbar input { min-width:220px; padding:6px 8px; border:1px solid #aaa; }
+        .pces-user-search-toolbar { margin:0 0 10px; font-size:12px; }
+        #pces-user-selected-hospital-label { margin-left:auto; font-weight:700; color:#1a3a5c; }
+        .pces-user-detail-title { text-align:center; font-weight:700; margin:12px 0 8px; }
+        .pces-user-detail-grid { display:grid; grid-template-columns:repeat(3,minmax(220px,1fr)); gap:8px 12px; }
+        .pces-user-field { display:grid; grid-template-columns:105px minmax(0,1fr); border:1px solid #333; min-height:31px; }
+        .pces-user-field label { display:flex; align-items:center; font-size:12px; font-weight:700; padding:5px 7px; border-right:1px solid #333; background:#f7f7f7; }
+        .pces-user-field input, .pces-user-field select { width:100%; border:0; padding:5px 7px; min-width:0; font-size:12px; }
+        .pces-user-field input[readonly], .pces-user-field select:disabled { background:#f1f3f5; }
+        .pces-user-save-row { display:flex; justify-content:flex-end; margin-top:10px; }
+        #pces-user-hospital-body tr, #pces-user-list-body tr { cursor:pointer; }
+        #pces-user-hospital-body tr.selected, #pces-user-list-body tr.selected { background:#dbe9f8; }
+        @media (max-width:1100px){ .pces-user-detail-grid{grid-template-columns:repeat(2,minmax(220px,1fr));} }
+
+    </style>
 </head>
 <body> 
     <div id="toast" class="toast"></div>
@@ -4481,8 +4769,35 @@
                 <button
                     id="patient-scheduling-tab"
                     class="section-btn entity-data-tab"
+                    style="display:none;"
                     onclick="requireAuth(() => { setActiveEntityDataTab('patient-scheduling-tab'); loadSchedulingPanel(); syncEhrAiToggleLabel(); })">
                     Scheduling
+                </button>
+            </div>
+
+            <!-- PCES Admin Services
+                 Phase 1: intentionally visible to all authenticated roles.
+                 Later this can be gated by pces_role == PCES_ADMIN. -->
+            <div
+                id="pces-admin-services-box"
+                class="sidebar-section-box"
+                style="display:block; margin-top: 8px;">
+                <div class="sidebar-section-label">PCES Admin Services</div>
+
+                <button
+                    id="pces-admin-hospital-tab"
+                    class="section-btn"
+                    style="display:block; margin:0 auto 6px;"
+                    onclick="requireAuth(() => { loadPcesAdminHospitalPanel(); syncEhrAiToggleLabel(); })">
+                    Hospital
+                </button>
+
+                <button
+                    id="pces-admin-user-onboarding-tab"
+                    class="section-btn"
+                    style="display:block; margin:0 auto 6px;"
+                    onclick="requireAuth(() => { loadPcesAdminUserOnboarding(); syncEhrAiToggleLabel(); })">
+                    User Onboarding
                 </button>
             </div>
 
@@ -4509,7 +4824,6 @@
             <div class="sidebar-bottom">
                 <div class="ehr-ai-box">
                     <button id="ehr-ai-toggle-btn" class="section-btn" onclick="toggleEhrAi()">EHR / AI</button>
-                    <button id="medical-imaging-services-btn" class="section-btn" type="button" title="Image Services entry point">Image Services</button>
                     <button class="section-btn" onclick="openChatYodha()">Chat Services</button>
                 </div>
             </div>
@@ -4710,6 +5024,11 @@
             </button>
         </div>
 
+        <div id="entity-detail-title"
+             class="entity-detail-title entity-action-title">
+            Select a record above to view details
+        </div>
+
         <button
             id="entity-save-btn"
             class="entity-action-btn"
@@ -4717,11 +5036,6 @@
             Save
         </button>
 
-    </div>
-
-    <div id="entity-detail-title"
-         class="entity-detail-title">
-        Select a record above to view details
     </div>
 
         <div class="entity-details-grid">
@@ -4907,11 +5221,11 @@
         </div>
 
         <div class="entity-table-wrapper">
-            <table class="entity-table">
+            <table class="entity-table vitals-history-table">
                 <thead id="my-schedule-vitals-head">
                     <tr>
-                        <th>Vital Type</th>
-                        <th>UoM</th>
+                        <th class="vital-type-col">Vital Type</th>
+                        <th class="uom-col">UoM</th>
                         <th>Value</th>
                     </tr>
                 </thead>
@@ -4931,6 +5245,16 @@
             </button>
             <button type="button" class="scheduling-select-btn" onclick="resetNurseVitalsEditor()">
                 Cancel
+            </button>
+        </div>
+
+        <div class="my-schedule-vitals-graph-action">
+            <button
+                id="my-schedule-graph-btn"
+                type="button"
+                class="scheduling-select-btn"
+                onclick="openMyScheduleVitalsGraph()">
+                Graph
             </button>
         </div>
     </div>
@@ -4963,6 +5287,41 @@
         </div>
     </div>
 
+</div>
+
+<!-- My Schedule Vitals Graph -->
+<div
+    id="my-schedule-vitals-graph-overlay"
+    class="vitals-graph-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="my-schedule-vitals-graph-title"
+    onclick="handleVitalsGraphOverlayClick(event)">
+
+    <div class="vitals-graph-modal">
+        <div class="vitals-graph-header">
+            <h3 id="my-schedule-vitals-graph-title">
+                Patient Vitals Time History
+            </h3>
+
+            <button
+                type="button"
+                class="vitals-graph-close"
+                aria-label="Close vitals graph"
+                onclick="closeMyScheduleVitalsGraph()">
+                ×
+            </button>
+        </div>
+
+        <div class="vitals-graph-content">
+            <div
+                id="my-schedule-vitals-graph-subtitle"
+                class="vitals-graph-subtitle">
+            </div>
+
+            <div id="my-schedule-vitals-graph-body"></div>
+        </div>
+    </div>
 </div>
 
 <!-- =====================================================
@@ -5073,6 +5432,247 @@
         </div>
     </div>
 
+</div>
+
+<!-- =====================================================
+     PCES ADMIN - HOSPITAL / TENANT PROVISIONING
+     Phase 1: available to all authenticated roles.
+     ===================================================== -->
+<div
+    id="pces-admin-hospital-panel"
+    class="entity-data-panel"
+    style="display:none; overflow-y:auto; padding:10px; gap:12px;">
+
+    <!-- TOP APPLET: Hospital -->
+    <div class="pces-admin-card">
+        <div class="pces-admin-card-header">
+            <div class="entity-list-title" style="flex:1; margin:0;">
+                New Hospital
+            </div>
+
+            <div class="pces-admin-actions">
+                <button type="button" class="entity-action-btn" onclick="startPcesHospitalInsert()">Insert</button>
+                <button type="button" class="entity-action-btn" onclick="startPcesHospitalUpdate()">Update</button>
+                <button type="button" class="entity-action-btn" onclick="searchPcesHospitals()">Search</button>
+            </div>
+        </div>
+
+        <div class="pces-admin-form-grid hospital-grid">
+            <div class="pces-admin-field">
+                <label>Hospital Name</label>
+                <input id="pces-hospital-name" type="text" maxlength="200" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Parent Hospital</label>
+                <select id="pces-hospital-parent">
+                    <option value="">— None —</option>
+                </select>
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Party Code</label>
+                <input id="pces-hospital-code" type="text" maxlength="100" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Party ID</label>
+                <input id="pces-hospital-party-id" type="text" readonly placeholder="Generated on Save">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Address 1</label>
+                <input id="pces-hospital-address1" type="text" maxlength="255" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Address 2</label>
+                <input id="pces-hospital-address2" type="text" maxlength="255" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>City</label>
+                <input id="pces-hospital-city" type="text" maxlength="100" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>State</label>
+                <input id="pces-hospital-state" type="text" maxlength="100" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Zip</label>
+                <input id="pces-hospital-zip" type="text" maxlength="20" autocomplete="off">
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Country</label>
+                <input id="pces-hospital-country" type="text" maxlength="100" value="USA" autocomplete="off">
+            </div>
+        </div>
+
+        <div id="pces-hospital-search-results" class="pces-admin-search-results" style="display:none;">
+            <div class="entity-table-wrapper" style="max-height:170px;">
+                <table class="entity-table">
+                    <thead>
+                        <tr>
+                            <th>S No</th>
+                            <th>Hospital Name</th>
+                            <th>Party Code</th>
+                            <th>Parent Hospital</th>
+                            <th>City</th>
+                            <th>State</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pces-hospital-search-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="pces-admin-save-row">
+            <button id="pces-hospital-save-btn" type="button" class="scheduling-select-btn" onclick="savePcesHospital()">Save</button>
+            <button type="button" class="scheduling-select-btn" onclick="cancelPcesHospitalEdit()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- BOTTOM APPLET: Tenant -->
+    <div class="pces-admin-card">
+        <div class="pces-admin-card-header">
+            <div class="entity-list-title" style="flex:1; margin:0;">
+                New Tenant
+            </div>
+
+            <div class="pces-admin-actions">
+                <button type="button" class="entity-action-btn" onclick="startPcesTenantInsert()">Insert</button>
+                <button type="button" class="entity-action-btn" onclick="startPcesTenantUpdate()">Update</button>
+                <button type="button" class="entity-action-btn" onclick="searchPcesAdminTenants()">Search</button>
+            </div>
+        </div>
+
+        <div class="pces-admin-form-grid tenant-provision-grid">
+            <div class="pces-admin-field">
+                <label>Hospital Name</label>
+                <input id="pces-tenant-hospital-name" type="text" readonly>
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Party Code</label>
+                <input id="pces-tenant-party-code" type="text" readonly>
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Party ID</label>
+                <input id="pces-tenant-party-id" type="text" readonly>
+            </div>
+
+            <div class="pces-admin-field">
+                <label>Tenant ID</label>
+                <input id="pces-tenant-id" type="text" readonly placeholder="Generated on Save">
+            </div>
+        </div>
+
+        <div id="pces-tenant-search-results" class="pces-admin-search-results" style="display:none;">
+            <div class="entity-table-wrapper" style="max-height:170px;">
+                <table class="entity-table">
+                    <thead>
+                        <tr>
+                            <th>S No</th>
+                            <th>Tenant ID</th>
+                            <th>Tenant Name</th>
+                            <th>Tenant Code</th>
+                            <th>Organization Party ID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pces-tenant-search-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="pces-admin-save-row">
+            <button id="pces-tenant-save-btn" type="button" class="scheduling-select-btn" onclick="savePcesAdminTenant()">Save</button>
+            <button type="button" class="scheduling-select-btn" onclick="cancelPcesAdminTenantEdit()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- =====================================================
+     PCES ADMIN - HOSPITAL USER MANAGEMENT
+     ===================================================== -->
+<div id="pces-admin-user-onboarding-panel" class="entity-data-panel"
+     style="display:none; overflow-y:auto; padding:10px; gap:12px; flex-direction:column;">
+
+    <div class="pces-user-admin-card">
+        <div class="pces-user-admin-header">
+            <div class="entity-list-title" style="margin:0; flex:1;">List of Hospitals</div>
+            <div class="pces-user-admin-search-row">
+                <input id="pces-user-hospital-search" type="text" maxlength="200"
+                       placeholder="Hospital Name"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUserHospitals();}">
+                <button type="button" class="entity-action-btn" onclick="searchPcesUserHospitals()">Search</button>
+            </div>
+        </div>
+        <div class="entity-table-wrapper" style="max-height:230px;">
+            <table class="entity-table">
+                <thead><tr>
+                    <th>S No</th><th>Party ID</th><th>Hospital Name</th><th>Location ID</th><th>Tenant ID</th>
+                </tr></thead>
+                <tbody id="pces-user-hospital-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pces-user-admin-card">
+        <div class="pces-user-admin-header">
+            <div class="entity-list-title" style="margin:0; flex:1;">List of Users</div>
+            <div class="pces-user-admin-actions">
+                <button type="button" class="entity-action-btn" onclick="startPcesUserInsert()">Insert</button>
+                <button type="button" class="entity-action-btn" onclick="startPcesUserUpdate()">Update</button>
+                <button type="button" class="entity-action-btn" onclick="searchPcesUsers()">Search</button>
+            </div>
+        </div>
+
+        <div class="pces-user-search-toolbar">
+            <label for="pces-user-search-text">Search User</label>
+            <input id="pces-user-search-text" type="text" maxlength="200"
+                   placeholder="Name, email or username"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}">
+            <span id="pces-user-selected-hospital-label"></span>
+        </div>
+
+        <div class="entity-table-wrapper" style="max-height:260px;">
+            <table class="entity-table">
+                <thead><tr>
+                    <th>S No</th><th>First Name</th><th>Middle</th><th>Last Name</th>
+                    <th>Party Type</th><th>PCES Role</th><th>Email</th><th>User Name</th><th>Entra ID</th>
+                </tr></thead>
+                <tbody id="pces-user-list-body"></tbody>
+            </table>
+        </div>
+
+        <div class="pces-user-detail-title">User Details</div>
+        <div class="pces-user-detail-grid">
+            <div class="pces-user-field"><label>Party ID</label><input id="pces-user-party-id" type="text" readonly></div>
+            <div class="pces-user-field"><label>First Name</label><input id="pces-user-first-name" type="text" maxlength="100"></div>
+            <div class="pces-user-field"><label>Middle</label><input id="pces-user-middle-name" type="text" maxlength="100"></div>
+            <div class="pces-user-field"><label>Last Name</label><input id="pces-user-last-name" type="text" maxlength="100"></div>
+            <div class="pces-user-field"><label>Party Type</label>
+                <select id="pces-user-party-type">
+                    <option value="DOCTOR">DOCTOR</option>
+                    <option value="NURSE">NURSE</option>
+                    <option value="OFFICE_ADMIN">OFFICE_ADMIN</option>
+                    <option value="PCES_ADMIN">PCES_ADMIN</option>
+                </select>
+            </div>
+            <div class="pces-user-field"><label>PCES Role</label><select id="pces-user-pces-role"></select></div>
+            <div class="pces-user-field"><label>Email</label><input id="pces-user-email" type="email" maxlength="255"></div>
+            <div class="pces-user-field"><label>User Name</label><input id="pces-user-username" type="text" maxlength="255"></div>
+            <div class="pces-user-field"><label>Entra ID</label><input id="pces-user-entra-id" type="text" readonly></div>
+        </div>
+        <div class="pces-user-save-row">
+            <button id="pces-user-save-btn" type="button" class="scheduling-select-btn" onclick="savePcesUser()">Save</button>
+        </div>
+    </div>
 </div>
 
 <!-- =====================================================
@@ -5311,6 +5911,7 @@
                             placeholder="Not selected">
 
                         <button
+                            id="scheduling-hospital-picker-btn"
                             type="button"
                             class="scheduling-select-btn scheduling-picker-btn"
                             onclick="openSchedulingHospitalModal()">
@@ -5912,8 +6513,7 @@
         const PCES_CONTEXT_FIELDS = [
             'g_doctor_ID', 'g_patient_ID', 'g_tenant_ID', 'g_lab_ID',
             'g_nurse_id', 'g_med_assist_id', 'g_office_admin_id', 'g_user_id',
-            'g_temp1_id', 'g_temp2_id', 'g_temp3_id',
-            'g_doctor_name', 'g_patient_name', 'g_hospital_name'
+            'g_temp1_id', 'g_temp2_id', 'g_temp3_id'
         ];
 
         function normalizePcesContextValue(value) {
@@ -5957,10 +6557,7 @@
                 g_user_id: null,
                 g_temp1_id: null,
                 g_temp2_id: null,
-                g_temp3_id: null,
-                g_doctor_name: null,
-                g_patient_name: null,
-                g_hospital_name: null
+                g_temp3_id: null
             });
         }
 
@@ -5989,10 +6586,7 @@
             g_user_id: normalizePcesContextValue(_savedPcesContext.g_user_id),
             g_temp1_id: normalizePcesContextValue(_savedPcesContext.g_temp1_id),
             g_temp2_id: normalizePcesContextValue(_savedPcesContext.g_temp2_id),
-            g_temp3_id: normalizePcesContextValue(_savedPcesContext.g_temp3_id),
-            g_doctor_name: normalizePcesContextValue(_savedPcesContext.g_doctor_name || sessionStorage.getItem('pces_doctor_name')),
-            g_patient_name: normalizePcesContextValue(_savedPcesContext.g_patient_name || sessionStorage.getItem('pces_patient_name')),
-            g_hospital_name: normalizePcesContextValue(_savedPcesContext.g_hospital_name || sessionStorage.getItem('pces_hospital_name'))
+            g_temp3_id: normalizePcesContextValue(_savedPcesContext.g_temp3_id)
         };
         console.log('[PCES Context] initialized', {...window.PCES_CONTEXT});
 
@@ -6123,11 +6717,19 @@ let selectedSchedulingNurseName = '';
 
 let selectedSchedulingHospitalId = null;
 let selectedSchedulingHospitalName = '';
+let selectedSchedulingTenantId = null;
 
 
 // Hide the shared Patient History / Medical Problem footer while any of the
 // six Patient / Doctor Data applets is active.
 function hideSharedClinicalFooterForDataApplets() {
+    const clinicalAiResponseBar =
+        document.querySelector('.allergy-bar');
+
+    if (clinicalAiResponseBar) {
+        clinicalAiResponseBar.style.display = 'none';
+    }
+
     const medicalHistory =
         document.querySelector('.medical-history-panel');
 
@@ -7237,6 +7839,12 @@ function renderEntityRecords(records) {
 
 async function loadSchedulingPanel() {
 
+    if (!_isOfficeAdmin()) {
+        console.warn('[Scheduling] Access denied: OFFICE_ADMIN required.');
+        alert('Scheduling is available only to Office Admin users.');
+        return;
+    }
+
     hideTenantManagementPanel();
 
     hidePatientEncounterPanel();
@@ -7286,7 +7894,10 @@ async function loadSchedulingPanel() {
     schedulingPanel.style.display = 'flex';
 
     // Start a fresh appointment draft whenever Scheduling is opened.
-    resetSchedulingSelections();
+    resetSchedulingSelections(false);
+
+    // Hospital is derived from the authenticated tenant context.
+    await prepopulateSchedulingHospitalFromContext();
 
     body.innerHTML = `
         <tr>
@@ -7426,7 +8037,7 @@ function selectSchedulingPatient(patient, selectedRow) {
 // Select Doctor + Select Nurse + Select Hospital
 // ============================================================
 
-function resetSchedulingSelections() {
+function resetSchedulingSelections(preserveHospital = false) {
 
     selectedSchedulingProviderId = null;
     selectedSchedulingProviderName = '';
@@ -7434,8 +8045,11 @@ function resetSchedulingSelections() {
     selectedSchedulingNurseId = null;
     selectedSchedulingNurseName = '';
 
-    selectedSchedulingHospitalId = null;
-    selectedSchedulingHospitalName = '';
+    if (!preserveHospital) {
+        selectedSchedulingHospitalId = null;
+        selectedSchedulingHospitalName = '';
+        selectedSchedulingTenantId = null;
+    }
 
     const doctorName =
         document.getElementById('scheduling-doctor-name');
@@ -7472,9 +8086,118 @@ function resetSchedulingSelections() {
     if (nurseId) nurseId.value = '';
     if (nurseIdDisplay) nurseIdDisplay.textContent = '';
 
-    if (hospitalName) hospitalName.value = '';
-    if (hospitalId) hospitalId.value = '';
-    if (hospitalIdDisplay) hospitalIdDisplay.textContent = '';
+    if (!preserveHospital) {
+        if (hospitalName) hospitalName.value = '';
+        if (hospitalId) hospitalId.value = '';
+        if (hospitalIdDisplay) hospitalIdDisplay.textContent = '';
+    }
+}
+
+
+async function prepopulateSchedulingHospitalFromContext() {
+
+    const context =
+        window.PCES_CONTEXT_API && typeof window.PCES_CONTEXT_API.get === 'function'
+            ? window.PCES_CONTEXT_API.get()
+            : (window.PCES_CONTEXT || {});
+
+    const tenantId =
+        context.g_tenant_ID ||
+        sessionStorage.getItem('pces_tenant_id') ||
+        '';
+
+    const tenantName =
+        sessionStorage.getItem('pces_tenant_name') ||
+        sessionStorage.getItem('pces_hospital_name') ||
+        '';
+
+    const nameInput =
+        document.getElementById('scheduling-hospital-name');
+
+    const idInput =
+        document.getElementById('scheduling-hospital-id');
+
+    const idDisplay =
+        document.getElementById('scheduling-hospital-id-display');
+
+    // Display the authenticated tenant immediately.
+    if (nameInput) {
+        nameInput.value = tenantName || 'Current tenant';
+    }
+
+    if (!tenantId) {
+        selectedSchedulingHospitalId = null;
+        selectedSchedulingHospitalName = tenantName;
+
+        if (idDisplay) {
+            idDisplay.textContent = 'Tenant context is unavailable.';
+        }
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/scheduling/tenant-hospital');
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.error ||
+                data.message ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        selectedSchedulingTenantId =
+            data.tenant_id || tenantId || null;
+
+        selectedSchedulingHospitalId =
+            data.hospital_id ||
+            selectedSchedulingTenantId ||
+            null;
+
+        selectedSchedulingHospitalName =
+            data.hospital_name ||
+            data.tenant_name ||
+            tenantName ||
+            '';
+
+        if (nameInput) {
+            nameInput.value = selectedSchedulingHospitalName;
+        }
+
+        if (idInput) {
+            idInput.value = selectedSchedulingHospitalId || '';
+        }
+
+        if (idDisplay) {
+            idDisplay.textContent = '';
+        }
+
+        console.log(
+            '[Scheduling] Hospital populated from tenant context:',
+            {
+                tenant_id: tenantId,
+                tenant_name: selectedSchedulingHospitalName,
+                hospital_id: selectedSchedulingHospitalId
+            }
+        );
+
+    } catch (error) {
+        selectedSchedulingHospitalId = null;
+        selectedSchedulingHospitalName = tenantName;
+
+        if (idInput) idInput.value = '';
+
+        if (idDisplay) {
+            idDisplay.textContent =
+                `Unable to resolve hospital for this tenant: ${error.message}`;
+        }
+
+        console.error(
+            '[Scheduling] Tenant hospital resolution failed:',
+            error
+        );
+    }
 }
 
 
@@ -7497,7 +8220,7 @@ function clearSchedulingDraft() {
     if (visitTypeInput) visitTypeInput.value = '';
     if (notesInput) notesInput.value = '';
 
-    resetSchedulingSelections();
+    resetSchedulingSelections(true);
 }
 
 
@@ -7574,11 +8297,17 @@ async function saveSchedulingAppointment() {
         return;
     }
 
+    const schedulingContext =
+        window.PCES_CONTEXT_API && typeof window.PCES_CONTEXT_API.get === 'function'
+            ? window.PCES_CONTEXT_API.get()
+            : (window.PCES_CONTEXT || {});
+
     const payload = {
         patient_id: selectedSchedulingPatientId,
         provider_id: selectedSchedulingProviderId,
         nurse_id: selectedSchedulingNurseId,
-        hospital_id: selectedSchedulingHospitalId,
+        tenant_id: selectedSchedulingTenantId || schedulingContext.g_tenant_ID || sessionStorage.getItem('pces_tenant_id') || '',
+        hospital_id: selectedSchedulingHospitalId || '',
         appointment_date: appointmentDate,
         appointment_time: appointmentTime,
         status: status,
@@ -7663,9 +8392,14 @@ async function openSchedulingDoctorModal() {
 
     try {
 
-        // Reuse the existing doctor list endpoint.
+        if (!selectedSchedulingTenantId) {
+            throw new Error('Please select a hospital first.');
+        }
+
         const response =
-            await fetch('/api/doctors/first20');
+            await fetch(
+                `/api/scheduling/doctors?tenant_id=${encodeURIComponent(selectedSchedulingTenantId)}`
+            );
 
         const doctors =
             await response.json();
@@ -7824,8 +8558,14 @@ async function openSchedulingNurseModal() {
     `;
 
     try {
+        if (!selectedSchedulingTenantId) {
+            throw new Error('Please select a hospital first.');
+        }
+
         const response =
-            await fetch('/api/nurses/first20');
+            await fetch(
+                `/api/scheduling/nurses?tenant_id=${encodeURIComponent(selectedSchedulingTenantId)}`
+            );
 
         const nurses =
             await response.json();
@@ -7986,7 +8726,7 @@ async function openSchedulingHospitalModal() {
     try {
 
         const response =
-            await fetch('/api/hospitals/first20');
+            await fetch('/api/scheduling/hospitals');
 
         const hospitals =
             await response.json();
@@ -8069,11 +8809,35 @@ function renderSchedulingHospitalModal(hospitals) {
 
 function selectSchedulingHospital(hospital) {
 
+    selectedSchedulingTenantId =
+        hospital.tenant_id || hospital.hospital_id || null;
+
     selectedSchedulingHospitalId =
-        hospital.hospital_id || null;
+        hospital.hospital_id || selectedSchedulingTenantId;
 
     selectedSchedulingHospitalName =
-        hospital.hospital_name || '';
+        hospital.hospital_name || hospital.tenant_name || '';
+
+    // A hospital change invalidates any doctor/nurse selected under
+    // the previous hospital.
+    selectedSchedulingProviderId = null;
+    selectedSchedulingProviderName = '';
+    selectedSchedulingNurseId = null;
+    selectedSchedulingNurseName = '';
+
+    const doctorNameInput = document.getElementById('scheduling-doctor-name');
+    const doctorIdInput = document.getElementById('scheduling-doctor-id');
+    const doctorIdDisplay = document.getElementById('scheduling-doctor-id-display');
+    const nurseNameInput = document.getElementById('scheduling-nurse-name');
+    const nurseIdInput = document.getElementById('scheduling-nurse-id');
+    const nurseIdDisplay = document.getElementById('scheduling-nurse-id-display');
+
+    if (doctorNameInput) doctorNameInput.value = '';
+    if (doctorIdInput) doctorIdInput.value = '';
+    if (doctorIdDisplay) doctorIdDisplay.textContent = '';
+    if (nurseNameInput) nurseNameInput.value = '';
+    if (nurseIdInput) nurseIdInput.value = '';
+    if (nurseIdDisplay) nurseIdDisplay.textContent = '';
 
     const nameInput =
         document.getElementById('scheduling-hospital-name');
@@ -8533,6 +9297,9 @@ async function loadDoctorSchedule() {
     const encounterBtn =
         document.getElementById('my-schedule-encounter-btn');
 
+    const graphBtn =
+        document.getElementById('my-schedule-graph-btn');
+
     if (chatMessages) chatMessages.style.display = 'none';
 
     const chatAiRow = document.querySelector('.chat-ai-row');
@@ -8556,6 +9323,7 @@ async function loadDoctorSchedule() {
     if (saveNotesBtn) saveNotesBtn.style.display = isNurse ? '' : 'none';
     if (cancelNotesBtn) cancelNotesBtn.style.display = isNurse ? '' : 'none';
     if (encounterBtn) encounterBtn.style.display = isNurse ? 'none' : '';
+    if (graphBtn) graphBtn.style.display = isNurse ? 'none' : '';
 
     window.myScheduleSelectedPatientId = null;
     window.myScheduleSelectedPatientName = '';
@@ -8793,6 +9561,8 @@ const MY_SCHEDULE_VITALS = [
 
 
 function resetMyScheduleVitalsArea() {
+    window.myScheduleVitalsSnapshots = [];
+
     const title = document.getElementById('my-schedule-vitals-title');
     const head = document.getElementById('my-schedule-vitals-head');
     const body = document.getElementById('my-schedule-vitals-body');
@@ -8802,8 +9572,8 @@ function resetMyScheduleVitalsArea() {
     if (head) {
         head.innerHTML = `
             <tr>
-                <th>Vital Type</th>
-                <th>UoM</th>
+                <th class="vital-type-col">Vital Type</th>
+                <th class="uom-col">UoM</th>
                 <th>Value</th>
             </tr>
         `;
@@ -8871,8 +9641,8 @@ function renderNurseVitalsEditor(record) {
     if (head) {
         head.innerHTML = `
             <tr>
-                <th>Vital Type</th>
-                <th>UoM</th>
+                <th class="vital-type-col">Vital Type</th>
+                <th class="uom-col">UoM</th>
                 <th>Value</th>
             </tr>
         `;
@@ -8885,8 +9655,8 @@ function renderNurseVitalsEditor(record) {
     MY_SCHEDULE_VITALS.forEach(([vitalType, uom]) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${escapeEntityHtml(vitalType)}</td>
-            <td>${escapeEntityHtml(uom || '—')}</td>
+            <td class="vital-type-col">${escapeEntityHtml(vitalType)}</td>
+            <td class="uom-col">${escapeEntityHtml(uom || '—')}</td>
             <td>
                 <input
                     class="vital-entry-input"
@@ -9005,14 +9775,18 @@ async function loadDoctorVitalsHistory(patientId) {
             throw new Error(snapshots.error || `HTTP ${response.status}`);
         }
 
+        window.myScheduleVitalsSnapshots =
+            Array.isArray(snapshots) ? snapshots : [];
+
         renderDoctorVitalsHistory(snapshots);
 
     } catch (error) {
+        window.myScheduleVitalsSnapshots = [];
         head.innerHTML = `
             <tr>
                 <th>S No</th>
-                <th>Vital Type</th>
-                <th>UoM</th>
+                <th class="vital-type-col">Vital Type</th>
+                <th class="uom-col">UoM</th>
                 <th>Latest Values</th>
             </tr>
         `;
@@ -9047,8 +9821,8 @@ function renderDoctorVitalsHistory(snapshots) {
         head.innerHTML = `
             <tr>
                 <th>S No</th>
-                <th>Vital Type</th>
-                <th>UoM</th>
+                <th class="vital-type-col">Vital Type</th>
+                <th class="uom-col">UoM</th>
                 <th>Latest Values</th>
             </tr>
         `;
@@ -9066,11 +9840,11 @@ function renderDoctorVitalsHistory(snapshots) {
     // immediately after UoM and older dates continue to the right.
     head.innerHTML = `
         <tr>
-            <th>S No</th>
-            <th>Vital Type</th>
-            <th>UoM</th>
+            <th class="vitals-sno-col">S No</th>
+            <th class="vital-type-col">Vital Type</th>
+            <th class="uom-col">UoM</th>
             ${snapshots.map(snapshot =>
-                `<th>${escapeEntityHtml(
+                `<th class="vitals-date-col">${escapeEntityHtml(
                     snapshot.display_date ||
                     formatVitalsHistoryDate(snapshot.date)
                 )}</th>`
@@ -9091,21 +9865,19 @@ function renderDoctorVitalsHistory(snapshots) {
                 entry ? (entry.value || '—') : '—';
 
             const abnormalClass =
-                entry && entry.abnormal_flag
-                    ? ' class="vital-abnormal"'
-                    : '';
+                Boolean(entry && entry.abnormal_flag);
 
             return `
-                <td${abnormalClass}>
+                <td class="vitals-date-col${abnormalClass ? ' vital-abnormal' : ''}">
                     ${escapeEntityHtml(displayValue)}
                 </td>
             `;
         }).join('');
 
         row.innerHTML = `
-            <td style="text-align:center;">${index + 1}</td>
-            <td>${escapeEntityHtml(vitalType)}</td>
-            <td>${escapeEntityHtml(defaultUom || '—')}</td>
+            <td class="vitals-sno-col" style="text-align:center;">${index + 1}</td>
+            <td class="vital-type-col">${escapeEntityHtml(vitalType)}</td>
+            <td class="uom-col">${escapeEntityHtml(defaultUom || '—')}</td>
             ${dateValues}
         `;
 
@@ -9151,6 +9923,398 @@ function findVitalEntry(values, requestedType) {
     }
 
     return null;
+}
+
+
+function openMyScheduleVitalsGraph() {
+    const patientId = window.myScheduleSelectedPatientId;
+    const snapshots = window.myScheduleVitalsSnapshots || [];
+
+    if (!patientId) {
+        alert('Please select a patient in My Schedule first.');
+        return;
+    }
+
+    if (!Array.isArray(snapshots) || !snapshots.length) {
+        alert('No vitals history is available for the selected patient.');
+        return;
+    }
+
+    const overlay =
+        document.getElementById('my-schedule-vitals-graph-overlay');
+    const body =
+        document.getElementById('my-schedule-vitals-graph-body');
+    const subtitle =
+        document.getElementById('my-schedule-vitals-graph-subtitle');
+
+    if (!overlay || !body) return;
+
+    if (subtitle) {
+        const patientName =
+            window.myScheduleSelectedPatientName || 'Selected Patient';
+
+        subtitle.textContent =
+            `${patientName} — trend across ${snapshots.length} recorded date(s)`;
+    }
+
+    body.innerHTML = '';
+
+    // API snapshots are newest-first. Charts read naturally oldest -> newest.
+    const orderedSnapshots = [...snapshots].reverse();
+
+    const bloodPressure = orderedSnapshots.map(snapshot => {
+        const entry =
+            findVitalEntry(snapshot.values || {}, 'Blood Pressure');
+
+        const raw =
+            entry && entry.value != null
+                ? String(entry.value)
+                : '';
+
+        const numbers =
+            raw.match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+
+        let systolic = null;
+        let diastolic = null;
+
+        if (numbers.length >= 2) {
+            // Normalize the two recorded BP numbers to the clinically standard
+            // high/low presentation even when source text is entered low/high.
+            systolic = Math.max(numbers[0], numbers[1]);
+            diastolic = Math.min(numbers[0], numbers[1]);
+        }
+
+        return {
+            date: snapshot.display_date ||
+                formatVitalsHistoryDate(snapshot.date),
+            systolic,
+            diastolic
+        };
+    });
+
+    const heartRate = orderedSnapshots.map(snapshot => ({
+        date: snapshot.display_date ||
+            formatVitalsHistoryDate(snapshot.date),
+        value: parseVitalNumericValue(
+            findVitalEntry(snapshot.values || {}, 'Heart Rate / Pulse')
+        )
+    }));
+
+    const respiratoryRate = orderedSnapshots.map(snapshot => ({
+        date: snapshot.display_date ||
+            formatVitalsHistoryDate(snapshot.date),
+        value: parseVitalNumericValue(
+            findVitalEntry(snapshot.values || {}, 'Respiratory Rate')
+        )
+    }));
+
+    body.appendChild(
+        buildVitalsTrendChart({
+            title: 'Blood Pressure',
+            unit: 'mmHg',
+            rows: bloodPressure,
+            series: [
+                {key: 'systolic', label: 'Systolic'},
+                {key: 'diastolic', label: 'Diastolic'}
+            ]
+        })
+    );
+
+    body.appendChild(
+        buildVitalsTrendChart({
+            title: 'Heart Rate / Pulse',
+            unit: 'bpm',
+            rows: heartRate,
+            series: [
+                {key: 'value', label: 'Heart Rate'}
+            ]
+        })
+    );
+
+    body.appendChild(
+        buildVitalsTrendChart({
+            title: 'Respiratory Rate',
+            unit: 'breaths/min',
+            rows: respiratoryRate,
+            series: [
+                {key: 'value', label: 'Respiratory Rate'}
+            ]
+        })
+    );
+
+    overlay.classList.add('show');
+}
+
+
+function closeMyScheduleVitalsGraph() {
+    const overlay =
+        document.getElementById('my-schedule-vitals-graph-overlay');
+
+    if (overlay) {
+        overlay.classList.remove('show');
+    }
+}
+
+
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        closeMyScheduleVitalsGraph();
+    }
+});
+
+
+function handleVitalsGraphOverlayClick(event) {
+    if (
+        event.target &&
+        event.target.id === 'my-schedule-vitals-graph-overlay'
+    ) {
+        closeMyScheduleVitalsGraph();
+    }
+}
+
+
+function parseVitalNumericValue(entry) {
+    if (!entry || entry.value == null) return null;
+
+    const match =
+        String(entry.value).match(/-?\d+(?:\.\d+)?/);
+
+    if (!match) return null;
+
+    const value = Number(match[0]);
+    return Number.isFinite(value) ? value : null;
+}
+
+
+function buildVitalsTrendChart({title, unit, rows, series}) {
+    const card = document.createElement('div');
+    card.className = 'vitals-graph-card';
+
+    const heading = document.createElement('div');
+    heading.className = 'vitals-graph-card-title';
+    heading.textContent = `${title} (${unit})`;
+    card.appendChild(heading);
+
+    const validValues = [];
+    rows.forEach(row => {
+        series.forEach(item => {
+            const value = row[item.key];
+            if (Number.isFinite(value)) {
+                validValues.push(value);
+            }
+        });
+    });
+
+    if (!validValues.length) {
+        const empty = document.createElement('div');
+        empty.className = 'vitals-graph-empty';
+        empty.textContent = `No ${title.toLowerCase()} data available.`;
+        card.appendChild(empty);
+        return card;
+    }
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'vitals-graph-svg');
+    svg.setAttribute('viewBox', '0 0 900 220');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute(
+        'aria-label',
+        `${title} trend over time`
+    );
+
+    const margin = {
+        left: 58,
+        right: 22,
+        top: 18,
+        bottom: 48
+    };
+
+    const width = 900;
+    const height = 220;
+    const plotWidth =
+        width - margin.left - margin.right;
+    const plotHeight =
+        height - margin.top - margin.bottom;
+
+    let minValue = Math.min(...validValues);
+    let maxValue = Math.max(...validValues);
+
+    if (minValue === maxValue) {
+        minValue -= 1;
+        maxValue += 1;
+    }
+
+    const padding =
+        Math.max((maxValue - minValue) * 0.12, 1);
+
+    minValue -= padding;
+    maxValue += padding;
+
+    const xForIndex = index => {
+        if (rows.length <= 1) {
+            return margin.left + plotWidth / 2;
+        }
+
+        return margin.left +
+            (index / (rows.length - 1)) * plotWidth;
+    };
+
+    const yForValue = value =>
+        margin.top +
+        ((maxValue - value) / (maxValue - minValue)) *
+            plotHeight;
+
+    // Grid and y-axis labels.
+    for (let tick = 0; tick <= 4; tick += 1) {
+        const ratio = tick / 4;
+        const y =
+            margin.top + ratio * plotHeight;
+        const value =
+            maxValue - ratio * (maxValue - minValue);
+
+        const grid = document.createElementNS(svgNS, 'line');
+        grid.setAttribute('x1', margin.left);
+        grid.setAttribute('x2', width - margin.right);
+        grid.setAttribute('y1', y);
+        grid.setAttribute('y2', y);
+        grid.setAttribute('stroke', '#d9e0e8');
+        grid.setAttribute('stroke-width', '1');
+        svg.appendChild(grid);
+
+        const label = document.createElementNS(svgNS, 'text');
+        label.setAttribute('x', margin.left - 8);
+        label.setAttribute('y', y + 4);
+        label.setAttribute('text-anchor', 'end');
+        label.setAttribute('font-size', '10');
+        label.setAttribute('fill', '#555');
+        label.textContent =
+            Number.isInteger(value)
+                ? String(Math.round(value))
+                : value.toFixed(1);
+        svg.appendChild(label);
+    }
+
+    const axis = document.createElementNS(svgNS, 'line');
+    axis.setAttribute('x1', margin.left);
+    axis.setAttribute('x2', width - margin.right);
+    axis.setAttribute('y1', margin.top + plotHeight);
+    axis.setAttribute('y2', margin.top + plotHeight);
+    axis.setAttribute('stroke', '#444');
+    axis.setAttribute('stroke-width', '1');
+    svg.appendChild(axis);
+
+    rows.forEach((row, index) => {
+        const x = xForIndex(index);
+
+        const tick = document.createElementNS(svgNS, 'line');
+        tick.setAttribute('x1', x);
+        tick.setAttribute('x2', x);
+        tick.setAttribute('y1', margin.top + plotHeight);
+        tick.setAttribute('y2', margin.top + plotHeight + 5);
+        tick.setAttribute('stroke', '#444');
+        svg.appendChild(tick);
+
+        const label = document.createElementNS(svgNS, 'text');
+        label.setAttribute('x', x);
+        label.setAttribute('y', height - 18);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', '10');
+        label.setAttribute('fill', '#444');
+        label.textContent = row.date || '';
+        svg.appendChild(label);
+    });
+
+    const seriesStyles = [
+        {stroke: '#1f5f99'},
+        {stroke: '#b75d2a'},
+        {stroke: '#2d7a4f'}
+    ];
+
+    series.forEach((item, seriesIndex) => {
+        const points = [];
+
+        rows.forEach((row, index) => {
+            const value = row[item.key];
+
+            if (Number.isFinite(value)) {
+                points.push({
+                    x: xForIndex(index),
+                    y: yForValue(value),
+                    value
+                });
+            }
+        });
+
+        if (!points.length) return;
+
+        const style =
+            seriesStyles[seriesIndex % seriesStyles.length];
+
+        const polyline =
+            document.createElementNS(svgNS, 'polyline');
+
+        polyline.setAttribute(
+            'points',
+            points.map(point =>
+                `${point.x},${point.y}`
+            ).join(' ')
+        );
+        polyline.setAttribute('fill', 'none');
+        polyline.setAttribute('stroke', style.stroke);
+        polyline.setAttribute('stroke-width', '2.5');
+        polyline.setAttribute('stroke-linejoin', 'round');
+        polyline.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(polyline);
+
+        points.forEach(point => {
+            const circle =
+                document.createElementNS(svgNS, 'circle');
+
+            circle.setAttribute('cx', point.x);
+            circle.setAttribute('cy', point.y);
+            circle.setAttribute('r', '4');
+            circle.setAttribute('fill', '#fff');
+            circle.setAttribute('stroke', style.stroke);
+            circle.setAttribute('stroke-width', '2');
+
+            const titleNode =
+                document.createElementNS(svgNS, 'title');
+
+            titleNode.textContent =
+                `${item.label}: ${point.value} ${unit}`;
+
+            circle.appendChild(titleNode);
+            svg.appendChild(circle);
+        });
+    });
+
+    card.appendChild(svg);
+
+    const legend = document.createElement('div');
+    legend.className = 'vitals-graph-legend';
+
+    series.forEach((item, seriesIndex) => {
+        const style =
+            seriesStyles[seriesIndex % seriesStyles.length];
+
+        const legendItem = document.createElement('span');
+        legendItem.className = 'vitals-graph-legend-item';
+
+        const line = document.createElement('span');
+        line.className = 'vitals-graph-legend-line';
+        line.style.background = style.stroke;
+
+        const text = document.createElement('span');
+        text.textContent = item.label;
+
+        legendItem.appendChild(line);
+        legendItem.appendChild(text);
+        legend.appendChild(legendItem);
+    });
+
+    card.appendChild(legend);
+    return card;
 }
 
 
@@ -9862,6 +11026,9 @@ function backToChat() {
     const chatAiRow = document.querySelector('.chat-ai-row');
     if (chatAiRow) chatAiRow.style.display = '';
 
+    const clinicalAiResponseBar = document.querySelector('.allergy-bar');
+    if (clinicalAiResponseBar) clinicalAiResponseBar.style.display = '';
+
     const legacyMedicalHistory = document.querySelector('.medical-history-panel');
     if (legacyMedicalHistory) legacyMedicalHistory.style.display = '';
 
@@ -10169,7 +11336,6 @@ function toggleEhrAi() {
             if (data.full_name) {
                 window.currentPatientName = data.full_name;
                 sessionStorage.setItem('pces_patient_name', data.full_name);
-                updatePcesContext({g_patient_name: data.full_name});
             }
             updateMedicalHistoryEmptyState(Boolean(window.selectedPatientId));
             if (data.patient_id) loadMedicalHistory(data.patient_id);
@@ -10189,7 +11355,6 @@ function toggleEhrAi() {
             window.currentPatientName = '';
             sessionStorage.removeItem('pces_patient_id');
             sessionStorage.removeItem('pces_patient_name');
-            updatePcesContext({g_patient_name: null});
             sessionStorage.removeItem('pces_patient_org');
             const popupPt = document.getElementById('popup-patient-name');
             if (popupPt) popupPt.textContent = '—';
@@ -12992,7 +14157,7 @@ ${data.conclusion}
             submit.disabled = true;
 
             try {
-                const res = await fetch('/api/tenants');
+                const res = await fetch('/api/login/tenants');
                 loginTenants = await res.json();
                 if (!res.ok || !Array.isArray(loginTenants)) {
                     throw new Error(loginTenants.message || 'Unable to load organizations');
@@ -13090,9 +14255,6 @@ ${data.conclusion}
                     g_med_assist_id: null,
                     g_office_admin_id: loggedInPartyType === 'OFFICE_ADMIN' ? data.party_id : null,
                     g_user_id: data.party_id,
-                    g_doctor_name: data.full_name || data.username,
-                    g_patient_name: null,
-                    g_hospital_name: data.tenant_name || null,
                     g_patient_ID: null,
                     g_tenant_ID: data.tenant_id,
                     g_lab_ID: null
@@ -13259,10 +14421,18 @@ function _currentRoleTokens() {
 }
 
 function _isOfficeAdmin() {
-    return _currentRoleTokens().includes('OFFICE_ADMIN');
+    const partyType = (sessionStorage.getItem('pces_party_type') || '')
+        .trim()
+        .toUpperCase();
+
+    return partyType === 'OFFICE_ADMIN'
+        || _currentRoleTokens().includes('OFFICE_ADMIN');
 }
 
 function hideTenantManagementPanel() {
+    const pcesAdminPanel = document.getElementById('pces-admin-hospital-panel');
+    if (pcesAdminPanel) pcesAdminPanel.style.display = 'none';
+
     const panel = document.getElementById('tenant-management-panel');
     if (panel) panel.style.display = 'none';
 
@@ -13281,7 +14451,9 @@ function hideClinicalMainPanelsForTenant() {
         'entity-data-panel',
         'doctor-schedule-panel',
         'patient-encounter-panel',
-        'patient-scheduling-panel'
+        'patient-scheduling-panel',
+        'pces-admin-hospital-panel',
+        'pces-admin-user-onboarding-panel'
     ].forEach(id => {
         const panel = document.getElementById(id);
         if (panel) panel.style.display = 'none';
@@ -13631,10 +14803,776 @@ function resetTenantSearch() {
 }
 
 
+
+// ============================================================
+// PCES Admin Services - Hospital / Tenant Provisioning
+// Phase 1: intentionally available to all authenticated roles.
+// ============================================================
+
+let pcesAdminHospitalMode = 'view';
+let pcesAdminCurrentHospital = null;
+let pcesAdminTenantMode = 'view';
+let pcesAdminCurrentTenant = null;
+
+function hidePcesAdminHospitalPanel() {
+    const panel = document.getElementById('pces-admin-hospital-panel');
+    if (panel) panel.style.display = 'none';
+
+    const tab = document.getElementById('pces-admin-hospital-tab');
+    if (tab) tab.classList.remove('active');
+}
+
+function hideClinicalPanelsForPcesAdmin() {
+    [
+        'chat-messages',
+        'entity-data-panel',
+        'doctor-schedule-panel',
+        'patient-encounter-panel',
+        'tenant-management-panel',
+        'patient-scheduling-panel',
+        'pces-admin-user-onboarding-panel'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    const chatAiRow = document.querySelector('.chat-ai-row');
+    if (chatAiRow) chatAiRow.style.display = 'none';
+
+    document.querySelectorAll('.entity-data-tab')
+        .forEach(tab => tab.classList.remove('active'));
+
+    const tenantTab = document.getElementById('tenant-admin-tab');
+    if (tenantTab) tenantTab.classList.remove('active');
+}
+
+async function loadPcesAdminHospitalPanel() {
+    hideClinicalPanelsForPcesAdmin();
+
+    const panel = document.getElementById('pces-admin-hospital-panel');
+    if (!panel) return;
+
+    panel.style.display = 'flex';
+
+    const tab = document.getElementById('pces-admin-hospital-tab');
+    if (tab) tab.classList.add('active');
+
+    await loadPcesAdminParentHospitals();
+
+    if (!pcesAdminCurrentHospital) {
+        startPcesHospitalInsert();
+    }
+}
+
+async function loadPcesAdminParentHospitals() {
+    const select = document.getElementById('pces-hospital-parent');
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">— None —</option>';
+
+    try {
+        const response = await fetch('/api/pces-admin/hospitals/parents');
+        const rows = await response.json();
+
+        if (!response.ok) {
+            throw new Error(rows.error || `HTTP ${response.status}`);
+        }
+
+        rows.forEach(row => {
+            const option = document.createElement('option');
+            option.value = row.party_id || '';
+            option.textContent = row.name || row.hospital_code || row.party_id;
+            select.appendChild(option);
+        });
+
+        if (currentValue) select.value = currentValue;
+
+    } catch (error) {
+        console.error('[PCES Admin] Parent hospital load failed:', error);
+    }
+}
+
+function clearPcesHospitalForm() {
+    const ids = [
+        'pces-hospital-name',
+        'pces-hospital-code',
+        'pces-hospital-party-id',
+        'pces-hospital-address1',
+        'pces-hospital-address2',
+        'pces-hospital-city',
+        'pces-hospital-state',
+        'pces-hospital-zip'
+    ];
+
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    const country = document.getElementById('pces-hospital-country');
+    if (country) country.value = 'USA';
+
+    const parent = document.getElementById('pces-hospital-parent');
+    if (parent) parent.value = '';
+
+    const resultBox = document.getElementById('pces-hospital-search-results');
+    if (resultBox) resultBox.style.display = 'none';
+
+    clearPcesTenantProvisionForm();
+}
+
+function populatePcesHospitalForm(row) {
+    pcesAdminCurrentHospital = row || null;
+
+    const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value || '';
+    };
+
+    set('pces-hospital-name', row.name);
+    set('pces-hospital-code', row.hospital_code);
+    set('pces-hospital-party-id', row.party_id);
+    set('pces-hospital-address1', row.line1);
+    set('pces-hospital-address2', row.line2);
+    set('pces-hospital-city', row.city);
+    set('pces-hospital-state', row.state);
+    set('pces-hospital-zip', row.postal_code);
+    set('pces-hospital-country', row.country || 'USA');
+
+    const parent = document.getElementById('pces-hospital-parent');
+    if (parent) parent.value = row.par_row_id || '';
+
+    syncPcesTenantFromHospital(row);
+
+    const resultBox = document.getElementById('pces-hospital-search-results');
+    if (resultBox) resultBox.style.display = 'none';
+}
+
+function startPcesHospitalInsert() {
+    pcesAdminHospitalMode = 'insert';
+    pcesAdminCurrentHospital = null;
+    clearPcesHospitalForm();
+
+    const nameInput = document.getElementById('pces-hospital-name');
+    if (nameInput) nameInput.focus();
+}
+
+function startPcesHospitalUpdate() {
+    if (!pcesAdminCurrentHospital || !pcesAdminCurrentHospital.party_id) {
+        alert('Search for and select a hospital before Update.');
+        return;
+    }
+    pcesAdminHospitalMode = 'update';
+}
+
+function cancelPcesHospitalEdit() {
+    if (pcesAdminCurrentHospital) {
+        populatePcesHospitalForm(pcesAdminCurrentHospital);
+        pcesAdminHospitalMode = 'view';
+    } else {
+        startPcesHospitalInsert();
+    }
+}
+
+async function searchPcesHospitals() {
+    const name = (document.getElementById('pces-hospital-name')?.value || '').trim();
+    const code = (document.getElementById('pces-hospital-code')?.value || '').trim();
+
+    const params = new URLSearchParams();
+    if (name) params.set('name', name);
+    if (code) params.set('code', code);
+
+    const response = await fetch(`/api/pces-admin/hospitals?${params.toString()}`);
+    const rows = await response.json();
+
+    if (!response.ok) {
+        alert(`Unable to search hospitals: ${rows.error || response.status}`);
+        return;
+    }
+
+    renderPcesHospitalSearchResults(rows);
+}
+
+function renderPcesHospitalSearchResults(rows) {
+    const box = document.getElementById('pces-hospital-search-results');
+    const body = document.getElementById('pces-hospital-search-body');
+    if (!box || !body) return;
+
+    body.innerHTML = '';
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;">No hospitals found.</td></tr>';
+        box.style.display = 'block';
+        return;
+    }
+
+    rows.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(row.name || '—')}</td>
+            <td>${escapeEntityHtml(row.hospital_code || '—')}</td>
+            <td>${escapeEntityHtml(row.parent_hospital_name || '—')}</td>
+            <td>${escapeEntityHtml(row.city || '—')}</td>
+            <td>${escapeEntityHtml(row.state || '—')}</td>
+        `;
+        tr.addEventListener('click', () => {
+            pcesAdminHospitalMode = 'view';
+            populatePcesHospitalForm(row);
+        });
+        body.appendChild(tr);
+    });
+
+    box.style.display = 'block';
+
+    if (rows.length === 1) {
+        pcesAdminHospitalMode = 'view';
+        populatePcesHospitalForm(rows[0]);
+    }
+}
+
+async function savePcesHospital() {
+    const payload = {
+        name: (document.getElementById('pces-hospital-name')?.value || '').trim(),
+        hospital_code: (document.getElementById('pces-hospital-code')?.value || '').trim(),
+        par_row_id: document.getElementById('pces-hospital-parent')?.value || '',
+        line1: (document.getElementById('pces-hospital-address1')?.value || '').trim(),
+        line2: (document.getElementById('pces-hospital-address2')?.value || '').trim(),
+        city: (document.getElementById('pces-hospital-city')?.value || '').trim(),
+        state: (document.getElementById('pces-hospital-state')?.value || '').trim(),
+        postal_code: (document.getElementById('pces-hospital-zip')?.value || '').trim(),
+        country: (document.getElementById('pces-hospital-country')?.value || '').trim(),
+        actor: sessionStorage.getItem('pces_username') ||
+               sessionStorage.getItem('pces_doctor_name') ||
+               'PCES_UI'
+    };
+
+    if (!payload.name) {
+        alert('Hospital Name is required.');
+        return;
+    }
+    if (!payload.hospital_code) {
+        alert('Party Code is required.');
+        return;
+    }
+    if (!payload.line1) {
+        alert('Address 1 is required.');
+        return;
+    }
+    if (!payload.city) {
+        alert('City is required.');
+        return;
+    }
+    if (!payload.country) {
+        alert('Country is required.');
+        return;
+    }
+
+    const isUpdate =
+        pcesAdminHospitalMode === 'update' &&
+        pcesAdminCurrentHospital &&
+        pcesAdminCurrentHospital.party_id;
+
+    const url = isUpdate
+        ? `/api/pces-admin/hospitals/${encodeURIComponent(pcesAdminCurrentHospital.party_id)}`
+        : '/api/pces-admin/hospitals';
+
+    const method = isUpdate ? 'PUT' : 'POST';
+    const button = document.getElementById('pces-hospital-save-btn');
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving...';
+    }
+
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        }
+
+        alert(isUpdate ? 'Hospital updated successfully.' : 'Hospital created successfully.');
+
+        pcesAdminHospitalMode = 'view';
+        pcesAdminCurrentHospital = result.hospital;
+        populatePcesHospitalForm(result.hospital);
+        await loadPcesAdminParentHospitals();
+
+    } catch (error) {
+        console.error('[PCES Admin] Hospital save failed:', error);
+        alert(`Unable to save hospital: ${error.message}`);
+
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Save';
+        }
+    }
+}
+
+function clearPcesTenantProvisionForm() {
+    ['pces-tenant-hospital-name', 'pces-tenant-party-code',
+     'pces-tenant-party-id', 'pces-tenant-id']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+
+    pcesAdminCurrentTenant = null;
+    pcesAdminTenantMode = 'view';
+
+    const resultBox = document.getElementById('pces-tenant-search-results');
+    if (resultBox) resultBox.style.display = 'none';
+}
+
+function syncPcesTenantFromHospital(hospital) {
+    const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value || '';
+    };
+
+    set('pces-tenant-hospital-name', hospital?.name || '');
+    set('pces-tenant-party-code', hospital?.hospital_code || '');
+    set('pces-tenant-party-id', hospital?.party_id || '');
+    set('pces-tenant-id', '');
+    pcesAdminCurrentTenant = null;
+    pcesAdminTenantMode = 'view';
+}
+
+function startPcesTenantInsert() {
+    if (!pcesAdminCurrentHospital || !pcesAdminCurrentHospital.party_id) {
+        alert('Create or select a Hospital first.');
+        return;
+    }
+
+    pcesAdminTenantMode = 'insert';
+    pcesAdminCurrentTenant = null;
+    syncPcesTenantFromHospital(pcesAdminCurrentHospital);
+}
+
+function startPcesTenantUpdate() {
+    if (!pcesAdminCurrentTenant || !pcesAdminCurrentTenant.tenant_id) {
+        alert('Search for and select a tenant before Update.');
+        return;
+    }
+    pcesAdminTenantMode = 'update';
+}
+
+function cancelPcesAdminTenantEdit() {
+    if (pcesAdminCurrentTenant) {
+        selectPcesAdminTenant(pcesAdminCurrentTenant);
+    } else if (pcesAdminCurrentHospital) {
+        syncPcesTenantFromHospital(pcesAdminCurrentHospital);
+    } else {
+        clearPcesTenantProvisionForm();
+    }
+}
+
+async function searchPcesAdminTenants() {
+    if (!pcesAdminCurrentHospital || !pcesAdminCurrentHospital.party_id) {
+        alert('Select a Hospital first.');
+        return;
+    }
+
+    const response = await fetch(
+        `/api/pces-admin/tenants?organization_party_id=${encodeURIComponent(pcesAdminCurrentHospital.party_id)}`
+    );
+    const rows = await response.json();
+
+    if (!response.ok) {
+        alert(`Unable to search tenants: ${rows.error || response.status}`);
+        return;
+    }
+
+    renderPcesAdminTenantSearchResults(rows);
+}
+
+function renderPcesAdminTenantSearchResults(rows) {
+    const box = document.getElementById('pces-tenant-search-results');
+    const body = document.getElementById('pces-tenant-search-body');
+    if (!box || !body) return;
+
+    body.innerHTML = '';
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;">No tenants found for this hospital.</td></tr>';
+        box.style.display = 'block';
+        return;
+    }
+
+    rows.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeEntityHtml(row.tenant_id || '—')}</td>
+            <td>${escapeEntityHtml(row.tenant_name || '—')}</td>
+            <td>${escapeEntityHtml(row.tenant_code || '—')}</td>
+            <td>${escapeEntityHtml(row.organization_party_id || '—')}</td>
+        `;
+        tr.addEventListener('click', () => selectPcesAdminTenant(row));
+        body.appendChild(tr);
+    });
+
+    box.style.display = 'block';
+
+    if (rows.length === 1) {
+        selectPcesAdminTenant(rows[0]);
+    }
+}
+
+function selectPcesAdminTenant(row) {
+    pcesAdminCurrentTenant = row;
+    pcesAdminTenantMode = 'view';
+
+    const idInput = document.getElementById('pces-tenant-id');
+    if (idInput) idInput.value = row.tenant_id || '';
+
+    const box = document.getElementById('pces-tenant-search-results');
+    if (box) box.style.display = 'none';
+}
+
+async function savePcesAdminTenant() {
+    if (!pcesAdminCurrentHospital || !pcesAdminCurrentHospital.party_id) {
+        alert('Create or select a Hospital first.');
+        return;
+    }
+
+    const payload = {
+        organization_party_id: pcesAdminCurrentHospital.party_id,
+        actor: sessionStorage.getItem('pces_username') ||
+               sessionStorage.getItem('pces_doctor_name') ||
+               'PCES_UI'
+    };
+
+    const isUpdate =
+        pcesAdminTenantMode === 'update' &&
+        pcesAdminCurrentTenant &&
+        pcesAdminCurrentTenant.tenant_id;
+
+    const url = isUpdate
+        ? `/api/pces-admin/tenants/${encodeURIComponent(pcesAdminCurrentTenant.tenant_id)}`
+        : '/api/pces-admin/tenants';
+
+    const method = isUpdate ? 'PUT' : 'POST';
+    const button = document.getElementById('pces-tenant-save-btn');
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving...';
+    }
+
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        }
+
+        alert(isUpdate ? 'Tenant updated successfully.' : 'Tenant created successfully.');
+
+        pcesAdminCurrentTenant = result.tenant;
+        pcesAdminTenantMode = 'view';
+        selectPcesAdminTenant(result.tenant);
+
+    } catch (error) {
+        console.error('[PCES Admin] Tenant save failed:', error);
+        alert(`Unable to save tenant: ${error.message}`);
+
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Save';
+        }
+    }
+}
+
+
+
+// ============================================================
+// PCES ADMIN - Hospital User Management
+// ============================================================
+let pcesUserHospitalCache = [];
+let pcesUserCache = [];
+let pcesSelectedUserHospital = null;
+let pcesSelectedUserRecord = null;
+let pcesUserMode = 'view';
+
+function _isPcesAdminUser() {
+    const partyType = (sessionStorage.getItem('pces_party_type') || '').trim().toUpperCase();
+    const roles = _currentRoleTokens();
+    return partyType === 'PCES_ADMIN' || roles.includes('PCES_ADMIN');
+}
+
+function hidePcesAdminUserOnboardingPanel() {
+    const panel = document.getElementById('pces-admin-user-onboarding-panel');
+    if (panel) panel.style.display = 'none';
+    document.getElementById('pces-admin-user-onboarding-tab')?.classList.remove('active');
+}
+
+async function loadPcesAdminUserOnboarding() {
+    hideClinicalPanelsForPcesAdmin();
+    const hospitalPanel = document.getElementById('pces-admin-hospital-panel');
+    if (hospitalPanel) hospitalPanel.style.display = 'none';
+    const panel = document.getElementById('pces-admin-user-onboarding-panel');
+    if (!panel) return;
+    panel.style.display = 'flex';
+    document.getElementById('pces-admin-user-onboarding-tab')?.classList.add('active');
+    await loadPcesUserRoles();
+    await loadPcesUserHospitals('');
+}
+
+async function loadPcesUserRoles() {
+    const select = document.getElementById('pces-user-pces-role');
+    if (!select) return;
+    const current = select.value;
+    try {
+        const response = await fetch('/api/pces-admin/user-management/roles');
+        const rows = await response.json();
+        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
+        select.innerHTML = '<option value="">Select Role</option>';
+        rows.forEach(role => {
+            const opt = document.createElement('option');
+            opt.value = role;
+            opt.textContent = role;
+            select.appendChild(opt);
+        });
+        if (current) select.value = current;
+    } catch (error) {
+        console.error('[PCES User Admin] Role load failed:', error);
+    }
+}
+
+async function loadPcesUserHospitals(searchName = '') {
+    const body = document.getElementById('pces-user-hospital-body');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;">Loading hospitals...</td></tr>';
+    const q = searchName ? `?name=${encodeURIComponent(searchName)}` : '';
+    try {
+        const response = await fetch(`/api/pces-admin/user-management/hospitals${q}`);
+        const rows = await response.json();
+        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
+        pcesUserHospitalCache = Array.isArray(rows) ? rows : [];
+        renderPcesUserHospitals(pcesUserHospitalCache);
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+    }
+}
+
+function searchPcesUserHospitals() {
+    loadPcesUserHospitals((document.getElementById('pces-user-hospital-search')?.value || '').trim());
+}
+
+function renderPcesUserHospitals(rows) {
+    const body = document.getElementById('pces-user-hospital-body');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;">No hospitals found.</td></tr>';
+        pcesSelectedUserHospital = null;
+        renderPcesUsers([]);
+        return;
+    }
+    rows.forEach((row,index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align:center;">${index+1}</td>
+            <td>${escapeEntityHtml(row.party_id || '—')}</td>
+            <td>${escapeEntityHtml(row.hospital_name || '—')}</td>
+            <td>${escapeEntityHtml(row.location_id || '—')}</td>
+            <td>${escapeEntityHtml(row.tenant_id || '—')}</td>`;
+        tr.addEventListener('click', () => selectPcesUserHospital(row,tr));
+        body.appendChild(tr);
+    });
+    const first = body.querySelector('tr');
+    if (first) selectPcesUserHospital(rows[0], first);
+}
+
+function selectPcesUserHospital(row,tr) {
+    document.querySelectorAll('#pces-user-hospital-body tr').forEach(r => r.classList.remove('selected'));
+    tr?.classList.add('selected');
+    pcesSelectedUserHospital = row;
+    pcesSelectedUserRecord = null;
+    pcesUserMode = 'view';
+    const label = document.getElementById('pces-user-selected-hospital-label');
+    if (label) label.textContent = row.hospital_name ? `Hospital: ${row.hospital_name}` : '';
+    clearPcesUserForm();
+    loadPcesUsersForHospital('');
+}
+
+async function loadPcesUsersForHospital(searchText = '') {
+    const body = document.getElementById('pces-user-list-body');
+    if (!body || !pcesSelectedUserHospital?.tenant_id) return;
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:14px;">Loading users...</td></tr>';
+    const params = new URLSearchParams({tenant_id:pcesSelectedUserHospital.tenant_id});
+    if (searchText) params.set('q',searchText);
+    try {
+        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const rows = await response.json();
+        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
+        pcesUserCache = Array.isArray(rows) ? rows : [];
+        renderPcesUsers(pcesUserCache);
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+    }
+}
+
+function searchPcesUsers() {
+    if (!pcesSelectedUserHospital) { alert('Select a hospital first.'); return; }
+    loadPcesUsersForHospital((document.getElementById('pces-user-search-text')?.value || '').trim());
+}
+
+function renderPcesUsers(rows) {
+    const body = document.getElementById('pces-user-list-body');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:14px;">No users found.</td></tr>';
+        pcesSelectedUserRecord = null;
+        clearPcesUserForm();
+        return;
+    }
+    rows.forEach((row,index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align:center;">${index+1}</td>
+            <td>${escapeEntityHtml(row.first_name || '—')}</td>
+            <td>${escapeEntityHtml(row.middle_name || '—')}</td>
+            <td>${escapeEntityHtml(row.last_name || '—')}</td>
+            <td>${escapeEntityHtml(row.party_type || '—')}</td>
+            <td>${escapeEntityHtml(row.pces_role || '—')}</td>
+            <td>${escapeEntityHtml(row.email || '—')}</td>
+            <td>${escapeEntityHtml(row.username || '—')}</td>
+            <td>${escapeEntityHtml(row.entra_object_id || '—')}</td>`;
+        tr.addEventListener('click', () => selectPcesUser(row,tr));
+        body.appendChild(tr);
+    });
+    const first = body.querySelector('tr');
+    if (first) selectPcesUser(rows[0], first);
+}
+
+function selectPcesUser(row,tr) {
+    document.querySelectorAll('#pces-user-list-body tr').forEach(r => r.classList.remove('selected'));
+    tr?.classList.add('selected');
+    pcesSelectedUserRecord = row;
+    pcesUserMode = 'view';
+    populatePcesUserForm(row);
+    setPcesUserFormMode('view');
+}
+
+function populatePcesUserForm(row) {
+    const map = {
+        'pces-user-party-id':row.party_id, 'pces-user-first-name':row.first_name,
+        'pces-user-middle-name':row.middle_name, 'pces-user-last-name':row.last_name,
+        'pces-user-party-type':row.party_type, 'pces-user-pces-role':row.pces_role,
+        'pces-user-email':row.email, 'pces-user-username':row.username,
+        'pces-user-entra-id':row.entra_object_id
+    };
+    Object.entries(map).forEach(([id,val]) => { const el=document.getElementById(id); if(el) el.value=val||''; });
+}
+
+function clearPcesUserForm() {
+    ['pces-user-party-id','pces-user-first-name','pces-user-middle-name','pces-user-last-name',
+     'pces-user-email','pces-user-username','pces-user-entra-id'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    const pt=document.getElementById('pces-user-party-type'); if(pt) pt.value='DOCTOR';
+    const pr=document.getElementById('pces-user-pces-role'); if(pr) pr.value='';
+    setPcesUserFormMode('view');
+}
+
+function setPcesUserFormMode(mode) {
+    const insert = mode === 'insert';
+    const update = mode === 'update';
+    ['pces-user-first-name','pces-user-middle-name','pces-user-last-name'].forEach(id => {
+        const el=document.getElementById(id); if(el) el.readOnly=!insert;
+    });
+    const pt=document.getElementById('pces-user-party-type'); if(pt) pt.disabled=!insert;
+    const pr=document.getElementById('pces-user-pces-role'); if(pr) pr.disabled=!insert;
+    const email=document.getElementById('pces-user-email'); if(email) email.readOnly=!(insert||update);
+    const username=document.getElementById('pces-user-username'); if(username) username.readOnly=!(insert||update);
+    const save=document.getElementById('pces-user-save-btn'); if(save) save.style.display=(insert||update)?'':'none';
+}
+
+function startPcesUserInsert() {
+    if (!pcesSelectedUserHospital) { alert('Select a hospital first.'); return; }
+    pcesSelectedUserRecord = null;
+    pcesUserMode = 'insert';
+    clearPcesUserForm();
+    setPcesUserFormMode('insert');
+    document.getElementById('pces-user-first-name')?.focus();
+}
+
+function startPcesUserUpdate() {
+    if (!pcesSelectedUserRecord) { alert('Select a user first.'); return; }
+    pcesUserMode = 'update';
+    populatePcesUserForm(pcesSelectedUserRecord);
+    setPcesUserFormMode('update');
+    document.getElementById('pces-user-email')?.focus();
+}
+
+async function savePcesUser() {
+    if (!pcesSelectedUserHospital?.tenant_id) { alert('Select a hospital first.'); return; }
+    const payload = {
+        tenant_id:pcesSelectedUserHospital.tenant_id,
+        first_name:(document.getElementById('pces-user-first-name')?.value||'').trim(),
+        middle_name:(document.getElementById('pces-user-middle-name')?.value||'').trim(),
+        last_name:(document.getElementById('pces-user-last-name')?.value||'').trim(),
+        party_type:document.getElementById('pces-user-party-type')?.value||'',
+        pces_role:document.getElementById('pces-user-pces-role')?.value||'',
+        email:(document.getElementById('pces-user-email')?.value||'').trim(),
+        username:(document.getElementById('pces-user-username')?.value||'').trim(),
+        actor:sessionStorage.getItem('pces_username')||sessionStorage.getItem('pces_doctor_name')||'PCES_UI'
+    };
+    if (pcesUserMode==='insert') {
+        if (!payload.first_name || !payload.last_name || !payload.party_type || !payload.pces_role || !payload.email || !payload.username) {
+            alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.'); return;
+        }
+    } else if (pcesUserMode==='update') {
+        if (!payload.email || !payload.username) { alert('Email and User Name are required.'); return; }
+    } else { return; }
+    const isUpdate=pcesUserMode==='update';
+    const url=isUpdate?`/api/pces-admin/user-management/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`:'/api/pces-admin/user-management/users';
+    const button=document.getElementById('pces-user-save-btn');
+    if(button){button.disabled=true;button.textContent='Saving...';}
+    try {
+        const response=await fetch(url,{method:isUpdate?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const result=await response.json();
+        if(!response.ok) throw new Error(result.error||result.message||`HTTP ${response.status}`);
+        alert(isUpdate?'User updated successfully.':'User created successfully.');
+        pcesUserMode='view';
+        await loadPcesUsersForHospital((document.getElementById('pces-user-search-text')?.value||'').trim());
+        const target=result.party_id;
+        const idx=pcesUserCache.findIndex(u=>u.party_id===target);
+        const rows=document.querySelectorAll('#pces-user-list-body tr');
+        if(idx>=0&&rows[idx]) selectPcesUser(pcesUserCache[idx],rows[idx]);
+    } catch(error) {
+        console.error('[PCES User Admin] Save failed:',error);
+        alert(`Unable to save user: ${error.message}`);
+    } finally {
+        if(button){button.disabled=false;button.textContent='Save';}
+    }
+}
+
         function applyRoleVisibility(roleStr) {
             const roles   = _parseRoles(roleStr);
-            const isNurse = _hasRole(roles, 'NURSE');
-            const isAdmin = _hasRole(roles, 'OFFICE_ADMIN');
+            const partyType =
+                (sessionStorage.getItem('pces_party_type') || '')
+                    .trim()
+                    .toUpperCase();
+            const isNurse = _hasRole(roles, 'NURSE') || partyType === 'NURSE';
+            const isAdmin = _hasRole(roles, 'OFFICE_ADMIN') || partyType === 'OFFICE_ADMIN';
 
             console.log('[PCES][Role] Parsed roles:', roles, '| OFFICE_ADMIN:', isAdmin);
 
@@ -13647,6 +15585,23 @@ function resetTenantSearch() {
             const s4 = document.getElementById('sidebar-s4');
             const s5 = document.getElementById('sme-training-container');
             const officeAdminBox = document.getElementById('office-admin-box');
+            const pcesAdminServicesBox = document.getElementById('pces-admin-services-box');
+            const pcesUserOnboardingTab = document.getElementById('pces-admin-user-onboarding-tab');
+            const schedulingTab = document.getElementById('patient-scheduling-tab');
+
+            // Phase 1 requirement: PCES Admin Services is visible to every authenticated role.
+            // Later replace this with a PCES_ADMIN role gate.
+            if (pcesAdminServicesBox) {
+                pcesAdminServicesBox.style.display = 'block';
+            }
+            if (pcesUserOnboardingTab) {
+                pcesUserOnboardingTab.style.display = 'block';
+            }
+
+            // Scheduling is visible only to OFFICE_ADMIN users.
+            if (schedulingTab) {
+                schedulingTab.style.display = isAdmin ? '' : 'none';
+            }
 
             // Office Admin command area must only be visible to OFFICE_ADMIN.
             // Use an explicit display value because this element starts hidden.

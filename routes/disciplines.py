@@ -566,7 +566,7 @@ def index():
     )
 
 
-@disciplines_bp.route("/api/tenants", methods=["GET"])
+@disciplines_bp.route("/api/login/tenants", methods=["GET"])
 def get_login_tenants():
     """Return all hospitals available for the PCES login dropdown."""
     try:
@@ -715,6 +715,8 @@ def login():
         session["pces_identity"] = {
             "party_id": str(provider_party_id),
             "tenant_id": str(selected_tenant_id),
+            "party_type": str(party_type or ""),
+            "pces_role": str(pces_role or ""),
         }
         logger.info(
             "PCES login successful party_id=%s first_name=%r middle_name=%r "
@@ -755,6 +757,204 @@ def login():
 
 
 
+def _session_is_office_admin() -> bool:
+    """Return True only for an authenticated Office Admin session."""
+    identity = session.get("pces_identity") or {}
+    party_type = str(identity.get("party_type") or "").strip().upper()
+    roles = {
+        token.strip().upper()
+        for token in str(identity.get("pces_role") or "").split(",")
+        if token.strip()
+    }
+    return party_type == "OFFICE_ADMIN" or "OFFICE_ADMIN" in roles
+
+
+def _office_admin_has_tenant(cursor, tenant_id: str) -> bool:
+    """Return True when the logged-in Office Admin is actively mapped to tenant_id."""
+    identity = session.get("pces_identity") or {}
+    admin_party_id = str(identity.get("party_id") or "").strip()
+    if not admin_party_id or not tenant_id:
+        return False
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM ehr_ccm_schema.p_party_tenant pt
+        JOIN ehr_ccm_schema.p_tenant t
+          ON t.tenant_id = pt.tenant_id
+        WHERE CAST(pt.party_id AS TEXT) = %s
+          AND CAST(pt.tenant_id AS TEXT) = %s
+          AND COALESCE(pt.is_active, TRUE) = TRUE
+          AND pt.status = 'ACTIVE'
+          AND COALESCE(t.is_active, TRUE) = TRUE
+          AND t.status = 'ACTIVE'
+        LIMIT 1
+        """,
+        (admin_party_id, tenant_id),
+    )
+    return cursor.fetchone() is not None
+
+
+def _party_is_active_in_tenant(cursor, party_id, party_type: str, tenant_id: str) -> bool:
+    """Validate that a party has the requested role and an active mapping to tenant_id."""
+    cursor.execute(
+        """
+        SELECT 1
+        FROM ehr_ccm_schema.p_party p
+        JOIN ehr_ccm_schema.p_party_tenant pt
+          ON pt.party_id = p.party_id
+        WHERE p.party_id = %s
+          AND p.party_type = %s
+          AND COALESCE(p.is_active, TRUE) = TRUE
+          AND CAST(pt.tenant_id AS TEXT) = %s
+          AND COALESCE(pt.is_active, TRUE) = TRUE
+          AND pt.status = 'ACTIVE'
+        LIMIT 1
+        """,
+        (party_id, party_type, tenant_id),
+    )
+    return cursor.fetchone() is not None
+
+
+def _resolve_tenant_hospital_party(cursor, tenant_id: str):
+    """Resolve a tenant to the ORGANIZATION p_party used by schedule/encounter hospital_id.
+
+    Resolution order:
+    1. Active ORGANIZATION explicitly mapped to the tenant through p_party_tenant.
+    2. Legacy fallback: active ORGANIZATION whose name exactly matches tenant_name.
+    """
+    tenant_id = str(tenant_id or "").strip()
+    if not tenant_id:
+        return None
+
+    cursor.execute(
+        """
+        SELECT
+            t.tenant_id,
+            t.tenant_name,
+            t.tenant_code
+        FROM ehr_ccm_schema.p_tenant t
+        WHERE CAST(t.tenant_id AS TEXT) = %s
+          AND COALESCE(t.is_active, TRUE) = TRUE
+          AND t.status = 'ACTIVE'
+        LIMIT 1
+        """,
+        (tenant_id,),
+    )
+    tenant_row = cursor.fetchone()
+    if tenant_row is None:
+        return None
+
+    resolved_tenant_id, tenant_name, tenant_code = tenant_row
+
+    cursor.execute(
+        """
+        SELECT
+            org.party_id,
+            org.name,
+            org.hospital_code,
+            org.hospital_location
+        FROM ehr_ccm_schema.p_party org
+        JOIN ehr_ccm_schema.p_party_tenant pt
+          ON pt.party_id = org.party_id
+        WHERE org.party_type = 'ORGANIZATION'
+          AND COALESCE(org.is_active, TRUE) = TRUE
+          AND CAST(pt.tenant_id AS TEXT) = %s
+          AND COALESCE(pt.is_active, TRUE) = TRUE
+          AND pt.status = 'ACTIVE'
+        ORDER BY
+            CASE
+                WHEN LOWER(COALESCE(org.name, '')) =
+                     LOWER(COALESCE(%s, ''))
+                THEN 0 ELSE 1
+            END,
+            org.name
+        LIMIT 1
+        """,
+        (tenant_id, tenant_name),
+    )
+    hospital_row = cursor.fetchone()
+
+    if hospital_row is None and tenant_name:
+        cursor.execute(
+            """
+            SELECT
+                party_id,
+                name,
+                hospital_code,
+                hospital_location
+            FROM ehr_ccm_schema.p_party
+            WHERE party_type = 'ORGANIZATION'
+              AND COALESCE(is_active, TRUE) = TRUE
+              AND LOWER(COALESCE(name, '')) = LOWER(%s)
+            LIMIT 1
+            """,
+            (tenant_name,),
+        )
+        hospital_row = cursor.fetchone()
+
+    if hospital_row is None:
+        return {
+            "tenant_id": str(resolved_tenant_id),
+            "tenant_name": tenant_name or "",
+            "tenant_code": tenant_code or "",
+            "hospital_id": "",
+            "hospital_name": tenant_name or "",
+        }
+
+    hospital_id, hospital_name, hospital_code, hospital_location = hospital_row
+    return {
+        "tenant_id": str(resolved_tenant_id),
+        "tenant_name": tenant_name or "",
+        "tenant_code": tenant_code or "",
+        "hospital_id": str(hospital_id),
+        "hospital_name": hospital_name or tenant_name or "",
+        "hospital_code": hospital_code or "",
+        "hospital_location": hospital_location or "",
+    }
+
+
+def _resolve_session_tenant_hospital(cursor):
+    """Resolve the authenticated tenant to its Scheduling ORGANIZATION party."""
+    identity = session.get("pces_identity") or {}
+    tenant_id = str(identity.get("tenant_id") or "").strip()
+    if not tenant_id:
+        return None
+
+    return _resolve_tenant_hospital_party(cursor, tenant_id)
+
+
+@disciplines_bp.route("/api/scheduling/tenant-hospital", methods=["GET"])
+@handle_route_errors
+def get_scheduling_tenant_hospital():
+    """Return the logged-in Office Admin's tenant and Scheduling hospital."""
+    if not _session_is_office_admin():
+        return jsonify({"error": "Office Admin access is required"}), 403
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                resolved = _resolve_session_tenant_hospital(cursor)
+
+        if resolved is None:
+            return jsonify({"error": "Authenticated tenant is unavailable"}), 401
+
+        if not resolved.get("hospital_id"):
+            return jsonify({
+                "error": (
+                    "No active ORGANIZATION party is mapped to the logged-in tenant. "
+                    "Add the organization-to-tenant mapping before scheduling."
+                ),
+                **resolved,
+            }), 409
+
+        return jsonify(resolved)
+
+    except Exception as exc:
+        logger.exception("Unable to resolve Scheduling tenant hospital: %s", exc)
+        return jsonify({"error": "Unable to resolve hospital for this tenant"}), 500
+
+
 # ============================================================
 # Office Admin - Tenant Management
 # ============================================================
@@ -762,61 +962,53 @@ def login():
 @disciplines_bp.route("/api/tenants", methods=["GET"])
 @handle_route_errors
 def get_tenants():
-    """Return active tenants sorted by tenant_name.
+    """Return only the tenant selected by the logged-in OFFICE_ADMIN user.
 
     Optional query parameter:
         ?name=<partial tenant name>
+
+    The tenant scope is taken from session["pces_identity"]["tenant_id"].
     """
+    identity = session.get("pces_identity")
+    if not identity or not identity.get("tenant_id"):
+        return jsonify({"error": "Please log in to view tenant administration."}), 401
+
+    tenant_id = str(identity["tenant_id"])
     tenant_name = (request.args.get("name") or "").strip()
 
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
-                if tenant_name:
-                    cursor.execute(
-                        """
-                        SELECT
-                            tenant_id,
-                            tenant_code,
-                            tenant_name,
-                            status,
-                            created_at,
-                            updated_at,
-                            created_by,
-                            updated_by,
-                            version_no
-                        FROM ehr_ccm_schema.p_tenant
-                        WHERE COALESCE(is_active, TRUE) = TRUE
-                          AND tenant_name ILIKE %s
-                        ORDER BY tenant_name ASC
-                        """,
-                        (f"%{tenant_name}%",),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        SELECT
-                            tenant_id,
-                            tenant_code,
-                            tenant_name,
-                            status,
-                            created_at,
-                            updated_at,
-                            created_by,
-                            updated_by,
-                            version_no
-                        FROM ehr_ccm_schema.p_tenant
-                        WHERE COALESCE(is_active, TRUE) = TRUE
-                        ORDER BY tenant_name ASC
-                        """
-                    )
+                sql = """
+                    SELECT
+                        tenant_id,
+                        tenant_code,
+                        tenant_name,
+                        status,
+                        created_at,
+                        updated_at,
+                        created_by,
+                        updated_by,
+                        version_no
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE CAST(tenant_id AS TEXT) = %s
+                      AND COALESCE(is_active, TRUE) = TRUE
+                """
+                params = [tenant_id]
 
+                if tenant_name:
+                    sql += " AND tenant_name ILIKE %s"
+                    params.append(f"%{tenant_name}%")
+
+                sql += " ORDER BY tenant_name ASC"
+
+                cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
 
         tenants = []
 
         for (
-            tenant_id,
+            row_tenant_id,
             tenant_code,
             tenant_name_value,
             status,
@@ -827,7 +1019,7 @@ def get_tenants():
             version_no,
         ) in rows:
             tenants.append({
-                "tenant_id": str(tenant_id),
+                "tenant_id": str(row_tenant_id),
                 "tenant_code": tenant_code or "",
                 "tenant_name": tenant_name_value or "",
                 "status": status or "",
@@ -854,8 +1046,12 @@ def get_tenants():
         return jsonify(tenants)
 
     except Exception as exc:
-        logger.exception("Unable to retrieve tenants: %s", exc)
-        return jsonify({"error": "Unable to retrieve tenants"}), 500
+        logger.exception(
+            "Unable to retrieve tenant for logged-in tenant_id=%s: %s",
+            tenant_id,
+            exc,
+        )
+        return jsonify({"error": "Unable to retrieve tenant"}), 500
 
 
 @disciplines_bp.route("/api/tenants", methods=["POST"])
@@ -2378,22 +2574,21 @@ def get_my_schedule_patient_diagnosis_history(patient_id: str):
 @disciplines_bp.route("/api/schedules", methods=["POST"])
 @handle_route_errors
 def create_schedule():
-    """Create one appointment in p_schedule and its planned encounter in p_encounter.
+    """Create one appointment in p_schedule and its planned encounter.
 
-    Expected JSON:
-      patient_id, provider_id, nurse_id, hospital_id, appointment_date,
-      appointment_time, visit_type, optional notes, optional status,
-      optional created_by.
-
-    The p_schedule and p_encounter inserts run in the same database
-    transaction so they either both succeed or both roll back.
+    Scheduling is restricted to Office Admin users. The hospital is resolved
+    server-side from the authenticated tenant instead of trusting browser data.
     """
+    if not _session_is_office_admin():
+        return jsonify({"error": "Office Admin access is required"}), 403
+
     data = request.get_json(silent=True) or {}
 
     patient_id = (data.get("patient_id") or "").strip()
     provider_id = (data.get("provider_id") or "").strip()
     nurse_id = (data.get("nurse_id") or "").strip()
-    hospital_id = (data.get("hospital_id") or "").strip()
+    requested_tenant_id = (data.get("tenant_id") or "").strip()
+    requested_hospital_id = (data.get("hospital_id") or "").strip()
     appointment_date = (data.get("appointment_date") or "").strip()
     appointment_time = (data.get("appointment_time") or "").strip()
     visit_type = (data.get("visit_type") or "").strip()
@@ -2407,7 +2602,8 @@ def create_schedule():
         "patient_id": patient_id,
         "provider_id": provider_id,
         "nurse_id": nurse_id,
-        "hospital_id": hospital_id,
+        "tenant_id": requested_tenant_id,
+        "hospital_id": requested_hospital_id,
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
         "visit_type": visit_type,
@@ -2424,12 +2620,10 @@ def create_schedule():
         patient_uuid = uuid.UUID(patient_id)
         provider_uuid = uuid.UUID(provider_id)
         nurse_uuid = uuid.UUID(nurse_id)
-        hospital_uuid = uuid.UUID(hospital_id)
     except ValueError:
         return jsonify({
             "error": (
-                "patient_id, provider_id, nurse_id and hospital_id "
-                "must be valid UUIDs"
+                "patient_id, provider_id and nurse_id must be valid UUIDs"
             )
         }), 400
 
@@ -2454,33 +2648,69 @@ def create_schedule():
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
 
-                # Validate the selected party IDs and their expected roles.
-                party_checks = [
-                    (patient_uuid, "PATIENT", "patient_id"),
+                if not _office_admin_has_tenant(cursor, requested_tenant_id):
+                    return jsonify({
+                        "error": "The selected hospital/tenant is not assigned to this Office Admin"
+                    }), 403
+
+                # The Scheduling picker is tenant-based, but p_schedule.hospital_id
+                # and p_encounter.hospital_id use an ORGANIZATION p_party.party_id.
+                # Resolve the selected tenant to that organization server-side.
+                if requested_hospital_id != requested_tenant_id:
+                    return jsonify({
+                        "error": "Selected hospital does not match the selected tenant"
+                    }), 400
+
+                resolved_hospital = _resolve_tenant_hospital_party(
+                    cursor,
+                    requested_tenant_id,
+                )
+                if not resolved_hospital or not resolved_hospital.get("hospital_id"):
+                    return jsonify({
+                        "error": (
+                            "The selected tenant is valid, but no active ORGANIZATION "
+                            "party could be resolved for it. Map an ORGANIZATION party "
+                            "to this tenant (or use the same organization/tenant name) "
+                            "before saving a schedule."
+                        ),
+                        "tenant_id": requested_tenant_id,
+                        "tenant_name": (
+                            resolved_hospital.get("tenant_name", "")
+                            if resolved_hospital else ""
+                        ),
+                    }), 409
+
+                hospital_uuid = uuid.UUID(resolved_hospital["hospital_id"])
+
+                # Doctor and Nurse must belong to that same selected hospital tenant.
+                for party_uuid, party_type, field_name in (
                     (provider_uuid, "DOCTOR", "provider_id"),
                     (nurse_uuid, "NURSE", "nurse_id"),
-                    (hospital_uuid, "ORGANIZATION", "hospital_id"),
-                ]
-
-                for party_uuid, party_type, field_name in party_checks:
-                    cursor.execute(
-                        """
-                        SELECT 1
-                        FROM ehr_ccm_schema.p_party
-                        WHERE party_id = %s
-                          AND party_type = %s
-                          AND is_active = TRUE
-                        LIMIT 1
-                        """,
-                        (party_uuid, party_type),
-                    )
-                    if cursor.fetchone() is None:
+                ):
+                    if not _party_is_active_in_tenant(
+                        cursor, party_uuid, party_type, requested_tenant_id
+                    ):
                         return jsonify({
                             "error": (
-                                f"Invalid {field_name}: active {party_type} "
-                                "record was not found"
+                                f"Invalid {field_name}: the selected {party_type.lower()} "
+                                "is not assigned to the selected hospital"
                             )
-                        }), 400
+                        }), 403
+
+                # Patient must still be an active patient record.
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_id = %s
+                      AND party_type = 'PATIENT'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (patient_uuid,),
+                )
+                if cursor.fetchone() is None:
+                    return jsonify({"error": "Invalid patient_id"}), 400
 
                 # Re-check availability at save time. This prevents an obviously
                 # stale UI slot from being inserted as a second active booking.
@@ -3025,13 +3255,7 @@ def update_doctor(party_id: str):
 @disciplines_bp.route("/api/patient/search", methods=["GET"])
 @handle_route_errors
 def search_patients_advanced():
-    """Advanced patient search scoped to the authenticated user's hospital.
-
-    The login flow copies the selected hospital from the authenticated
-    PCES global context (g_tenant_ID) into session["pces_identity"]["tenant_id"].
-    Use that server-side session value as the authority; never trust a tenant
-    supplied by the search request. Return every patient associated with that
-    hospital, without restricting results to a particular doctor.
+    """Advanced patient search — source-aware.
 
     Query params (at least one required):
       first, last, middle, dob (YYYY-MM-DD), phone, email
@@ -3375,6 +3599,183 @@ def search_doctors_advanced():
 # ============================================================
 # Patient Scheduling - Hospital picker
 # ============================================================
+
+
+@disciplines_bp.route("/api/scheduling/hospitals", methods=["GET"])
+@handle_route_errors
+def get_scheduling_hospitals():
+    """Return active tenants/hospitals assigned to the logged-in Office Admin."""
+    if not _session_is_office_admin():
+        return jsonify({"error": "Office Admin access is required"}), 403
+
+    identity = session.get("pces_identity") or {}
+    admin_party_id = str(identity.get("party_id") or "").strip()
+    if not admin_party_id:
+        return jsonify({"error": "Authenticated Office Admin is unavailable"}), 401
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT
+                        t.tenant_id,
+                        t.tenant_name,
+                        t.tenant_code
+                    FROM ehr_ccm_schema.p_party_tenant pt
+                    JOIN ehr_ccm_schema.p_tenant t
+                      ON t.tenant_id = pt.tenant_id
+                    WHERE CAST(pt.party_id AS TEXT) = %s
+                      AND COALESCE(pt.is_active, TRUE) = TRUE
+                      AND pt.status = 'ACTIVE'
+                      AND COALESCE(t.is_active, TRUE) = TRUE
+                      AND t.status = 'ACTIVE'
+                    ORDER BY t.tenant_name, t.tenant_id
+                    """,
+                    (admin_party_id,),
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "tenant_id": str(tenant_id),
+                "tenant_name": tenant_name or "",
+                "tenant_code": tenant_code or "",
+                # Frontend keeps using hospital_* keys for the Scheduling UI.
+                "hospital_id": str(tenant_id),
+                "hospital_name": tenant_name or "",
+                "hospital_code": tenant_code or "",
+                "location": "",
+            }
+            for tenant_id, tenant_name, tenant_code in rows
+        ])
+
+    except Exception as exc:
+        logger.exception("Unable to retrieve Office Admin Scheduling hospitals: %s", exc)
+        return jsonify({"error": "Unable to retrieve Scheduling hospitals"}), 500
+
+
+@disciplines_bp.route("/api/scheduling/doctors", methods=["GET"])
+@handle_route_errors
+def get_scheduling_doctors():
+    """Return active doctors mapped to an Office Admin-authorized tenant."""
+    if not _session_is_office_admin():
+        return jsonify({"error": "Office Admin access is required"}), 403
+
+    tenant_id = str(request.args.get("tenant_id") or "").strip()
+    if not tenant_id:
+        return jsonify({"error": "tenant_id is required"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                if not _office_admin_has_tenant(cursor, tenant_id):
+                    return jsonify({"error": "This tenant is not assigned to the Office Admin"}), 403
+
+                cursor.execute(
+                    """
+                    SELECT
+                        p.party_id,
+                        p.first_name,
+                        p.middle_name,
+                        p.last_name,
+                        p.phone,
+                        p.email
+                    FROM ehr_ccm_schema.p_party p
+                    JOIN ehr_ccm_schema.p_party_tenant pt
+                      ON pt.party_id = p.party_id
+                    WHERE p.party_type = 'DOCTOR'
+                      AND COALESCE(p.is_active, TRUE) = TRUE
+                      AND CAST(pt.tenant_id AS TEXT) = %s
+                      AND COALESCE(pt.is_active, TRUE) = TRUE
+                      AND pt.status = 'ACTIVE'
+                    ORDER BY p.last_name, p.first_name
+                    LIMIT 100
+                    """,
+                    (tenant_id,),
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "doctor_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": " ".join(
+                    x for x in [first_name, middle_name, last_name] if x
+                ),
+                "phone": phone or "",
+                "email": email or "",
+            }
+            for party_id, first_name, middle_name, last_name, phone, email in rows
+        ])
+
+    except Exception as exc:
+        logger.exception("Unable to retrieve Scheduling doctors for tenant %s: %s", tenant_id, exc)
+        return jsonify({"error": "Unable to retrieve doctors"}), 500
+
+
+@disciplines_bp.route("/api/scheduling/nurses", methods=["GET"])
+@handle_route_errors
+def get_scheduling_nurses():
+    """Return active nurses mapped to an Office Admin-authorized tenant."""
+    if not _session_is_office_admin():
+        return jsonify({"error": "Office Admin access is required"}), 403
+
+    tenant_id = str(request.args.get("tenant_id") or "").strip()
+    if not tenant_id:
+        return jsonify({"error": "tenant_id is required"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                if not _office_admin_has_tenant(cursor, tenant_id):
+                    return jsonify({"error": "This tenant is not assigned to the Office Admin"}), 403
+
+                cursor.execute(
+                    """
+                    SELECT
+                        p.party_id,
+                        p.first_name,
+                        p.middle_name,
+                        p.last_name,
+                        p.phone,
+                        p.email
+                    FROM ehr_ccm_schema.p_party p
+                    JOIN ehr_ccm_schema.p_party_tenant pt
+                      ON pt.party_id = p.party_id
+                    WHERE p.party_type = 'NURSE'
+                      AND COALESCE(p.is_active, TRUE) = TRUE
+                      AND CAST(pt.tenant_id AS TEXT) = %s
+                      AND COALESCE(pt.is_active, TRUE) = TRUE
+                      AND pt.status = 'ACTIVE'
+                    ORDER BY p.last_name, p.first_name
+                    LIMIT 100
+                    """,
+                    (tenant_id,),
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "nurse_id": str(party_id),
+                "first_name": first_name or "",
+                "middle_name": middle_name or "",
+                "last_name": last_name or "",
+                "full_name": " ".join(
+                    x for x in [first_name, middle_name, last_name] if x
+                ),
+                "phone": phone or "",
+                "email": email or "",
+            }
+            for party_id, first_name, middle_name, last_name, phone, email in rows
+        ])
+
+    except Exception as exc:
+        logger.exception("Unable to retrieve Scheduling nurses for tenant %s: %s", tenant_id, exc)
+        return jsonify({"error": "Unable to retrieve nurses"}), 500
+
 
 @disciplines_bp.route("/api/hospitals/first20", methods=["GET"])
 @handle_route_errors
@@ -3948,3 +4349,1128 @@ def get_patient_ai_summary(patient_id: str):
     except Exception as exc:
         logger.error("get_patient_ai_summary: LLM error for %s (%s)", patient_id, exc)
         return jsonify({"summary": "", "conclusion": "", "error": f"LLM error: {exc}", **structured_sections}), 500
+
+# ============================================================
+# PCES Admin Services - Hospital / Tenant Provisioning
+# Phase 1: no PCES_ADMIN role restriction yet; authenticated session required.
+# ============================================================
+
+def _pces_admin_require_login():
+    identity = session.get("pces_identity") or {}
+    if not identity.get("party_id"):
+        return None, (jsonify({"error": "Please log in first."}), 401)
+    return identity, None
+
+
+def _pces_admin_actor(data: dict) -> str:
+    return ((data.get("actor") or "PCES_UI").strip() or "PCES_UI")[:100]
+
+
+def _pces_admin_hospital_row(cursor, party_id):
+    cursor.execute(
+        """
+        SELECT
+            p.party_id,
+            p.name,
+            p.hospital_code,
+            p.hospital_location,
+            p.par_row_id,
+            parent.name AS parent_hospital_name,
+            p.address_id,
+            a.line1,
+            a.line2,
+            a.city,
+            a.state,
+            a.postal_code,
+            a.country,
+            p.organization_type,
+            p.created_at,
+            p.updated_at
+        FROM ehr_ccm_schema.p_party p
+        LEFT JOIN ehr_ccm_schema.p_party parent
+          ON parent.party_id = p.par_row_id
+        LEFT JOIN ehr_ccm_schema.p_address a
+          ON a.address_id = p.address_id
+        WHERE p.party_id = %s
+          AND p.party_type = 'ORGANIZATION'
+          AND COALESCE(p.is_active, TRUE) = TRUE
+        LIMIT 1
+        """,
+        (party_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    (
+        party_id,
+        name,
+        hospital_code,
+        hospital_location,
+        par_row_id,
+        parent_hospital_name,
+        address_id,
+        line1,
+        line2,
+        city,
+        state,
+        postal_code,
+        country,
+        organization_type,
+        created_at,
+        updated_at,
+    ) = row
+
+    return {
+        "party_id": str(party_id),
+        "name": name or "",
+        "hospital_code": hospital_code or "",
+        "hospital_location": hospital_location or "",
+        "par_row_id": str(par_row_id) if par_row_id else "",
+        "parent_hospital_name": parent_hospital_name or "",
+        "address_id": str(address_id) if address_id else "",
+        "line1": line1 or "",
+        "line2": line2 or "",
+        "city": city or "",
+        "state": state or "",
+        "postal_code": postal_code or "",
+        "country": country or "",
+        "organization_type": organization_type or "",
+        "created_at": created_at.isoformat(timespec="seconds") if created_at else "",
+        "updated_at": updated_at.isoformat(timespec="seconds") if updated_at else "",
+    }
+
+
+@disciplines_bp.route("/api/pces-admin/hospitals/parents", methods=["GET"])
+@handle_route_errors
+def pces_admin_parent_hospitals():
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT party_id, name, hospital_code
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_type = 'ORGANIZATION'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    ORDER BY name NULLS LAST, hospital_code NULLS LAST
+                    """
+                )
+                rows = cursor.fetchall()
+
+        return jsonify([
+            {
+                "party_id": str(party_id),
+                "name": name or "",
+                "hospital_code": hospital_code or "",
+            }
+            for party_id, name, hospital_code in rows
+        ])
+
+    except Exception as exc:
+        logger.exception("Unable to load parent hospitals: %s", exc)
+        return jsonify({"error": "Unable to load parent hospitals"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/hospitals", methods=["GET"])
+@handle_route_errors
+def pces_admin_search_hospitals():
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    name = (request.args.get("name") or "").strip()
+    code = (request.args.get("code") or "").strip()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                    SELECT p.party_id
+                    FROM ehr_ccm_schema.p_party p
+                    WHERE p.party_type = 'ORGANIZATION'
+                      AND COALESCE(p.is_active, TRUE) = TRUE
+                """
+                params = []
+
+                if name:
+                    sql += " AND p.name ILIKE %s"
+                    params.append(f"%{name}%")
+
+                if code:
+                    sql += " AND p.hospital_code ILIKE %s"
+                    params.append(f"%{code}%")
+
+                sql += " ORDER BY p.name NULLS LAST, p.hospital_code NULLS LAST LIMIT 200"
+
+                cursor.execute(sql, tuple(params))
+                ids = [row[0] for row in cursor.fetchall()]
+
+                records = [
+                    _pces_admin_hospital_row(cursor, party_id)
+                    for party_id in ids
+                ]
+
+        return jsonify([record for record in records if record])
+
+    except Exception as exc:
+        logger.exception("Unable to search hospitals: %s", exc)
+        return jsonify({"error": "Unable to search hospitals"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/hospitals", methods=["POST"])
+@handle_route_errors
+def pces_admin_create_hospital():
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get("name") or "").strip()
+    hospital_code = (data.get("hospital_code") or "").strip()
+    line1 = (data.get("line1") or "").strip()
+    line2 = (data.get("line2") or "").strip()
+    city = (data.get("city") or "").strip()
+    state = (data.get("state") or "").strip()
+    postal_code = (data.get("postal_code") or "").strip()
+    country = (data.get("country") or "").strip()
+    par_row_id = str(data.get("par_row_id") or "").strip()
+    actor = _pces_admin_actor(data)
+
+    if not name:
+        return jsonify({"error": "Hospital Name is required"}), 400
+    if not hospital_code:
+        return jsonify({"error": "Party Code is required"}), 400
+    if not line1:
+        return jsonify({"error": "Address 1 is required"}), 400
+    if not city:
+        return jsonify({"error": "City is required"}), 400
+    if not country:
+        return jsonify({"error": "Country is required"}), 400
+
+    try:
+        parent_uuid = uuid.UUID(par_row_id) if par_row_id else None
+    except ValueError:
+        return jsonify({"error": "Invalid Parent Hospital ID"}), 400
+
+    party_id = uuid.uuid4()
+    address_id = uuid.uuid4()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                if parent_uuid:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM ehr_ccm_schema.p_party
+                        WHERE party_id = %s
+                          AND party_type = 'ORGANIZATION'
+                          AND COALESCE(is_active, TRUE) = TRUE
+                        LIMIT 1
+                        """,
+                        (parent_uuid,),
+                    )
+                    if cursor.fetchone() is None:
+                        return jsonify({"error": "Parent Hospital was not found"}), 400
+
+                cursor.execute(
+                    """
+                    SELECT party_id
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_type = 'ORGANIZATION'
+                      AND UPPER(COALESCE(hospital_code, '')) = UPPER(%s)
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (hospital_code,),
+                )
+                if cursor.fetchone():
+                    return jsonify({"error": f"Party Code '{hospital_code}' already exists"}), 409
+
+                # Insert party first with address_id NULL to avoid the circular FK.
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_party (
+                        party_id,
+                        party_type,
+                        name,
+                        organization_type,
+                        hospital_code,
+                        hospital_location,
+                        par_row_id,
+                        address_type,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, 'ORGANIZATION', %s, 'HOSPITAL',
+                        %s, %s, %s, 'PRIMARY',
+                        NOW(), %s, TRUE, 1
+                    )
+                    """,
+                    (
+                        party_id,
+                        name,
+                        hospital_code,
+                        city,
+                        parent_uuid,
+                        actor,
+                    ),
+                )
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_address (
+                        address_id,
+                        party_id,
+                        line1,
+                        line2,
+                        city,
+                        state,
+                        postal_code,
+                        country,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        NOW(), %s, TRUE, 1
+                    )
+                    """,
+                    (
+                        address_id,
+                        party_id,
+                        line1,
+                        line2 or None,
+                        city,
+                        state or None,
+                        postal_code or None,
+                        country,
+                        actor,
+                    ),
+                )
+
+                cursor.execute(
+                    """
+                    UPDATE ehr_ccm_schema.p_party
+                    SET address_id = %s
+                    WHERE party_id = %s
+                    """,
+                    (address_id, party_id),
+                )
+
+                hospital = _pces_admin_hospital_row(cursor, party_id)
+
+        return jsonify({
+            "success": True,
+            "hospital": hospital,
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Unable to create hospital: %s", exc)
+        return jsonify({"error": "Unable to create hospital"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/hospitals/<party_id>", methods=["PUT"])
+@handle_route_errors
+def pces_admin_update_hospital(party_id: str):
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    try:
+        party_uuid = uuid.UUID(party_id)
+    except ValueError:
+        return jsonify({"error": "Invalid Party ID"}), 400
+
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get("name") or "").strip()
+    hospital_code = (data.get("hospital_code") or "").strip()
+    line1 = (data.get("line1") or "").strip()
+    line2 = (data.get("line2") or "").strip()
+    city = (data.get("city") or "").strip()
+    state = (data.get("state") or "").strip()
+    postal_code = (data.get("postal_code") or "").strip()
+    country = (data.get("country") or "").strip()
+    par_row_id = str(data.get("par_row_id") or "").strip()
+    actor = _pces_admin_actor(data)
+
+    if not name or not hospital_code or not line1 or not city or not country:
+        return jsonify({
+            "error": "Hospital Name, Party Code, Address 1, City, and Country are required"
+        }), 400
+
+    try:
+        parent_uuid = uuid.UUID(par_row_id) if par_row_id else None
+    except ValueError:
+        return jsonify({"error": "Invalid Parent Hospital ID"}), 400
+
+    if parent_uuid == party_uuid:
+        return jsonify({"error": "A hospital cannot be its own Parent Hospital"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT address_id
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_id = %s
+                      AND party_type = 'ORGANIZATION'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (party_uuid,),
+                )
+                existing = cursor.fetchone()
+                if not existing:
+                    return jsonify({"error": "Hospital not found"}), 404
+
+                address_id = existing[0]
+
+                cursor.execute(
+                    """
+                    SELECT party_id
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_type = 'ORGANIZATION'
+                      AND UPPER(COALESCE(hospital_code, '')) = UPPER(%s)
+                      AND party_id <> %s
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (hospital_code, party_uuid),
+                )
+                if cursor.fetchone():
+                    return jsonify({"error": f"Party Code '{hospital_code}' already exists"}), 409
+
+                if parent_uuid:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM ehr_ccm_schema.p_party
+                        WHERE party_id = %s
+                          AND party_type = 'ORGANIZATION'
+                          AND COALESCE(is_active, TRUE) = TRUE
+                        LIMIT 1
+                        """,
+                        (parent_uuid,),
+                    )
+                    if cursor.fetchone() is None:
+                        return jsonify({"error": "Parent Hospital was not found"}), 400
+
+                cursor.execute(
+                    """
+                    UPDATE ehr_ccm_schema.p_party
+                    SET
+                        name = %s,
+                        hospital_code = %s,
+                        hospital_location = %s,
+                        par_row_id = %s,
+                        organization_type = COALESCE(organization_type, 'HOSPITAL'),
+                        updated_at = NOW(),
+                        updated_by = %s,
+                        version_no = COALESCE(version_no, 0) + 1
+                    WHERE party_id = %s
+                    """,
+                    (
+                        name,
+                        hospital_code,
+                        city,
+                        parent_uuid,
+                        actor,
+                        party_uuid,
+                    ),
+                )
+
+                if address_id:
+                    cursor.execute(
+                        """
+                        UPDATE ehr_ccm_schema.p_address
+                        SET
+                            line1 = %s,
+                            line2 = %s,
+                            city = %s,
+                            state = %s,
+                            postal_code = %s,
+                            country = %s,
+                            updated_at = NOW(),
+                            updated_by = %s,
+                            version_no = COALESCE(version_no, 0) + 1
+                        WHERE address_id = %s
+                        """,
+                        (
+                            line1,
+                            line2 or None,
+                            city,
+                            state or None,
+                            postal_code or None,
+                            country,
+                            actor,
+                            address_id,
+                        ),
+                    )
+                else:
+                    address_id = uuid.uuid4()
+                    cursor.execute(
+                        """
+                        INSERT INTO ehr_ccm_schema.p_address (
+                            address_id, party_id, line1, line2, city, state,
+                            postal_code, country, created_at, created_by,
+                            is_active, version_no
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s,
+                            NOW(), %s, TRUE, 1
+                        )
+                        """,
+                        (
+                            address_id,
+                            party_uuid,
+                            line1,
+                            line2 or None,
+                            city,
+                            state or None,
+                            postal_code or None,
+                            country,
+                            actor,
+                        ),
+                    )
+                    cursor.execute(
+                        """
+                        UPDATE ehr_ccm_schema.p_party
+                        SET address_id = %s
+                        WHERE party_id = %s
+                        """,
+                        (address_id, party_uuid),
+                    )
+
+                hospital = _pces_admin_hospital_row(cursor, party_uuid)
+
+        return jsonify({"success": True, "hospital": hospital})
+
+    except Exception as exc:
+        logger.exception("Unable to update hospital %s: %s", party_id, exc)
+        return jsonify({"error": "Unable to update hospital"}), 500
+
+
+def _pces_admin_tenant_row(cursor, tenant_id):
+    cursor.execute(
+        """
+        SELECT
+            t.tenant_id,
+            t.tenant_code,
+            t.tenant_name,
+            t.status,
+            t.organization_party_id,
+            p.name,
+            p.hospital_code,
+            t.created_at,
+            t.updated_at
+        FROM ehr_ccm_schema.p_tenant t
+        LEFT JOIN ehr_ccm_schema.p_party p
+          ON p.party_id = t.organization_party_id
+        WHERE t.tenant_id = %s
+          AND COALESCE(t.is_active, TRUE) = TRUE
+        LIMIT 1
+        """,
+        (tenant_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    (
+        tenant_id,
+        tenant_code,
+        tenant_name,
+        status,
+        organization_party_id,
+        hospital_name,
+        hospital_code,
+        created_at,
+        updated_at,
+    ) = row
+
+    return {
+        "tenant_id": str(tenant_id),
+        "tenant_code": tenant_code or "",
+        "tenant_name": tenant_name or "",
+        "status": status or "",
+        "organization_party_id": (
+            str(organization_party_id) if organization_party_id else ""
+        ),
+        "hospital_name": hospital_name or "",
+        "hospital_code": hospital_code or "",
+        "created_at": created_at.isoformat(timespec="seconds") if created_at else "",
+        "updated_at": updated_at.isoformat(timespec="seconds") if updated_at else "",
+    }
+
+
+@disciplines_bp.route("/api/pces-admin/tenants", methods=["GET"])
+@handle_route_errors
+def pces_admin_search_tenants():
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    organization_party_id = str(
+        request.args.get("organization_party_id") or ""
+    ).strip()
+
+    try:
+        org_uuid = uuid.UUID(organization_party_id) if organization_party_id else None
+    except ValueError:
+        return jsonify({"error": "Invalid Organization Party ID"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                    SELECT tenant_id
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE COALESCE(is_active, TRUE) = TRUE
+                """
+                params = []
+
+                if org_uuid:
+                    sql += " AND organization_party_id = %s"
+                    params.append(org_uuid)
+
+                sql += " ORDER BY tenant_name, tenant_code LIMIT 200"
+
+                cursor.execute(sql, tuple(params))
+                ids = [row[0] for row in cursor.fetchall()]
+
+                records = [
+                    _pces_admin_tenant_row(cursor, tenant_id)
+                    for tenant_id in ids
+                ]
+
+        return jsonify([record for record in records if record])
+
+    except Exception as exc:
+        logger.exception("Unable to search PCES admin tenants: %s", exc)
+        return jsonify({"error": "Unable to search tenants"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/tenants", methods=["POST"])
+@handle_route_errors
+def pces_admin_create_tenant():
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True) or {}
+    organization_party_id = str(data.get("organization_party_id") or "").strip()
+    actor = _pces_admin_actor(data)
+
+    try:
+        org_uuid = uuid.UUID(organization_party_id)
+    except ValueError:
+        return jsonify({"error": "A valid Hospital Party ID is required"}), 400
+
+    tenant_id = uuid.uuid4()
+    party_tenant_id = uuid.uuid4()
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT name, hospital_code
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_id = %s
+                      AND party_type = 'ORGANIZATION'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (org_uuid,),
+                )
+                hospital = cursor.fetchone()
+                if not hospital:
+                    return jsonify({"error": "Hospital was not found"}), 404
+
+                hospital_name, hospital_code = hospital
+                tenant_name = (hospital_name or "").strip()
+                tenant_code = (hospital_code or "").strip()
+
+                if not tenant_name:
+                    return jsonify({"error": "Hospital Name is required before creating a Tenant"}), 409
+                if not tenant_code:
+                    return jsonify({"error": "Party Code is required before creating a Tenant"}), 409
+
+                cursor.execute(
+                    """
+                    SELECT tenant_id
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE UPPER(tenant_code) = UPPER(%s)
+                    LIMIT 1
+                    """,
+                    (tenant_code,),
+                )
+                if cursor.fetchone():
+                    return jsonify({
+                        "error": f"Tenant Code '{tenant_code}' already exists"
+                    }), 409
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_tenant (
+                        tenant_id,
+                        tenant_code,
+                        tenant_name,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no,
+                        organization_party_id
+                    )
+                    VALUES (
+                        %s, %s, %s, 'ACTIVE',
+                        NOW(), %s, TRUE, 1, %s
+                    )
+                    """,
+                    (
+                        tenant_id,
+                        tenant_code,
+                        tenant_name,
+                        actor,
+                        org_uuid,
+                    ),
+                )
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_party_tenant (
+                        party_tenant_id,
+                        party_id,
+                        tenant_id,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, %s, %s, 'ACTIVE',
+                        NOW(), %s, TRUE, 1
+                    )
+                    ON CONFLICT (party_id, tenant_id) DO NOTHING
+                    """,
+                    (
+                        party_tenant_id,
+                        org_uuid,
+                        tenant_id,
+                        actor,
+                    ),
+                )
+
+                tenant = _pces_admin_tenant_row(cursor, tenant_id)
+
+        return jsonify({"success": True, "tenant": tenant}), 201
+
+    except Exception as exc:
+        logger.exception("Unable to create PCES admin tenant: %s", exc)
+        return jsonify({"error": "Unable to create tenant"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/tenants/<tenant_id>", methods=["PUT"])
+@handle_route_errors
+def pces_admin_update_tenant(tenant_id: str):
+    _, auth_error = _pces_admin_require_login()
+    if auth_error:
+        return auth_error
+
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        return jsonify({"error": "Invalid Tenant ID"}), 400
+
+    data = request.get_json(silent=True) or {}
+    organization_party_id = str(data.get("organization_party_id") or "").strip()
+    actor = _pces_admin_actor(data)
+
+    try:
+        org_uuid = uuid.UUID(organization_party_id)
+    except ValueError:
+        return jsonify({"error": "A valid Hospital Party ID is required"}), 400
+
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT name, hospital_code
+                    FROM ehr_ccm_schema.p_party
+                    WHERE party_id = %s
+                      AND party_type = 'ORGANIZATION'
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    LIMIT 1
+                    """,
+                    (org_uuid,),
+                )
+                hospital = cursor.fetchone()
+                if not hospital:
+                    return jsonify({"error": "Hospital was not found"}), 404
+
+                tenant_name, tenant_code = hospital
+                tenant_name = (tenant_name or "").strip()
+                tenant_code = (tenant_code or "").strip()
+
+                cursor.execute(
+                    """
+                    SELECT tenant_id
+                    FROM ehr_ccm_schema.p_tenant
+                    WHERE UPPER(tenant_code) = UPPER(%s)
+                      AND tenant_id <> %s
+                    LIMIT 1
+                    """,
+                    (tenant_code, tenant_uuid),
+                )
+                if cursor.fetchone():
+                    return jsonify({
+                        "error": f"Tenant Code '{tenant_code}' already exists"
+                    }), 409
+
+                cursor.execute(
+                    """
+                    UPDATE ehr_ccm_schema.p_tenant
+                    SET
+                        tenant_name = %s,
+                        tenant_code = %s,
+                        organization_party_id = %s,
+                        updated_at = NOW(),
+                        updated_by = %s,
+                        version_no = COALESCE(version_no, 0) + 1
+                    WHERE tenant_id = %s
+                      AND COALESCE(is_active, TRUE) = TRUE
+                    RETURNING tenant_id
+                    """,
+                    (
+                        tenant_name,
+                        tenant_code,
+                        org_uuid,
+                        actor,
+                        tenant_uuid,
+                    ),
+                )
+                updated = cursor.fetchone()
+                if not updated:
+                    return jsonify({"error": "Tenant not found"}), 404
+
+                cursor.execute(
+                    """
+                    INSERT INTO ehr_ccm_schema.p_party_tenant (
+                        party_tenant_id,
+                        party_id,
+                        tenant_id,
+                        status,
+                        created_at,
+                        created_by,
+                        is_active,
+                        version_no
+                    )
+                    VALUES (
+                        %s, %s, %s, 'ACTIVE',
+                        NOW(), %s, TRUE, 1
+                    )
+                    ON CONFLICT (party_id, tenant_id)
+                    DO UPDATE SET
+                        status = 'ACTIVE',
+                        is_active = TRUE,
+                        updated_at = NOW(),
+                        updated_by = EXCLUDED.created_by,
+                        version_no = COALESCE(ehr_ccm_schema.p_party_tenant.version_no, 0) + 1
+                    """,
+                    (
+                        uuid.uuid4(),
+                        org_uuid,
+                        tenant_uuid,
+                        actor,
+                    ),
+                )
+
+                tenant = _pces_admin_tenant_row(cursor, tenant_uuid)
+
+        return jsonify({"success": True, "tenant": tenant})
+
+    except Exception as exc:
+        logger.exception("Unable to update PCES admin tenant %s: %s", tenant_id, exc)
+        return jsonify({"error": "Unable to update tenant"}), 500
+
+# ============================================================
+# PCES ADMIN - Hospital User Management
+# ============================================================
+
+def _session_is_pces_admin() -> bool:
+    identity = session.get("pces_identity") or {}
+    party_type = str(identity.get("party_type") or "").strip().upper()
+    role_tokens = {
+        token.strip().upper()
+        for token in str(identity.get("pces_role") or "").split(",")
+        if token.strip()
+    }
+    return party_type == "PCES_ADMIN" or "PCES_ADMIN" in role_tokens
+
+
+def _require_pces_admin():
+    """Phase 1 user-management access guard.
+
+    For now, allow every authenticated PCES user to access the Hospital User
+    Management APIs. The PCES_ADMIN-only check can be restored later by
+    re-enabling the role validation here.
+    """
+    identity = session.get("pces_identity") or {}
+    if not identity.get("party_id"):
+        return jsonify({"error": "Please log in first."}), 401
+    return None
+
+
+@disciplines_bp.route("/api/pces-admin/user-management/hospitals", methods=["GET"])
+@handle_route_errors
+def pces_admin_user_hospitals():
+    auth_error = _require_pces_admin()
+    if auth_error:
+        return auth_error
+    name = (request.args.get("name") or "").strip()
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                    SELECT
+                        p.party_id,
+                        p.name,
+                        p.hospital_location,
+                        t.tenant_id
+                    FROM ehr_ccm_schema.p_party p
+                    JOIN ehr_ccm_schema.p_tenant t
+                      ON t.organization_party_id = p.party_id
+                    WHERE p.party_type = 'ORGANIZATION'
+                      AND COALESCE(p.is_active, TRUE) = TRUE
+                      AND COALESCE(t.is_active, TRUE) = TRUE
+                      AND t.status = 'ACTIVE'
+                """
+                params = []
+                if name:
+                    sql += " AND p.name ILIKE %s"
+                    params.append(f"%{name}%")
+                sql += " ORDER BY p.name ASC NULLS LAST, p.party_id LIMIT 10"
+                cursor.execute(sql, tuple(params))
+                rows = cursor.fetchall()
+        return jsonify([
+            {
+                "party_id": str(party_id),
+                "hospital_name": hospital_name or "",
+                "location_id": hospital_location or "",
+                "tenant_id": str(tenant_id),
+            }
+            for party_id, hospital_name, hospital_location, tenant_id in rows
+        ])
+    except Exception as exc:
+        logger.exception("Unable to load PCES admin hospitals for user management: %s", exc)
+        return jsonify({"error": "Unable to load hospitals"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/user-management/roles", methods=["GET"])
+@handle_route_errors
+def pces_admin_user_roles():
+    auth_error = _require_pces_admin()
+    if auth_error:
+        return auth_error
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT pces_role
+                    FROM ehr_ccm_schema.p_party
+                    WHERE pces_role IS NOT NULL
+                      AND BTRIM(pces_role) <> ''
+                    ORDER BY pces_role
+                """)
+                rows = cursor.fetchall()
+        return jsonify([row[0] for row in rows if row and row[0]])
+    except Exception as exc:
+        logger.exception("Unable to load PCES roles: %s", exc)
+        return jsonify({"error": "Unable to load PCES roles"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/user-management/users", methods=["GET"])
+@handle_route_errors
+def pces_admin_list_users():
+    auth_error = _require_pces_admin()
+    if auth_error:
+        return auth_error
+    tenant_id = str(request.args.get("tenant_id") or "").strip()
+    query = (request.args.get("q") or "").strip()
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        return jsonify({"error": "A valid tenant_id is required"}), 400
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                sql = """
+                    SELECT
+                        p.party_id, p.first_name, p.middle_name, p.last_name,
+                        p.party_type, p.pces_role, p.email, p.username,
+                        p.entra_object_id, p.created_at
+                    FROM ehr_ccm_schema.p_party_tenant pt
+                    JOIN ehr_ccm_schema.p_party p ON p.party_id = pt.party_id
+                    WHERE pt.tenant_id = %s
+                      AND COALESCE(pt.is_active, TRUE) = TRUE
+                      AND pt.status = 'ACTIVE'
+                      AND COALESCE(p.is_active, TRUE) = TRUE
+                      AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
+                """
+                params = [tenant_uuid]
+                if query:
+                    like = f"%{query}%"
+                    sql += """
+                      AND (
+                        COALESCE(p.first_name,'') ILIKE %s OR
+                        COALESCE(p.middle_name,'') ILIKE %s OR
+                        COALESCE(p.last_name,'') ILIKE %s OR
+                        COALESCE(p.email,'') ILIKE %s OR
+                        COALESCE(p.username,'') ILIKE %s
+                      )
+                    """
+                    params.extend([like, like, like, like, like])
+                sql += " ORDER BY p.created_at DESC NULLS LAST, p.last_name, p.first_name LIMIT 20"
+                cursor.execute(sql, tuple(params))
+                rows = cursor.fetchall()
+        return jsonify([
+            {
+                "party_id": str(r[0]), "first_name": r[1] or "", "middle_name": r[2] or "",
+                "last_name": r[3] or "", "party_type": r[4] or "", "pces_role": r[5] or "",
+                "email": r[6] or "", "username": r[7] or "", "entra_object_id": r[8] or "",
+                "created_at": r[9].isoformat(timespec="seconds") if r[9] else "",
+            } for r in rows
+        ])
+    except Exception as exc:
+        logger.exception("Unable to load users for tenant %s: %s", tenant_id, exc)
+        return jsonify({"error": "Unable to load users"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/user-management/users", methods=["POST"])
+@handle_route_errors
+def pces_admin_create_user():
+    auth_error = _require_pces_admin()
+    if auth_error:
+        return auth_error
+    data = request.get_json(silent=True) or {}
+    tenant_id = str(data.get("tenant_id") or "").strip()
+    first_name = (data.get("first_name") or "").strip()
+    middle_name = (data.get("middle_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    party_type = (data.get("party_type") or "").strip().upper()
+    pces_role = (data.get("pces_role") or "").strip()
+    email = (data.get("email") or "").strip()
+    username = (data.get("username") or "").strip()
+    actor = ((data.get("actor") or "PCES_UI").strip() or "PCES_UI")[:100]
+    allowed_types = {"DOCTOR", "NURSE", "OFFICE_ADMIN", "PCES_ADMIN"}
+    if not all([first_name, last_name, party_type, pces_role, email, username]):
+        return jsonify({"error": "First Name, Last Name, Party Type, PCES Role, Email and User Name are required"}), 400
+    if party_type not in allowed_types:
+        return jsonify({"error": "Invalid Party Type"}), 400
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        return jsonify({"error": "A valid tenant_id is required"}), 400
+    party_id = uuid.uuid4()
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1 FROM ehr_ccm_schema.p_tenant WHERE tenant_id=%s AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'", (tenant_uuid,))
+                if cursor.fetchone() is None:
+                    return jsonify({"error": "Selected hospital tenant was not found"}), 404
+                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(username)=LOWER(%s) LIMIT 1", (username,))
+                if cursor.fetchone():
+                    return jsonify({"error": f"User Name '{username}' already exists"}), 409
+                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(email)=LOWER(%s) LIMIT 1", (email,))
+                if cursor.fetchone():
+                    return jsonify({"error": f"Email '{email}' already exists"}), 409
+                cursor.execute("""
+                    INSERT INTO ehr_ccm_schema.p_party (
+                        party_id, party_type, first_name, middle_name, last_name,
+                        email, username, pces_role, created_at, created_by,
+                        is_active, version_no
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),%s,TRUE,1)
+                """, (party_id, party_type, first_name, middle_name or None, last_name, email, username, pces_role, actor))
+                cursor.execute("""
+                    INSERT INTO ehr_ccm_schema.p_party_tenant (
+                        party_tenant_id, party_id, tenant_id, status,
+                        created_at, created_by, is_active, version_no
+                    ) VALUES (%s,%s,%s,'ACTIVE',NOW(),%s,TRUE,1)
+                """, (uuid.uuid4(), party_id, tenant_uuid, actor))
+        return jsonify({"success": True, "party_id": str(party_id)}), 201
+    except Exception as exc:
+        logger.exception("Unable to create PCES managed user: %s", exc)
+        if "uk_p_party_username" in str(exc) or "duplicate key" in str(exc).lower():
+            return jsonify({"error": "User Name already exists"}), 409
+        return jsonify({"error": "Unable to create user"}), 500
+
+
+@disciplines_bp.route("/api/pces-admin/user-management/users/<party_id>", methods=["PUT"])
+@handle_route_errors
+def pces_admin_update_user(party_id: str):
+    auth_error = _require_pces_admin()
+    if auth_error:
+        return auth_error
+    try:
+        party_uuid = uuid.UUID(party_id)
+    except ValueError:
+        return jsonify({"error": "Invalid Party ID"}), 400
+    data = request.get_json(silent=True) or {}
+    tenant_id = str(data.get("tenant_id") or "").strip()
+    email = (data.get("email") or "").strip()
+    username = (data.get("username") or "").strip()
+    actor = ((data.get("actor") or "PCES_UI").strip() or "PCES_UI")[:100]
+    if not email or not username:
+        return jsonify({"error": "Email and User Name are required"}), 400
+    try:
+        tenant_uuid = uuid.UUID(tenant_id)
+    except ValueError:
+        return jsonify({"error": "A valid tenant_id is required"}), 400
+    try:
+        with _ehr_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 1 FROM ehr_ccm_schema.p_party_tenant
+                    WHERE party_id=%s AND tenant_id=%s AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'
+                    LIMIT 1
+                """, (party_uuid, tenant_uuid))
+                if cursor.fetchone() is None:
+                    return jsonify({"error": "User is not assigned to the selected hospital"}), 403
+                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(username)=LOWER(%s) AND party_id<>%s LIMIT 1", (username, party_uuid))
+                if cursor.fetchone():
+                    return jsonify({"error": f"User Name '{username}' already exists"}), 409
+                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(email)=LOWER(%s) AND party_id<>%s LIMIT 1", (email, party_uuid))
+                if cursor.fetchone():
+                    return jsonify({"error": f"Email '{email}' already exists"}), 409
+                cursor.execute("""
+                    UPDATE ehr_ccm_schema.p_party
+                    SET email=%s, username=%s, updated_at=NOW(), updated_by=%s,
+                        version_no=COALESCE(version_no,0)+1
+                    WHERE party_id=%s AND COALESCE(is_active,TRUE)=TRUE
+                      AND party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
+                    RETURNING party_id
+                """, (email, username, actor, party_uuid))
+                if cursor.fetchone() is None:
+                    return jsonify({"error": "User not found"}), 404
+        return jsonify({"success": True, "party_id": str(party_uuid)})
+    except Exception as exc:
+        logger.exception("Unable to update PCES managed user %s: %s", party_id, exc)
+        return jsonify({"error": "Unable to update user"}), 500
+
