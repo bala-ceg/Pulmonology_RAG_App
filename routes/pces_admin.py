@@ -59,7 +59,8 @@ def users_create():
 def users_update(party_id):
     if not _admin_id(): return _denied()
     data=request.get_json(silent=True) or {}
-    try: return jsonify({"success":True,**update_user(_admin_id(),party_id,data)})
+    tenant_id=data.pop("tenant_id","")
+    try: return jsonify({"success":True,**update_user(_admin_id(),party_id,tenant_id,data)})
     except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
     except Exception:
         current_app.logger.exception("Unable to update user")
