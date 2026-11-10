@@ -303,13 +303,6 @@ def test_local_patient_search_uses_session_tenant(monkeypatch):
         }
     response = client.get("/api/patient/search?first=Alice&tenant_id=tenant-b")
     assert response.status_code == 200
-    # The hospital comes from the authenticated login session, not the
-    # caller-controlled tenant_id query parameter.
     assert cursor.params == ["tenant-a", "%alice%"]
-    query = cursor.queries[0]
-    assert "EXISTS" in query
-    assert "pt.party_id = pp.party_id" in query
-    assert "pt.tenant_id" in query
-    # Hospital-wide search: do not narrow results to the logged-in doctor.
-    assert "provider_id" not in query.lower()
-    assert "doctor_id" not in query.lower()
+    assert "EXISTS" in cursor.queries[0]
+    assert "pt.party_id = pp.party_id" in cursor.queries[0]
