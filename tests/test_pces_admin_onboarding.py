@@ -36,6 +36,39 @@ def test_users_default_to_20(monkeypatch):
 def test_patch_is_admin_only():
     assert client().patch("/api/pces-admin/users/00000000-0000-0000-0000-000000000001",json={"email":"x@y.com"}).status_code==403
 
+def test_user_search_passes_last_name_party_type_and_email(monkeypatch):
+    from routes import pces_admin
+    seen={}
+    def fake(admin_id,tenant_id,last_name,party_type,email):
+        seen.update(tenant_id=tenant_id,last_name=last_name,party_type=party_type,email=email)
+        return [{"party_id":"p1","on_boarded":True,"on_board_date":"2026-08-15"}]
+    monkeypatch.setattr(pces_admin,"search_users",fake)
+    response=client(ADMIN).get(
+        "/api/pces-admin/users/search?tenant_id=00000000-0000-0000-0000-000000000001"
+        "&last_name=Pearson&party_type=DOCTOR&email=doctor%40example.test"
+    )
+    assert response.status_code==200
+    assert seen["last_name"]=="Pearson"
+    assert seen["party_type"]=="DOCTOR"
+    assert seen["email"]=="doctor@example.test"
+    assert response.get_json()["users"][0]["on_boarded"] is True
+
+
+def test_user_update_requires_selected_hospital_membership(monkeypatch):
+    from routes import pces_admin
+    seen={}
+    def fake(admin_id,party_id,tenant_id,data):
+        seen.update(party_id=party_id,tenant_id=tenant_id,data=data)
+        return {"party_id":party_id,"updated_fields":["email"]}
+    monkeypatch.setattr(pces_admin,"update_user",fake)
+    response=client(ADMIN).patch(
+        "/api/pces-admin/users/00000000-0000-0000-0000-000000000002",
+        json={"tenant_id":"00000000-0000-0000-0000-000000000001","email":"new@example.test"}
+    )
+    assert response.status_code==200
+    assert seen["tenant_id"]=="00000000-0000-0000-0000-000000000001"
+    assert seen["data"]=={"email":"new@example.test"}
+
 def test_onboard_is_admin_only():
     assert client().post("/api/pces-admin/users/00000000-0000-0000-0000-000000000001/onboard").status_code==403
 
