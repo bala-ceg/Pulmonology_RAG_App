@@ -15566,13 +15566,17 @@ function startPcesUserUpdate() {
 async function savePcesUser() {
     if(!pcesSelectedUserHospital?.tenant_id){alert('Select a hospital first.');return;}
     const payload={tenant_id:pcesSelectedUserHospital.tenant_id,
-      first_name:(document.getElementById('pces-user-first-name')?.value||'').trim(),
-      middle_name:(document.getElementById('pces-user-middle-name')?.value||'').trim(),
-      last_name:(document.getElementById('pces-user-last-name')?.value||'').trim(),
-      party_type:document.getElementById('pces-user-party-type')?.value||'',
-      pces_role:document.getElementById('pces-user-pces-role')?.value||'',
       email:(document.getElementById('pces-user-email')?.value||'').trim(),
       username:(document.getElementById('pces-user-username')?.value||'').trim()};
+    if(pcesUserMode==='insert'){
+      Object.assign(payload,{
+        first_name:(document.getElementById('pces-user-first-name')?.value||'').trim(),
+        middle_name:(document.getElementById('pces-user-middle-name')?.value||'').trim(),
+        last_name:(document.getElementById('pces-user-last-name')?.value||'').trim(),
+        party_type:document.getElementById('pces-user-party-type')?.value||'',
+        pces_role:document.getElementById('pces-user-pces-role')?.value||''
+      });
+    }
     if(pcesUserMode==='insert'&&(!payload.first_name||!payload.last_name||!payload.party_type||!payload.pces_role||!payload.email||!payload.username)){alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');return;}
     if(pcesUserMode==='update'&&(!payload.email||!payload.username)){alert('Email and User Name are required.');return;}
     if(!['insert','update'].includes(pcesUserMode))return;
