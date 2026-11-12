@@ -5263,39 +5263,49 @@ def pces_admin_user_hospitals():
     auth_error = _require_pces_admin()
     if auth_error:
         return auth_error
+
     name = (request.args.get("name") or "").strip()
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
+                # p_tenant is the authoritative hospital/tenant registry.
+                # Keep tenants even when organization_party_id is not populated;
+                # an INNER JOIN silently hid those hospitals from this picker.
                 sql = """
                     SELECT
-                        p.party_id,
-                        p.name,
-                        p.hospital_location,
+                        t.organization_party_id,
+                        COALESCE(NULLIF(BTRIM(p.name), ''), t.tenant_name),
+                        t.tenant_code,
                         t.tenant_id
-                    FROM ehr_ccm_schema.p_party p
-                    JOIN ehr_ccm_schema.p_tenant t
-                      ON t.organization_party_id = p.party_id
-                    WHERE p.party_type = 'ORGANIZATION'
-                      AND COALESCE(p.is_active, TRUE) = TRUE
-                      AND COALESCE(t.is_active, TRUE) = TRUE
+                    FROM ehr_ccm_schema.p_tenant t
+                    LEFT JOIN ehr_ccm_schema.p_party p
+                      ON p.party_id = t.organization_party_id
+                     AND p.party_type = 'ORGANIZATION'
+                     AND COALESCE(p.is_active, TRUE) = TRUE
+                    WHERE COALESCE(t.is_active, TRUE) = TRUE
                       AND t.status = 'ACTIVE'
                 """
                 params = []
                 if name:
-                    sql += " AND p.name ILIKE %s"
-                    params.append(f"%{name}%")
-                sql += " ORDER BY p.name ASC NULLS LAST, p.party_id LIMIT 10"
+                    sql += """ AND (
+                        COALESCE(p.name, '') ILIKE %s
+                        OR COALESCE(t.tenant_name, '') ILIKE %s
+                        OR COALESCE(t.tenant_code, '') ILIKE %s
+                    )"""
+                    like = f"%{name}%"
+                    params.extend([like, like, like])
+                sql += " ORDER BY t.tenant_name ASC NULLS LAST, t.tenant_code LIMIT 200"
                 cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
+
         return jsonify([
             {
-                "party_id": str(party_id),
-                "hospital_name": hospital_name or "",
-                "location_id": hospital_location or "",
-                "tenant_id": str(tenant_id),
+                "party_id": str(row[0]) if row[0] else "",
+                "hospital_name": row[1] or "",
+                "location_id": row[2] or "",
+                "tenant_id": str(row[3]),
             }
-            for party_id, hospital_name, hospital_location, tenant_id in rows
+            for row in rows
         ])
     except Exception as exc:
         logger.exception("Unable to load PCES admin hospitals for user management: %s", exc)
