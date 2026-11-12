@@ -243,7 +243,22 @@ def onboard_user(admin_id,party_id,tenant_id):
         if not row: raise OnboardingError("Doctor/Nurse record was not found")
         first,middle,last,email,username,oid,kind,party_tenant_id=row
         if not email or not username: raise OnboardingError("Email and username are required before onboarding")
-        if oid: raise OnboardingError("An Entra account is already linked; reconcile before retrying")
+        if oid:
+            # The Entra account already exists. Repair only the PCES membership
+            # onboarding flag; never provision a duplicate Entra identity.
+            with _connect() as repair_conn, repair_conn.cursor() as repair_cur:
+                _admin(repair_cur,admin_id)
+                repair_cur.execute("""UPDATE p_party_tenant
+                                      SET on_board=TRUE,updated_at=NOW(),updated_by=%s,
+                                          version_no=COALESCE(version_no,1)+1
+                                      WHERE party_tenant_id=%s
+                                      RETURNING on_board""",(admin_id,party_tenant_id))
+                if not repair_cur.fetchone():
+                    raise OnboardingError("Entra ID is linked, but the hospital membership could not be reconciled")
+            return {"party_id":party_id,"party_tenant_id":str(party_tenant_id),
+                    "tenant_id":tenant_id,"entra_object_id":str(oid),
+                    "on_boarded":True,"on_board_date":None,"email_sent":None,
+                    "message":"Existing Entra account linked; PCES onboarding status reconciled. Original onboarding date is unavailable."}
     oid,password=provision_entra_user({"first_name":first,"middle_name":middle,"last_name":last,"email":email})
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
