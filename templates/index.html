@@ -15408,7 +15408,7 @@ async function loadPcesUserRoles() {
     try {
         const response = await fetch('/api/pces-admin/user-management/roles');
         const rows = await response.json();
-        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
+        if (!response.ok || !rows.success) throw new Error(rows.error || `HTTP ${response.status}`);
         select.innerHTML = '<option value="">Select Role</option>';
         rows.forEach(role => {
             const opt = document.createElement('option');
@@ -15520,11 +15520,11 @@ async function searchPcesUsers() {
 
     try {
         const response = await fetch(`/api/pces-admin/users/search?${params.toString()}`);
-        const rows = await response.json();
-        if (!response.ok) {
-            throw new Error(rows.error || `HTTP ${response.status}`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
         }
-        pcesUserCache = Array.isArray(rows) ? rows : [];
+        pcesUserCache = Array.isArray(result.users) ? result.users : [];
         renderPcesUsers(pcesUserCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15695,13 +15695,17 @@ async function onboardSelectedPcesUser() {
         alert('An Entra ID is already linked to this user, but the onboarding date/status is incomplete. Do not create another Entra account. Reconcile the existing Entra account and PCES membership first.');
         return;
     }
-    if(!confirm('Create the Microsoft Entra account and send onboarding instructions to this user?'))return;
+    const hasLinkedEntraId = Boolean(pcesSelectedUserRecord.entra_id);
+    const confirmMessage = hasLinkedEntraId
+        ? 'An Entra ID is already linked. Reconcile the PCES onboarding status without creating another Entra account?'
+        : 'Create the Microsoft Entra account and send onboarding instructions to this user?';
+    if (!confirm(confirmMessage)) return;
     const button=[...document.querySelectorAll('.pces-user-admin-actions button')].find(b=>b.textContent.trim()==='On Board');
     if(button){button.disabled=true;button.textContent='Processing...';}
     try{
       const response=await fetch(`/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}/onboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant_id:pcesSelectedUserHospital.tenant_id})});
       const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||`HTTP ${response.status}`);
-      alert(result.email_sent?'User onboarded and email sent.':'User onboarded, but email delivery needs retry.');
+      alert(result.message || (result.email_sent ? 'User onboarded and email sent.' : 'User onboarded, but email delivery needs retry.'));
       await loadPcesUsersForHospital();
     }catch(error){alert(`Unable to onboard user: ${error.message}`);}
     finally{if(button){button.disabled=false;button.textContent='On Board';}}
