@@ -57,8 +57,8 @@ def list_users(admin_id, tenant_id, limit=20, offset=0):
                               p.email,p.username,p.entra_object_id,pt.on_board,pt.on_board_date,p.created_at
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
                        WHERE pt.tenant_id=%s AND pt.status='ACTIVE' AND COALESCE(pt.is_active,TRUE)=TRUE
-                         AND COALESCE(p.is_active,TRUE)=TRUE AND p.deleted_at IS NULL
-                         AND p.party_type IN ('DOCTOR','NURSE')
+                         AND COALESCE(p.is_active,TRUE)=TRUE
+                         AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
                        ORDER BY pt.on_board_date DESC NULLS LAST,p.created_at DESC LIMIT %s OFFSET %s""",
                     (tenant_id,limit,offset))
         rows=cur.fetchall()
@@ -70,9 +70,9 @@ def list_users(admin_id, tenant_id, limit=20, offset=0):
 
 def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
     tenant_id=_uuid(tenant_id,"hospital ID"); party_type=party_type.strip().upper()
-    if party_type and party_type not in {"DOCTOR","NURSE"}: raise OnboardingError("Party type must be DOCTOR or NURSE")
+    if party_type and party_type not in {"DOCTOR","NURSE","OFFICE_ADMIN","PCES_ADMIN"}: raise OnboardingError("Invalid party type")
     clauses=["pt.tenant_id=%s","pt.status='ACTIVE'","COALESCE(pt.is_active,TRUE)=TRUE",
-             "COALESCE(p.is_active,TRUE)=TRUE","p.deleted_at IS NULL","p.party_type IN ('DOCTOR','NURSE')"]
+             "COALESCE(p.is_active,TRUE)=TRUE","p.deleted_at IS NULL","p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')"]
     params=[tenant_id]
     for col,val in (("p.last_name",last_name),("p.party_type",party_type),("p.email",email)):
         if val.strip(): clauses.append("LOWER(COALESCE("+col+",'')) LIKE LOWER(%s)"); params.append("%"+val.strip()+"%")
@@ -248,8 +248,8 @@ def onboard_user(admin_id,party_id,tenant_id):
         cur.execute("""SELECT p.first_name,p.middle_name,p.last_name,p.email,p.username,p.entra_object_id,p.party_type,pt.party_tenant_id
                        FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
                        WHERE p.party_id=%s AND pt.tenant_id=%s AND pt.status='ACTIVE'
-                         AND COALESCE(pt.is_active,TRUE)=TRUE AND p.party_type IN ('DOCTOR','NURSE')
-                         AND COALESCE(p.is_active,TRUE)=TRUE AND p.deleted_at IS NULL FOR UPDATE OF p,pt""",(party_id,tenant_id))
+                         AND COALESCE(pt.is_active,TRUE)=TRUE AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
+                         AND COALESCE(p.is_active,TRUE)=TRUE FOR UPDATE OF p,pt""",(party_id,tenant_id))
         row=cur.fetchone()
         if not row: raise OnboardingError("Doctor/Nurse record was not found")
         first,middle,last,email,username,oid,kind,party_tenant_id=row
