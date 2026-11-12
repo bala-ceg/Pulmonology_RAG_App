@@ -15545,52 +15545,134 @@ function clearPcesUserForm() {
     setPcesUserFormMode('view');
 }
 function setPcesUserFormMode(mode) {
-    const insert=mode==='insert',update=mode==='update';
-    ['pces-user-first-name','pces-user-middle-name','pces-user-last-name'].forEach(id=>{const el=document.getElementById(id);if(el)el.readOnly=!insert;});
-    const pt=document.getElementById('pces-user-party-type');if(pt)pt.disabled=!insert;
-    const pr=document.getElementById('pces-user-pces-role');if(pr)pr.disabled=!insert;
-    const email=document.getElementById('pces-user-email');if(email)email.readOnly=!(insert||update);
-    const username=document.getElementById('pces-user-username');if(username)username.readOnly=!(insert||update);
-    const save=document.getElementById('pces-user-save-btn');if(save)save.style.display=(insert||update)?'':'none';
+    const insert = mode === 'insert';
+    const update = mode === 'update';
+
+    // Existing user identity attributes are editable in Update mode too.
+    // Party ID and Entra ID remain system-managed/read-only.
+    ['pces-user-first-name', 'pces-user-middle-name', 'pces-user-last-name'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = !(insert || update);
+    });
+
+    const partyType = document.getElementById('pces-user-party-type');
+    if (partyType) partyType.disabled = !(insert || update);
+
+    const pcesRole = document.getElementById('pces-user-pces-role');
+    if (pcesRole) pcesRole.disabled = !(insert || update);
+
+    const email = document.getElementById('pces-user-email');
+    if (email) email.readOnly = !(insert || update);
+
+    const username = document.getElementById('pces-user-username');
+    if (username) username.readOnly = !(insert || update);
+
+    const save = document.getElementById('pces-user-save-btn');
+    if (save) save.style.display = (insert || update) ? '' : 'none';
 }
+
 function startPcesUserInsert() {
-    if(!pcesSelectedUserHospital){alert('Select a hospital first.');return;}
-    pcesSelectedUserRecord=null;pcesUserMode='insert';clearPcesUserForm();setPcesUserFormMode('insert');
+    if (!pcesSelectedUserHospital) {
+        alert('Select a hospital first.');
+        return;
+    }
+    pcesSelectedUserRecord = null;
+    pcesUserMode = 'insert';
+    clearPcesUserForm();
+    setPcesUserFormMode('insert');
     document.getElementById('pces-user-first-name')?.focus();
 }
+
 function startPcesUserUpdate() {
-    if(!pcesSelectedUserRecord){alert('Select a user first.');return;}
-    pcesUserMode='update';populatePcesUserForm(pcesSelectedUserRecord);setPcesUserFormMode('update');
-    document.getElementById('pces-user-email')?.focus();
-}
-async function savePcesUser() {
-    if(!pcesSelectedUserHospital?.tenant_id){alert('Select a hospital first.');return;}
-    const payload={tenant_id:pcesSelectedUserHospital.tenant_id,
-      email:(document.getElementById('pces-user-email')?.value||'').trim(),
-      username:(document.getElementById('pces-user-username')?.value||'').trim()};
-    if(pcesUserMode==='insert'){
-      Object.assign(payload,{
-        first_name:(document.getElementById('pces-user-first-name')?.value||'').trim(),
-        middle_name:(document.getElementById('pces-user-middle-name')?.value||'').trim(),
-        last_name:(document.getElementById('pces-user-last-name')?.value||'').trim(),
-        party_type:document.getElementById('pces-user-party-type')?.value||'',
-        pces_role:document.getElementById('pces-user-pces-role')?.value||''
-      });
+    if (!pcesSelectedUserRecord) {
+        alert('Select a user first.');
+        return;
     }
-    if(pcesUserMode==='insert'&&(!payload.first_name||!payload.last_name||!payload.party_type||!payload.pces_role||!payload.email||!payload.username)){alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');return;}
-    if(pcesUserMode==='update'&&(!payload.email||!payload.username)){alert('Email and User Name are required.');return;}
-    if(!['insert','update'].includes(pcesUserMode))return;
-    const isUpdate=pcesUserMode==='update',url=isUpdate?`/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`:'/api/pces-admin/users';
-    const button=document.getElementById('pces-user-save-btn');if(button){button.disabled=true;button.textContent='Saving...';}
-    try{
-      const response=await fetch(url,{method:isUpdate?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||result.message||`HTTP ${response.status}`);
-      alert(isUpdate?'User updated successfully.':'User created successfully.');pcesUserMode='view';
-      await loadPcesUsersForHospital();const idx=pcesUserCache.findIndex(u=>u.party_id===result.party_id);
-      const rows=document.querySelectorAll('#pces-user-list-body tr');if(idx>=0&&rows[idx])selectPcesUser(pcesUserCache[idx],rows[idx]);
-    }catch(error){console.error('[PCES User Admin] Save failed:',error);alert(`Unable to save user: ${error.message}`);}
-    finally{if(button){button.disabled=false;button.textContent='Save';}}
+    pcesUserMode = 'update';
+    populatePcesUserForm(pcesSelectedUserRecord);
+    setPcesUserFormMode('update');
+    document.getElementById('pces-user-first-name')?.focus();
 }
+
+async function savePcesUser() {
+    if (!pcesSelectedUserHospital?.tenant_id) {
+        alert('Select a hospital first.');
+        return;
+    }
+
+    const payload = {
+        tenant_id: pcesSelectedUserHospital.tenant_id,
+        first_name: (document.getElementById('pces-user-first-name')?.value || '').trim(),
+        middle_name: (document.getElementById('pces-user-middle-name')?.value || '').trim(),
+        last_name: (document.getElementById('pces-user-last-name')?.value || '').trim(),
+        party_type: document.getElementById('pces-user-party-type')?.value || '',
+        pces_role: document.getElementById('pces-user-pces-role')?.value || '',
+        email: (document.getElementById('pces-user-email')?.value || '').trim(),
+        username: (document.getElementById('pces-user-username')?.value || '').trim()
+    };
+
+    if (pcesUserMode === 'insert' || pcesUserMode === 'update') {
+        if (!payload.first_name || !payload.last_name || !payload.party_type ||
+            !payload.pces_role || !payload.email || !payload.username) {
+            alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');
+            return;
+        }
+    } else {
+        return;
+    }
+
+    const isUpdate = pcesUserMode === 'update';
+    if (isUpdate && !pcesSelectedUserRecord?.party_id) {
+        alert('Select a user before updating.');
+        return;
+    }
+
+    const url = isUpdate
+        ? `/api/pces-admin/user-management/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`
+        : '/api/pces-admin/user-management/users';
+    const button = document.getElementById('pces-user-save-btn');
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving...';
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: isUpdate ? 'PUT' : 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        }
+
+        alert(isUpdate ? 'User updated successfully.' : 'User created successfully.');
+        pcesUserMode = 'view';
+
+        await loadPcesUsersForHospital(
+            (document.getElementById('pces-user-search-text')?.value || '').trim()
+        );
+
+        const targetId = result.party_id;
+        const index = pcesUserCache.findIndex(user => user.party_id === targetId);
+        const rows = document.querySelectorAll('#pces-user-list-body tr');
+        if (index >= 0 && rows[index]) {
+            selectPcesUser(pcesUserCache[index], rows[index]);
+        }
+    } catch (error) {
+        console.error('[PCES User Admin] Save failed:', error);
+        alert(`Unable to save user: ${error.message}`);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Save';
+        }
+    }
+}
+
 async function onboardSelectedPcesUser() {
     if(!pcesSelectedUserHospital?.tenant_id||!pcesSelectedUserRecord){alert('Select a user first.');return;}
     if(pcesSelectedUserRecord.on_boarded||pcesSelectedUserRecord.entra_id){alert('This user is already onboarded or has an Entra ID linked.');return;}
