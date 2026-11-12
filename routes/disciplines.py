@@ -5447,47 +5447,94 @@ def pces_admin_update_user(party_id: str):
     auth_error = _require_pces_admin()
     if auth_error:
         return auth_error
+
     try:
         party_uuid = uuid.UUID(party_id)
     except ValueError:
         return jsonify({"error": "Invalid Party ID"}), 400
+
     data = request.get_json(silent=True) or {}
     tenant_id = str(data.get("tenant_id") or "").strip()
+    first_name = (data.get("first_name") or "").strip()
+    middle_name = (data.get("middle_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    party_type = (data.get("party_type") or "").strip().upper()
+    pces_role = (data.get("pces_role") or "").strip()
     email = (data.get("email") or "").strip()
     username = (data.get("username") or "").strip()
     actor = ((data.get("actor") or "PCES_UI").strip() or "PCES_UI")[:100]
-    if not email or not username:
-        return jsonify({"error": "Email and User Name are required"}), 400
+
+    allowed_types = {"DOCTOR", "NURSE", "OFFICE_ADMIN", "PCES_ADMIN"}
+    if not all([first_name, last_name, party_type, pces_role, email, username]):
+        return jsonify({
+            "error": "First Name, Last Name, Party Type, PCES Role, Email and User Name are required"
+        }), 400
+    if party_type not in allowed_types:
+        return jsonify({"error": "Invalid Party Type"}), 400
+
     try:
         tenant_uuid = uuid.UUID(tenant_id)
     except ValueError:
         return jsonify({"error": "A valid tenant_id is required"}), 400
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT 1 FROM ehr_ccm_schema.p_party_tenant
-                    WHERE party_id=%s AND tenant_id=%s AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'
+                    WHERE party_id=%s AND tenant_id=%s
+                      AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'
                     LIMIT 1
                 """, (party_uuid, tenant_uuid))
                 if cursor.fetchone() is None:
                     return jsonify({"error": "User is not assigned to the selected hospital"}), 403
-                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(username)=LOWER(%s) AND party_id<>%s LIMIT 1", (username, party_uuid))
+
+                cursor.execute("""
+                    SELECT party_id FROM ehr_ccm_schema.p_party
+                    WHERE LOWER(username)=LOWER(%s) AND party_id<>%s
+                    LIMIT 1
+                """, (username, party_uuid))
                 if cursor.fetchone():
                     return jsonify({"error": f"User Name '{username}' already exists"}), 409
-                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(email)=LOWER(%s) AND party_id<>%s LIMIT 1", (email, party_uuid))
+
+                cursor.execute("""
+                    SELECT party_id FROM ehr_ccm_schema.p_party
+                    WHERE LOWER(email)=LOWER(%s) AND party_id<>%s
+                    LIMIT 1
+                """, (email, party_uuid))
                 if cursor.fetchone():
                     return jsonify({"error": f"Email '{email}' already exists"}), 409
+
                 cursor.execute("""
                     UPDATE ehr_ccm_schema.p_party
-                    SET email=%s, username=%s, updated_at=NOW(), updated_by=%s,
+                    SET first_name=%s,
+                        middle_name=%s,
+                        last_name=%s,
+                        party_type=%s,
+                        pces_role=%s,
+                        email=%s,
+                        username=%s,
+                        updated_at=NOW(),
+                        updated_by=%s,
                         version_no=COALESCE(version_no,0)+1
-                    WHERE party_id=%s AND COALESCE(is_active,TRUE)=TRUE
+                    WHERE party_id=%s
+                      AND COALESCE(is_active,TRUE)=TRUE
                       AND party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
                     RETURNING party_id
-                """, (email, username, actor, party_uuid))
+                """, (
+                    first_name,
+                    middle_name or None,
+                    last_name,
+                    party_type,
+                    pces_role,
+                    email,
+                    username,
+                    actor,
+                    party_uuid,
+                ))
                 if cursor.fetchone() is None:
                     return jsonify({"error": "User not found"}), 404
+
         return jsonify({"success": True, "party_id": str(party_uuid)})
     except Exception as exc:
         logger.exception("Unable to update PCES managed user %s: %s", party_id, exc)
