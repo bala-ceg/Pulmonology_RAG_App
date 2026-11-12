@@ -101,26 +101,59 @@ def create_user(admin_id,tenant_id,data):
     return {"party_id":party_id,"party_tenant_id":membership_id,"tenant_id":tenant_id,"on_boarded":False}
 
 def update_user(admin_id,party_id,tenant_id,data):
-    admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID")
+    admin_id=_uuid(admin_id,"PCES Admin party ID")
+    party_id=_uuid(party_id,"party ID")
     tenant_id=_uuid(tenant_id,"hospital ID")
-    if not data or set(data)-{"email","username"}: raise OnboardingError("Only email and username can be updated")
-    sets=[]; vals=[]
-    for key in ("email","username"):
+
+    allowed={"first_name","middle_name","last_name","party_type","pces_role","email","username"}
+    if not data or set(data)-allowed:
+        raise OnboardingError("Unsupported user fields were supplied")
+
+    values={}
+    for key in allowed:
         if key in data:
-            value=str(data[key] or "").strip()
-            if not value: raise OnboardingError(key+" cannot be empty")
-            sets.append(key+"=%s"); vals.append(value)
-    if not sets: raise OnboardingError("Provide email or username to update")
+            values[key]=str(data[key] or "").strip()
+    for key in ("first_name","last_name","party_type","pces_role","email","username"):
+        if key not in values or not values[key]:
+            raise OnboardingError(key.replace("_"," ").title()+" is required")
+    if values["party_type"] not in {"DOCTOR","NURSE"}:
+        raise OnboardingError("Only DOCTOR and NURSE users can be updated")
+
+    columns={"first_name":"first_name","middle_name":"middle_name","last_name":"last_name",
+             "party_type":"party_type","pces_role":"pces_role","email":"email","username":"username"}
+    sets=[]
+    vals=[]
+    for key in columns:
+        if key in values:
+            sets.append(columns[key]+"=%s")
+            vals.append(values[key] or None)
+
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
         cur.execute("""SELECT 1 FROM p_party_tenant
                        WHERE party_id=%s AND tenant_id=%s AND status='ACTIVE'
                          AND COALESCE(is_active,TRUE)=TRUE""",(party_id,tenant_id))
-        if not cur.fetchone(): raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
-        cur.execute("UPDATE p_party SET "+",".join(sets)+",updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1 WHERE party_id=%s AND party_type IN ('DOCTOR','NURSE') RETURNING party_id",
+        if not cur.fetchone():
+            raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
+
+        cur.execute("""SELECT 1 FROM p_party
+                       WHERE party_id<>%s AND LOWER(username)=LOWER(%s) LIMIT 1""",
+                    (party_id,values["username"]))
+        if cur.fetchone():
+            raise OnboardingError("User Name already exists")
+        cur.execute("""SELECT 1 FROM p_party
+                       WHERE party_id<>%s AND LOWER(email)=LOWER(%s) LIMIT 1""",
+                    (party_id,values["email"]))
+        if cur.fetchone():
+            raise OnboardingError("Email already exists")
+
+        cur.execute("UPDATE p_party SET "+",".join(sets)+
+                    ",updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1 "+
+                    "WHERE party_id=%s AND party_type IN ('DOCTOR','NURSE') RETURNING party_id",
                     tuple(vals+[admin_id,party_id]))
-        if not cur.fetchone(): raise OnboardingError("Doctor/Nurse record was not found")
-    return {"party_id":party_id,"updated_fields":sorted(data)}
+        if not cur.fetchone():
+            raise OnboardingError("Doctor/Nurse record was not found")
+    return {"party_id":party_id,"updated_fields":sorted(values)}
 
 def _temp_password():
     alphabet=string.ascii_letters+string.digits
