@@ -15691,10 +15691,6 @@ async function onboardSelectedPcesUser() {
         alert('This user is already onboarded.');
         return;
     }
-    if (pcesSelectedUserRecord.entra_id) {
-        alert('An Entra ID is already linked to this user, but the onboarding date/status is incomplete. Do not create another Entra account. Reconcile the existing Entra account and PCES membership first.');
-        return;
-    }
     const hasLinkedEntraId = Boolean(pcesSelectedUserRecord.entra_id);
     const confirmMessage = hasLinkedEntraId
         ? 'An Entra ID is already linked. Reconcile the PCES onboarding status without creating another Entra account?'
