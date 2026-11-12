@@ -15480,36 +15480,57 @@ function selectPcesUserHospital(row,tr) {
 }
 
 async function loadPcesUsersForHospital() {
-    const body=document.getElementById('pces-user-list-body');
-    if(!body||!pcesSelectedUserHospital?.tenant_id)return;
-    body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:14px;">Loading users...</td></tr>';
-    const params=new URLSearchParams({tenant_id:pcesSelectedUserHospital.tenant_id,limit:'20',offset:'0'});
+    const body = document.getElementById('pces-user-list-body');
+    if (!body || !pcesSelectedUserHospital?.tenant_id) return;
+
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Loading users...</td></tr>';
+    const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
+
     try {
-        const response=await fetch(`/api/pces-admin/users?${params.toString()}`);
-        const result=await response.json();
-        if(!response.ok||!result.success)throw new Error(result.error||`HTTP ${response.status}`);
-        pcesUserCache=Array.isArray(result.users)?result.users:[];
+        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const rows = await response.json();
+        if (!response.ok) {
+            throw new Error(rows.error || `HTTP ${response.status}`);
+        }
+        pcesUserCache = Array.isArray(rows) ? rows : [];
         renderPcesUsers(pcesUserCache);
-    } catch(error) {
-        body.innerHTML=`<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
     }
 }
-function searchPcesUsers() {
-    if(!pcesSelectedUserHospital){alert('Select a hospital first.');return;}
-    const params=new URLSearchParams({tenant_id:pcesSelectedUserHospital.tenant_id});
-    const lastName=(document.getElementById('pces-user-search-last-name')?.value||'').trim();
-    const partyType=document.getElementById('pces-user-search-party-type')?.value||'';
-    const email=(document.getElementById('pces-user-search-email')?.value||'').trim();
-    if(lastName)params.set('last_name',lastName);
-    if(partyType)params.set('party_type',partyType);
-    if(email)params.set('email',email);
-    const body=document.getElementById('pces-user-list-body');
-    body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:14px;">Searching...</td></tr>';
-    fetch(`/api/pces-admin/users/search?${params.toString()}`)
-      .then(async response=>{const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||`HTTP ${response.status}`);return result.users||[];})
-      .then(rows=>{pcesUserCache=rows;renderPcesUsers(rows);})
-      .catch(error=>{body.innerHTML=`<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;});
+
+async function searchPcesUsers() {
+    if (!pcesSelectedUserHospital?.tenant_id) {
+        alert('Select a hospital first.');
+        return;
+    }
+
+    const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
+    const lastName = (document.getElementById('pces-user-search-last-name')?.value || '').trim();
+    const partyType = document.getElementById('pces-user-search-party-type')?.value || '';
+    const email = (document.getElementById('pces-user-search-email')?.value || '').trim();
+
+    if (lastName) params.set('last_name', lastName);
+    if (partyType) params.set('party_type', partyType);
+    if (email) params.set('email', email);
+
+    const body = document.getElementById('pces-user-list-body');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Searching...</td></tr>';
+
+    try {
+        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const rows = await response.json();
+        if (!response.ok) {
+            throw new Error(rows.error || `HTTP ${response.status}`);
+        }
+        pcesUserCache = Array.isArray(rows) ? rows : [];
+        renderPcesUsers(pcesUserCache);
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+    }
 }
+
 function renderPcesUsers(rows) {
     const body=document.getElementById('pces-user-list-body'); if(!body)return; body.innerHTML='';
     if(!rows.length){body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:14px;">No users found.</td></tr>';pcesSelectedUserRecord=null;clearPcesUserForm();return;}
