@@ -5402,7 +5402,7 @@ def pces_admin_list_users():
                 "email": row[6] or "",
                 "username": row[7] or "",
                 "entra_id": str(row[8] or ""),
-                "on_boarded": bool(row[8]),
+                "on_boarded": None,
                 "on_board_date": "",
                 "created_at": row[9].isoformat(timespec="seconds") if row[9] else "",
             }
