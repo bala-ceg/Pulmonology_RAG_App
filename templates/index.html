@@ -4890,6 +4890,17 @@
                                     <div class="doctor-popup-value" id="popup-patient-name">—</div>
                                 </div>
                             </div>
+                            <div class="doctor-popup-row" style="border-top:1px solid #eee;margin-top:6px;padding-top:8px;">
+                                <span class="doctor-popup-icon">👤</span>
+                                <div style="flex:1;">
+                                    <div class="doctor-popup-label">Profile</div>
+                                    <div class="doctor-popup-value">Security</div>
+                                    <button type="button" onclick="openPasswordHelpModal(event)"
+                                        style="margin-top:6px;padding:6px 10px;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font-size:12px;font-weight:600;">
+                                        🔐 Change / reset password
+                                    </button>
+                                </div>
+                            </div>
                             <div class="doctor-popup-row" onclick="logout()" style="cursor:pointer;border-top:1px solid #eee;margin-top:6px;padding-top:6px;">
                                 <span class="doctor-popup-icon">🚪</span>
                                 <div>
@@ -4900,6 +4911,35 @@
                     </div>
                 </div>
             </div>
+            <!-- Microsoft-hosted password reset guidance. PCES never collects the new password. -->
+            <div id="pces-password-help-overlay" role="dialog" aria-modal="true"
+                 aria-labelledby="pces-password-help-title"
+                 style="display:none;position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px;">
+                <div style="background:#fff;color:#24292f;border-radius:12px;max-width:480px;width:100%;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.25);">
+                    <h2 id="pces-password-help-title" style="margin:0 0 12px;font-size:20px;">Change / reset password</h2>
+                    <p style="line-height:1.55;margin:0 0 12px;">
+                        Your PCES password is managed securely by Microsoft. To choose a new password:
+                    </p>
+                    <ol style="padding-left:22px;line-height:1.6;margin:0 0 16px;">
+                        <li>Sign out of PCES.</li>
+                        <li>Continue to the Microsoft sign-in page.</li>
+                        <li>Select <strong>Forgot password?</strong></li>
+                        <li>Verify the code sent to your registered email and set your new password.</li>
+                    </ol>
+                    <p style="font-size:13px;color:#57606a;line-height:1.5;margin:0 0 18px;">
+                        Password entry and email verification happen on Microsoft's hosted pages.
+                        PCES does not collect or store your new password. Your hospital memberships are not changed.
+                    </p>
+                    <div id="pces-password-help-error" role="alert" style="display:none;color:#b42318;font-size:13px;margin-bottom:12px;"></div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
+                        <button type="button" onclick="closePasswordHelpModal()"
+                            style="padding:9px 14px;border:1px solid #d0d7de;border-radius:7px;background:#fff;cursor:pointer;">Cancel</button>
+                        <button type="button" id="pces-password-continue-btn" onclick="startPasswordReset()"
+                            style="padding:9px 14px;border:0;border-radius:7px;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer;">Sign out and continue</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Allergy bar: CLINICAL AI RESPONSE label (left) + Known Allergies (right) -->
             <div class="allergy-bar">
                 <span class="response-label">CLINICAL AI RESPONSE</span>
@@ -5629,13 +5669,20 @@
                 <button type="button" class="entity-action-btn" onclick="startPcesUserInsert()">Insert</button>
                 <button type="button" class="entity-action-btn" onclick="startPcesUserUpdate()">Update</button>
                 <button type="button" class="entity-action-btn" onclick="searchPcesUsers()">Search</button>
+                <button type="button" class="entity-action-btn" onclick="onboardSelectedPcesUser()">On Board</button>
             </div>
         </div>
 
-        <div class="pces-user-search-toolbar">
-            <label for="pces-user-search-text">Search User</label>
-            <input id="pces-user-search-text" type="text" maxlength="200"
-                   placeholder="Name, email or username"
+        <div class="pces-user-search-toolbar" style="flex-wrap:wrap;">
+            <label for="pces-user-search-last-name">Last Name</label>
+            <input id="pces-user-search-last-name" type="text" maxlength="100" placeholder="Last Name"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}">
+            <label for="pces-user-search-party-type">Party Type</label>
+            <select id="pces-user-search-party-type">
+                <option value="">All</option><option value="DOCTOR">DOCTOR</option><option value="NURSE">NURSE</option>
+            </select>
+            <label for="pces-user-search-email">Email</label>
+            <input id="pces-user-search-email" type="email" maxlength="255" placeholder="Email"
                    onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}">
             <span id="pces-user-selected-hospital-label"></span>
         </div>
@@ -5645,6 +5692,7 @@
                 <thead><tr>
                     <th>S No</th><th>First Name</th><th>Middle</th><th>Last Name</th>
                     <th>Party Type</th><th>PCES Role</th><th>Email</th><th>User Name</th><th>Entra ID</th>
+                    <th>On Boarded</th><th>On Board Date</th>
                 </tr></thead>
                 <tbody id="pces-user-list-body"></tbody>
             </table>
@@ -5686,6 +5734,13 @@
     <div class="entity-list-area tenant-list-area">
         <div class="entity-list-title">
             Tenant List Applet
+        </div>
+
+        <div class="tenant-toolbar">
+            <button type="button"
+                    onclick="window.location.href='/auth/entra/admin'">
+                Provider Access Requests
+            </button>
         </div>
 
         <div class="tenant-toolbar">
@@ -6555,6 +6610,9 @@
                 g_med_assist_id: null,
                 g_office_admin_id: null,
                 g_user_id: null,
+                g_doctor_name: null,
+                g_patient_name: null,
+                g_hospital_name: null,
                 g_temp1_id: null,
                 g_temp2_id: null,
                 g_temp3_id: null
@@ -6584,6 +6642,9 @@
             g_med_assist_id: normalizePcesContextValue(_savedPcesContext.g_med_assist_id),
             g_office_admin_id: normalizePcesContextValue(_savedPcesContext.g_office_admin_id),
             g_user_id: normalizePcesContextValue(_savedPcesContext.g_user_id),
+            g_doctor_name: normalizePcesContextValue(_savedPcesContext.g_doctor_name || sessionStorage.getItem('pces_doctor_name')),
+            g_patient_name: normalizePcesContextValue(_savedPcesContext.g_patient_name || sessionStorage.getItem('pces_patient_name')),
+            g_hospital_name: normalizePcesContextValue(_savedPcesContext.g_hospital_name || sessionStorage.getItem('pces_hospital_name')),
             g_temp1_id: normalizePcesContextValue(_savedPcesContext.g_temp1_id),
             g_temp2_id: normalizePcesContextValue(_savedPcesContext.g_temp2_id),
             g_temp3_id: normalizePcesContextValue(_savedPcesContext.g_temp3_id)
@@ -15347,7 +15408,7 @@ async function loadPcesUserRoles() {
     try {
         const response = await fetch('/api/pces-admin/user-management/roles');
         const rows = await response.json();
-        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
+        if (!response.ok || !rows.success) throw new Error(rows.error || `HTTP ${response.status}`);
         select.innerHTML = '<option value="">Select Role</option>';
         rows.forEach(role => {
             const opt = document.createElement('option');
@@ -15367,10 +15428,10 @@ async function loadPcesUserHospitals(searchName = '') {
     body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;">Loading hospitals...</td></tr>';
     const q = searchName ? `?name=${encodeURIComponent(searchName)}` : '';
     try {
-        const response = await fetch(`/api/pces-admin/user-management/hospitals${q}`);
+        const response = await fetch(`/api/pces-admin/hospitals${q}`);
         const rows = await response.json();
         if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
-        pcesUserHospitalCache = Array.isArray(rows) ? rows : [];
+        pcesUserHospitalCache = Array.isArray(rows.hospitals) ? rows.hospitals : [];
         renderPcesUserHospitals(pcesUserHospitalCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15415,103 +15476,127 @@ function selectPcesUserHospital(row,tr) {
     const label = document.getElementById('pces-user-selected-hospital-label');
     if (label) label.textContent = row.hospital_name ? `Hospital: ${row.hospital_name}` : '';
     clearPcesUserForm();
-    loadPcesUsersForHospital('');
+    loadPcesUsersForHospital();
 }
 
-async function loadPcesUsersForHospital(searchText = '') {
+async function loadPcesUsersForHospital() {
     const body = document.getElementById('pces-user-list-body');
     if (!body || !pcesSelectedUserHospital?.tenant_id) return;
-    body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:14px;">Loading users...</td></tr>';
-    const params = new URLSearchParams({tenant_id:pcesSelectedUserHospital.tenant_id});
-    if (searchText) params.set('q',searchText);
+
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Loading users...</td></tr>';
+    const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
+
     try {
-        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
-        const rows = await response.json();
-        if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
-        pcesUserCache = Array.isArray(rows) ? rows : [];
+        const response = await fetch(`/api/pces-admin/users?${params.toString()}`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        pcesUserCache = Array.isArray(result.users) ? result.users : [];
         renderPcesUsers(pcesUserCache);
     } catch (error) {
-        body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
     }
 }
 
-function searchPcesUsers() {
-    if (!pcesSelectedUserHospital) { alert('Select a hospital first.'); return; }
-    loadPcesUsersForHospital((document.getElementById('pces-user-search-text')?.value || '').trim());
+async function searchPcesUsers() {
+    if (!pcesSelectedUserHospital?.tenant_id) {
+        alert('Select a hospital first.');
+        return;
+    }
+
+    const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
+    const lastName = (document.getElementById('pces-user-search-last-name')?.value || '').trim();
+    const partyType = document.getElementById('pces-user-search-party-type')?.value || '';
+    const email = (document.getElementById('pces-user-search-email')?.value || '').trim();
+
+    if (lastName) params.set('last_name', lastName);
+    if (partyType) params.set('party_type', partyType);
+    if (email) params.set('email', email);
+
+    const body = document.getElementById('pces-user-list-body');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Searching...</td></tr>';
+
+    try {
+        const response = await fetch(`/api/pces-admin/users/search?${params.toString()}`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        pcesUserCache = Array.isArray(result.users) ? result.users : [];
+        renderPcesUsers(pcesUserCache);
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
+    }
 }
 
 function renderPcesUsers(rows) {
-    const body = document.getElementById('pces-user-list-body');
-    if (!body) return;
-    body.innerHTML = '';
-    if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:14px;">No users found.</td></tr>';
-        pcesSelectedUserRecord = null;
-        clearPcesUserForm();
-        return;
-    }
-    rows.forEach((row,index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="text-align:center;">${index+1}</td>
-            <td>${escapeEntityHtml(row.first_name || '—')}</td>
-            <td>${escapeEntityHtml(row.middle_name || '—')}</td>
-            <td>${escapeEntityHtml(row.last_name || '—')}</td>
-            <td>${escapeEntityHtml(row.party_type || '—')}</td>
-            <td>${escapeEntityHtml(row.pces_role || '—')}</td>
-            <td>${escapeEntityHtml(row.email || '—')}</td>
-            <td>${escapeEntityHtml(row.username || '—')}</td>
-            <td>${escapeEntityHtml(row.entra_object_id || '—')}</td>`;
-        tr.addEventListener('click', () => selectPcesUser(row,tr));
-        body.appendChild(tr);
+    const body=document.getElementById('pces-user-list-body'); if(!body)return; body.innerHTML='';
+    if(!rows.length){body.innerHTML='<tr><td colspan="11" style="text-align:center;padding:14px;">No users found.</td></tr>';pcesSelectedUserRecord=null;clearPcesUserForm();return;}
+    rows.forEach((row,index)=>{
+        const tr=document.createElement('tr');
+        const onBoardDate=row.on_board_date?new Date(row.on_board_date+'T00:00:00').toLocaleDateString():'—';
+        tr.innerHTML=`<td style="text-align:center;">${index+1}</td>
+          <td>${escapeEntityHtml(row.first_name||'—')}</td><td>${escapeEntityHtml(row.middle_name||'—')}</td>
+          <td>${escapeEntityHtml(row.last_name||'—')}</td><td>${escapeEntityHtml(row.party_type||'—')}</td>
+          <td>${escapeEntityHtml(row.pces_role||'—')}</td><td>${escapeEntityHtml(row.email||'—')}</td>
+          <td>${escapeEntityHtml(row.username||'—')}</td><td>${escapeEntityHtml(row.entra_id||'—')}</td>
+          <td>${row.on_boarded === true ? 'Yes' : row.on_boarded === false ? 'No' : '—'}</td><td>${escapeEntityHtml(onBoardDate)}</td>`;
+        tr.addEventListener('click',()=>selectPcesUser(row,tr));body.appendChild(tr);
     });
-    const first = body.querySelector('tr');
-    if (first) selectPcesUser(rows[0], first);
+    const first=body.querySelector('tr');if(first)selectPcesUser(rows[0],first);
 }
-
 function selectPcesUser(row,tr) {
-    document.querySelectorAll('#pces-user-list-body tr').forEach(r => r.classList.remove('selected'));
-    tr?.classList.add('selected');
-    pcesSelectedUserRecord = row;
-    pcesUserMode = 'view';
-    populatePcesUserForm(row);
-    setPcesUserFormMode('view');
+    document.querySelectorAll('#pces-user-list-body tr').forEach(r=>r.classList.remove('selected'));
+    tr?.classList.add('selected');pcesSelectedUserRecord=row;pcesUserMode='view';
+    populatePcesUserForm(row);setPcesUserFormMode('view');
 }
-
 function populatePcesUserForm(row) {
-    const map = {
-        'pces-user-party-id':row.party_id, 'pces-user-first-name':row.first_name,
-        'pces-user-middle-name':row.middle_name, 'pces-user-last-name':row.last_name,
-        'pces-user-party-type':row.party_type, 'pces-user-pces-role':row.pces_role,
-        'pces-user-email':row.email, 'pces-user-username':row.username,
-        'pces-user-entra-id':row.entra_object_id
-    };
-    Object.entries(map).forEach(([id,val]) => { const el=document.getElementById(id); if(el) el.value=val||''; });
+    const map={'pces-user-party-id':row.party_id,'pces-user-first-name':row.first_name,
+      'pces-user-middle-name':row.middle_name,'pces-user-last-name':row.last_name,
+      'pces-user-party-type':row.party_type,'pces-user-pces-role':row.pces_role,
+      'pces-user-email':row.email,'pces-user-username':row.username,'pces-user-entra-id':row.entra_id};
+    Object.entries(map).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val||'';});
 }
-
 function clearPcesUserForm() {
-    ['pces-user-party-id','pces-user-first-name','pces-user-middle-name','pces-user-last-name',
-     'pces-user-email','pces-user-username','pces-user-entra-id'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-    const pt=document.getElementById('pces-user-party-type'); if(pt) pt.value='DOCTOR';
-    const pr=document.getElementById('pces-user-pces-role'); if(pr) pr.value='';
+    ['pces-user-party-id','pces-user-first-name','pces-user-middle-name','pces-user-last-name','pces-user-email','pces-user-username','pces-user-entra-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const pt=document.getElementById('pces-user-party-type');if(pt)pt.value='DOCTOR';
+    const pr=document.getElementById('pces-user-pces-role');if(pr)pr.value='';
     setPcesUserFormMode('view');
 }
-
 function setPcesUserFormMode(mode) {
     const insert = mode === 'insert';
     const update = mode === 'update';
-    ['pces-user-first-name','pces-user-middle-name','pces-user-last-name'].forEach(id => {
-        const el=document.getElementById(id); if(el) el.readOnly=!insert;
+
+    // Existing user identity attributes are editable in Update mode too.
+    // Party ID and Entra ID remain system-managed/read-only.
+    ['pces-user-first-name', 'pces-user-middle-name', 'pces-user-last-name'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = !(insert || update);
     });
-    const pt=document.getElementById('pces-user-party-type'); if(pt) pt.disabled=!insert;
-    const pr=document.getElementById('pces-user-pces-role'); if(pr) pr.disabled=!insert;
-    const email=document.getElementById('pces-user-email'); if(email) email.readOnly=!(insert||update);
-    const username=document.getElementById('pces-user-username'); if(username) username.readOnly=!(insert||update);
-    const save=document.getElementById('pces-user-save-btn'); if(save) save.style.display=(insert||update)?'':'none';
+
+    const partyType = document.getElementById('pces-user-party-type');
+    if (partyType) partyType.disabled = !(insert || update);
+
+    const pcesRole = document.getElementById('pces-user-pces-role');
+    if (pcesRole) pcesRole.disabled = !(insert || update);
+
+    const email = document.getElementById('pces-user-email');
+    if (email) email.readOnly = !(insert || update);
+
+    const username = document.getElementById('pces-user-username');
+    if (username) username.readOnly = !(insert || update);
+
+    const save = document.getElementById('pces-user-save-btn');
+    if (save) save.style.display = (insert || update) ? '' : 'none';
 }
 
 function startPcesUserInsert() {
-    if (!pcesSelectedUserHospital) { alert('Select a hospital first.'); return; }
+    if (!pcesSelectedUserHospital) {
+        alert('Select a hospital first.');
+        return;
+    }
     pcesSelectedUserRecord = null;
     pcesUserMode = 'insert';
     clearPcesUserForm();
@@ -15520,54 +15605,102 @@ function startPcesUserInsert() {
 }
 
 function startPcesUserUpdate() {
-    if (!pcesSelectedUserRecord) { alert('Select a user first.'); return; }
+    if (!pcesSelectedUserRecord) {
+        alert('Select a user first.');
+        return;
+    }
     pcesUserMode = 'update';
     populatePcesUserForm(pcesSelectedUserRecord);
     setPcesUserFormMode('update');
-    document.getElementById('pces-user-email')?.focus();
+    document.getElementById('pces-user-first-name')?.focus();
 }
 
 async function savePcesUser() {
-    if (!pcesSelectedUserHospital?.tenant_id) { alert('Select a hospital first.'); return; }
+    if (!pcesSelectedUserHospital?.tenant_id) {
+        alert('Select a hospital first.');
+        return;
+    }
+    if (!['insert', 'update'].includes(pcesUserMode)) return;
+
     const payload = {
-        tenant_id:pcesSelectedUserHospital.tenant_id,
-        first_name:(document.getElementById('pces-user-first-name')?.value||'').trim(),
-        middle_name:(document.getElementById('pces-user-middle-name')?.value||'').trim(),
-        last_name:(document.getElementById('pces-user-last-name')?.value||'').trim(),
-        party_type:document.getElementById('pces-user-party-type')?.value||'',
-        pces_role:document.getElementById('pces-user-pces-role')?.value||'',
-        email:(document.getElementById('pces-user-email')?.value||'').trim(),
-        username:(document.getElementById('pces-user-username')?.value||'').trim(),
-        actor:sessionStorage.getItem('pces_username')||sessionStorage.getItem('pces_doctor_name')||'PCES_UI'
+        tenant_id: pcesSelectedUserHospital.tenant_id,
+        first_name: (document.getElementById('pces-user-first-name')?.value || '').trim(),
+        middle_name: (document.getElementById('pces-user-middle-name')?.value || '').trim(),
+        last_name: (document.getElementById('pces-user-last-name')?.value || '').trim(),
+        party_type: document.getElementById('pces-user-party-type')?.value || '',
+        pces_role: document.getElementById('pces-user-pces-role')?.value || '',
+        email: (document.getElementById('pces-user-email')?.value || '').trim(),
+        username: (document.getElementById('pces-user-username')?.value || '').trim()
     };
-    if (pcesUserMode==='insert') {
-        if (!payload.first_name || !payload.last_name || !payload.party_type || !payload.pces_role || !payload.email || !payload.username) {
-            alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.'); return;
-        }
-    } else if (pcesUserMode==='update') {
-        if (!payload.email || !payload.username) { alert('Email and User Name are required.'); return; }
-    } else { return; }
-    const isUpdate=pcesUserMode==='update';
-    const url=isUpdate?`/api/pces-admin/user-management/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`:'/api/pces-admin/user-management/users';
-    const button=document.getElementById('pces-user-save-btn');
-    if(button){button.disabled=true;button.textContent='Saving...';}
+
+    if (!payload.first_name || !payload.last_name || !payload.party_type ||
+        !payload.pces_role || !payload.email || !payload.username) {
+        alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');
+        return;
+    }
+
+    const isUpdate = pcesUserMode === 'update';
+    if (isUpdate && !pcesSelectedUserRecord?.party_id) {
+        alert('Select a user before updating.');
+        return;
+    }
+
+    const url = isUpdate
+        ? `/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`
+        : '/api/pces-admin/users';
+    const button = document.getElementById('pces-user-save-btn');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving...';
+    }
+
     try {
-        const response=await fetch(url,{method:isUpdate?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-        const result=await response.json();
-        if(!response.ok) throw new Error(result.error||result.message||`HTTP ${response.status}`);
-        alert(isUpdate?'User updated successfully.':'User created successfully.');
-        pcesUserMode='view';
-        await loadPcesUsersForHospital((document.getElementById('pces-user-search-text')?.value||'').trim());
-        const target=result.party_id;
-        const idx=pcesUserCache.findIndex(u=>u.party_id===target);
-        const rows=document.querySelectorAll('#pces-user-list-body tr');
-        if(idx>=0&&rows[idx]) selectPcesUser(pcesUserCache[idx],rows[idx]);
-    } catch(error) {
-        console.error('[PCES User Admin] Save failed:',error);
+        const response = await fetch(url, {
+            method: isUpdate ? 'PATCH' : 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        }
+
+        alert(isUpdate ? 'User updated successfully.' : 'User created successfully.');
+        pcesUserMode = 'view';
+        await loadPcesUsersForHospital();
+
+        const index = pcesUserCache.findIndex(user => user.party_id === result.party_id);
+        const rows = document.querySelectorAll('#pces-user-list-body tr');
+        if (index >= 0 && rows[index]) {
+            selectPcesUser(pcesUserCache[index], rows[index]);
+        }
+    } catch (error) {
+        console.error('[PCES User Admin] Save failed:', error);
         alert(`Unable to save user: ${error.message}`);
     } finally {
-        if(button){button.disabled=false;button.textContent='Save';}
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Save';
+        }
     }
+}
+
+async function onboardSelectedPcesUser() {
+    if(!pcesSelectedUserHospital?.tenant_id||!pcesSelectedUserRecord){alert('Select a user first.');return;}
+    const hasLinkedEntraId = Boolean(pcesSelectedUserRecord.entra_id);
+    const confirmMessage = hasLinkedEntraId
+        ? 'An Entra ID is already linked. Reconcile the PCES onboarding status without creating another Entra account?'
+        : 'Create the Microsoft Entra account and send onboarding instructions to this user?';
+    if (!confirm(confirmMessage)) return;
+    const button=[...document.querySelectorAll('.pces-user-admin-actions button')].find(b=>b.textContent.trim()==='On Board');
+    if(button){button.disabled=true;button.textContent='Processing...';}
+    try{
+      const response=await fetch(`/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}/onboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant_id:pcesSelectedUserHospital.tenant_id})});
+      const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||`HTTP ${response.status}`);
+      alert(result.message || (result.email_sent ? 'User onboarded and email sent.' : 'User onboarded, but email delivery needs retry.'));
+      await loadPcesUsersForHospital();
+    }catch(error){alert(`Unable to onboard user: ${error.message}`);}
+    finally{if(button){button.disabled=false;button.textContent='On Board';}}
 }
 
         function applyRoleVisibility(roleStr) {
@@ -15676,7 +15809,7 @@ async function savePcesUser() {
             } catch (error) {
                 console.error('[PCES] Unable to log out:', error);
                 alert('Unable to log out. Please try again.');
-                return;
+                return false;
             }
             // Clear auth state
             _pcesAuthed = false;
@@ -15713,6 +15846,41 @@ async function savePcesUser() {
             // Reset patient problem text
             const problemText = document.getElementById('problem-text');
             if (problemText) problemText.textContent = 'Patient problem not mentioned';
+            return true;
+        }
+
+        function openPasswordHelpModal(event) {
+            if (event) event.stopPropagation();
+            const popup = document.getElementById('doctor-popup');
+            if (popup) popup.style.display = 'none';
+            const overlay = document.getElementById('pces-password-help-overlay');
+            const error = document.getElementById('pces-password-help-error');
+            if (error) { error.textContent = ''; error.style.display = 'none'; }
+            if (overlay) overlay.style.display = 'flex';
+        }
+
+        function closePasswordHelpModal() {
+            const overlay = document.getElementById('pces-password-help-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        async function startPasswordReset() {
+            const button = document.getElementById('pces-password-continue-btn');
+            const error = document.getElementById('pces-password-help-error');
+            if (button) { button.disabled = true; button.textContent = 'Signing out…'; }
+            if (error) { error.textContent = ''; error.style.display = 'none'; }
+            try {
+                // Reuse the existing PCES logout process before starting a fresh Microsoft sign-in.
+                const signedOut = await logout();
+                if (!signedOut) throw new Error('PCES could not complete sign-out. Please try again.');
+                window.location.assign('/auth/entra/login?prompt=login');
+            } catch (err) {
+                if (error) {
+                    error.textContent = err.message || 'Unable to start password reset. Please try again.';
+                    error.style.display = 'block';
+                }
+                if (button) { button.disabled = false; button.textContent = 'Sign out and continue'; }
+            }
         }
 
         function toggleDoctorPopup(e) {
@@ -15731,13 +15899,95 @@ async function savePcesUser() {
             if (popup) popup.style.display = 'none';
         });
 
-        // Show doctor name on page load if already authenticated; sync button state
-        if (_pcesAuthed) {
-            showLoggedInDoctor();
-        } else {
+        // Rehydrate UI state from the server-side PCES session.
+        // sessionStorage is display state only; the server validates identity and membership.
+        async function bootstrapPcesSession() {
+            try {
+                const response = await fetch('/auth/entra/session', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: {'Accept': 'application/json'}
+                });
+                if (!response.ok) {
+                    clearPcesBrowserAuthState();
+                    _pcesAuthed = false;
+                    _updateAuthButtons(false);
+                    _updateSendBtn();
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.success || !data.party_id || !data.tenant_id) {
+                    clearPcesBrowserAuthState();
+                    _pcesAuthed = false;
+                    _updateAuthButtons(false);
+                    _updateSendBtn();
+                    return;
+                }
+
+                _pcesAuthed = true;
+                sessionStorage.setItem('pces_auth', 'true');
+                sessionStorage.setItem('pces_username', data.username || '');
+                sessionStorage.setItem('pces_party_id', data.party_id || '');
+                sessionStorage.setItem('pces_party_type', data.party_type || '');
+                sessionStorage.setItem('pces_party_first_name', data.first_name || '');
+                sessionStorage.setItem('pces_party_middle_name', data.middle_name || '');
+                sessionStorage.setItem('pces_party_last_name', data.last_name || '');
+                sessionStorage.setItem('pces_doctor_name', data.full_name || data.username || '');
+                sessionStorage.setItem('pces_doctor_id', data.party_id || '');
+                sessionStorage.setItem('pces_doctor_department', data.department || '');
+                sessionStorage.setItem('pces_doctor_email', data.email || '');
+                sessionStorage.setItem('pces_doctor_role', data.pces_role || '');
+                sessionStorage.setItem('pces_tenant_id', data.tenant_id || '');
+                sessionStorage.setItem('pces_tenant_code', data.tenant_code || '');
+                sessionStorage.setItem('pces_tenant_name', data.tenant_name || '');
+                sessionStorage.setItem('pces_hospital_name', data.hospital_name || data.tenant_name || '');
+                ['pces_patient_id', 'pces_patient_name', 'pces_patient_org'].forEach(k => sessionStorage.removeItem(k));
+
+                const partyType = String(data.party_type || '').trim().toUpperCase();
+                updatePcesContext({
+                    g_doctor_ID: partyType === 'DOCTOR' ? data.party_id : null,
+                    g_nurse_id: partyType === 'NURSE' ? data.party_id : null,
+                    g_med_assist_id: null,
+                    g_office_admin_id: partyType === 'OFFICE_ADMIN' ? data.party_id : null,
+                    g_user_id: data.party_id,
+                    g_doctor_name: data.full_name || data.username || '',
+                    g_patient_name: null,
+                    g_hospital_name: data.hospital_name || data.tenant_name || null,
+                    g_patient_ID: null,
+                    g_tenant_ID: data.tenant_id,
+                    g_lab_ID: null
+                });
+                showLoggedInDoctor();
+                _updateSendBtn();
+            } catch (error) {
+                console.error('[PCES] Unable to restore server session:', error);
+                clearPcesBrowserAuthState();
+                _pcesAuthed = false;
+                _updateAuthButtons(false);
+                _updateSendBtn();
+            }
+        }
+
+        function clearPcesBrowserAuthState() {
+            [
+                'pces_auth', 'pces_username', 'pces_party_id', 'pces_party_type',
+                'pces_party_first_name', 'pces_party_middle_name', 'pces_party_last_name',
+                'pces_doctor_name', 'pces_doctor_id', 'pces_doctor_department',
+                'pces_doctor_email', 'pces_doctor_role', 'pces_tenant_id',
+                'pces_tenant_code', 'pces_tenant_name', 'pces_hospital_name',
+                'pces_patient_id', 'pces_patient_name', 'pces_patient_org'
+            ].forEach(k => sessionStorage.removeItem(k));
+            resetPcesContext();
+            const badge = document.getElementById('logged-in-doctor');
+            if (badge) badge.style.display = 'none';
             const loginBtn = document.getElementById('header-login-btn');
             if (loginBtn) loginBtn.style.display = 'inline-block';
         }
+
+        // Always trust the server session, not stale browser storage, after page load.
+        bootstrapPcesSession();
 
         // Restore patient selection from sessionStorage on page load
         if (window.selectedPatientId && window.currentPatientName) {

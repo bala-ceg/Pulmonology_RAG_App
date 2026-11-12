@@ -603,11 +603,8 @@ def login():
     password = data.get("password") or ""
     tenant_id = str(data.get("tenant_id") or "").strip()
 
-    if not username or not password or not tenant_id:
-        return jsonify({
-            "success": False,
-            "message": "Username, password, and hospital are required",
-        }), 400
+    if not username or not password:
+        return jsonify({"success": False, "message": "Username and password are required"}), 400
 
     try:
         with _ehr_conn() as conn:
@@ -695,6 +692,28 @@ def login():
         if row is None:
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
+        # PCES_ADMIN is a global administrator and does not require a hospital membership.
+        if party_type == "PCES_ADMIN":
+            if str(pces_role or "").upper() != "PCES_ADMIN":
+                return jsonify({"success": False, "message": "Invalid administrator role"}), 403
+            session["pces_identity"] = {
+                "party_id": str(provider_party_id),
+                "party_type": "PCES_ADMIN",
+                "pces_role": "PCES_ADMIN",
+                "tenant_id": None,
+            }
+            return jsonify({
+                "success": True, "username": db_username,
+                "party_id": str(provider_party_id), "party_type": "PCES_ADMIN",
+                "pces_role": "PCES_ADMIN", "first_name": first_name or "",
+                "middle_name": middle_name or "", "last_name": last_name or "",
+                "email": email or "", "full_name": " ".join(x for x in (first_name, last_name) if x) or db_username or email or username,
+                "tenant_id": None, "tenant_code": "", "tenant_name": "", "hospital_name": "",
+            })
+
+        if not tenant_id:
+            return jsonify({"success": False, "message": "Hospital is required"}), 400
+
         if tenant_row is None:
             return jsonify({
                 "success": False,
@@ -716,7 +735,7 @@ def login():
             "party_id": str(provider_party_id),
             "tenant_id": str(selected_tenant_id),
             "party_type": str(party_type or ""),
-            "pces_role": str(pces_role or ""),
+            "pces_role": str(pces_role or party_type or ""),
         }
         logger.info(
             "PCES login successful party_id=%s first_name=%r middle_name=%r "
@@ -5312,12 +5331,22 @@ def pces_admin_list_users():
     auth_error = _require_pces_admin()
     if auth_error:
         return auth_error
+
     tenant_id = str(request.args.get("tenant_id") or "").strip()
     query = (request.args.get("q") or "").strip()
+    last_name = (request.args.get("last_name") or "").strip()
+    party_type = (request.args.get("party_type") or "").strip().upper()
+    email = (request.args.get("email") or "").strip()
+
     try:
         tenant_uuid = uuid.UUID(tenant_id)
     except ValueError:
         return jsonify({"error": "A valid tenant_id is required"}), 400
+
+    allowed_types = {"DOCTOR", "NURSE", "OFFICE_ADMIN", "PCES_ADMIN"}
+    if party_type and party_type not in allowed_types:
+        return jsonify({"error": "Invalid Party Type filter"}), 400
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
@@ -5335,6 +5364,16 @@ def pces_admin_list_users():
                       AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
                 """
                 params = [tenant_uuid]
+
+                if last_name:
+                    sql += " AND COALESCE(p.last_name, '') ILIKE %s"
+                    params.append(f"%{last_name}%")
+                if party_type:
+                    sql += " AND p.party_type = %s"
+                    params.append(party_type)
+                if email:
+                    sql += " AND COALESCE(p.email, '') ILIKE %s"
+                    params.append(f"%{email}%")
                 if query:
                     like = f"%{query}%"
                     sql += """
@@ -5347,16 +5386,27 @@ def pces_admin_list_users():
                       )
                     """
                     params.extend([like, like, like, like, like])
-                sql += " ORDER BY p.created_at DESC NULLS LAST, p.last_name, p.first_name LIMIT 20"
+
+                sql += " ORDER BY p.created_at DESC NULLS LAST, p.last_name, p.first_name LIMIT 100"
                 cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
+
         return jsonify([
             {
-                "party_id": str(r[0]), "first_name": r[1] or "", "middle_name": r[2] or "",
-                "last_name": r[3] or "", "party_type": r[4] or "", "pces_role": r[5] or "",
-                "email": r[6] or "", "username": r[7] or "", "entra_object_id": r[8] or "",
-                "created_at": r[9].isoformat(timespec="seconds") if r[9] else "",
-            } for r in rows
+                "party_id": str(row[0]),
+                "first_name": row[1] or "",
+                "middle_name": row[2] or "",
+                "last_name": row[3] or "",
+                "party_type": row[4] or "",
+                "pces_role": row[5] or "",
+                "email": row[6] or "",
+                "username": row[7] or "",
+                "entra_id": str(row[8] or ""),
+                "on_boarded": None,
+                "on_board_date": "",
+                "created_at": row[9].isoformat(timespec="seconds") if row[9] else "",
+            }
+            for row in rows
         ])
     except Exception as exc:
         logger.exception("Unable to load users for tenant %s: %s", tenant_id, exc)
@@ -5428,47 +5478,94 @@ def pces_admin_update_user(party_id: str):
     auth_error = _require_pces_admin()
     if auth_error:
         return auth_error
+
     try:
         party_uuid = uuid.UUID(party_id)
     except ValueError:
         return jsonify({"error": "Invalid Party ID"}), 400
+
     data = request.get_json(silent=True) or {}
     tenant_id = str(data.get("tenant_id") or "").strip()
+    first_name = (data.get("first_name") or "").strip()
+    middle_name = (data.get("middle_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    party_type = (data.get("party_type") or "").strip().upper()
+    pces_role = (data.get("pces_role") or "").strip()
     email = (data.get("email") or "").strip()
     username = (data.get("username") or "").strip()
     actor = ((data.get("actor") or "PCES_UI").strip() or "PCES_UI")[:100]
-    if not email or not username:
-        return jsonify({"error": "Email and User Name are required"}), 400
+
+    allowed_types = {"DOCTOR", "NURSE", "OFFICE_ADMIN", "PCES_ADMIN"}
+    if not all([first_name, last_name, party_type, pces_role, email, username]):
+        return jsonify({
+            "error": "First Name, Last Name, Party Type, PCES Role, Email and User Name are required"
+        }), 400
+    if party_type not in allowed_types:
+        return jsonify({"error": "Invalid Party Type"}), 400
+
     try:
         tenant_uuid = uuid.UUID(tenant_id)
     except ValueError:
         return jsonify({"error": "A valid tenant_id is required"}), 400
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT 1 FROM ehr_ccm_schema.p_party_tenant
-                    WHERE party_id=%s AND tenant_id=%s AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'
+                    WHERE party_id=%s AND tenant_id=%s
+                      AND COALESCE(is_active,TRUE)=TRUE AND status='ACTIVE'
                     LIMIT 1
                 """, (party_uuid, tenant_uuid))
                 if cursor.fetchone() is None:
                     return jsonify({"error": "User is not assigned to the selected hospital"}), 403
-                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(username)=LOWER(%s) AND party_id<>%s LIMIT 1", (username, party_uuid))
+
+                cursor.execute("""
+                    SELECT party_id FROM ehr_ccm_schema.p_party
+                    WHERE LOWER(username)=LOWER(%s) AND party_id<>%s
+                    LIMIT 1
+                """, (username, party_uuid))
                 if cursor.fetchone():
                     return jsonify({"error": f"User Name '{username}' already exists"}), 409
-                cursor.execute("SELECT party_id FROM ehr_ccm_schema.p_party WHERE LOWER(email)=LOWER(%s) AND party_id<>%s LIMIT 1", (email, party_uuid))
+
+                cursor.execute("""
+                    SELECT party_id FROM ehr_ccm_schema.p_party
+                    WHERE LOWER(email)=LOWER(%s) AND party_id<>%s
+                    LIMIT 1
+                """, (email, party_uuid))
                 if cursor.fetchone():
                     return jsonify({"error": f"Email '{email}' already exists"}), 409
+
                 cursor.execute("""
                     UPDATE ehr_ccm_schema.p_party
-                    SET email=%s, username=%s, updated_at=NOW(), updated_by=%s,
+                    SET first_name=%s,
+                        middle_name=%s,
+                        last_name=%s,
+                        party_type=%s,
+                        pces_role=%s,
+                        email=%s,
+                        username=%s,
+                        updated_at=NOW(),
+                        updated_by=%s,
                         version_no=COALESCE(version_no,0)+1
-                    WHERE party_id=%s AND COALESCE(is_active,TRUE)=TRUE
+                    WHERE party_id=%s
+                      AND COALESCE(is_active,TRUE)=TRUE
                       AND party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
                     RETURNING party_id
-                """, (email, username, actor, party_uuid))
+                """, (
+                    first_name,
+                    middle_name or None,
+                    last_name,
+                    party_type,
+                    pces_role,
+                    email,
+                    username,
+                    actor,
+                    party_uuid,
+                ))
                 if cursor.fetchone() is None:
                     return jsonify({"error": "User not found"}), 404
+
         return jsonify({"success": True, "party_id": str(party_uuid)})
     except Exception as exc:
         logger.exception("Unable to update PCES managed user %s: %s", party_id, exc)

@@ -53,6 +53,37 @@ class Config:
     PG_TOOL_PASSWORD: str | None = os.getenv("PG_TOOL_PASSWORD")
 
     # ------------------------------------------------------------------
+    # Microsoft Entra External ID (optional until enabled in deployment)
+    # ------------------------------------------------------------------
+    ENTRA_CLIENT_ID: str | None = os.getenv("ENTRA_CLIENT_ID")
+    ENTRA_CLIENT_SECRET: str | None = os.getenv("ENTRA_CLIENT_SECRET")
+    ENTRA_AUTHORITY: str | None = os.getenv("ENTRA_AUTHORITY")
+    ENTRA_REDIRECT_URI: str | None = os.getenv("ENTRA_REDIRECT_URI")
+
+    PCES_PROVISIONING_CLIENT_ID: str | None = os.getenv("PCES_PROVISIONING_CLIENT_ID")
+    PCES_PROVISIONING_CLIENT_SECRET: str | None = os.getenv("PCES_PROVISIONING_CLIENT_SECRET")
+    PCES_DIRECTORY_TENANT_ID: str | None = os.getenv("PCES_DIRECTORY_TENANT_ID")
+    PCES_DIRECTORY_DOMAIN: str | None = os.getenv("PCES_DIRECTORY_DOMAIN")
+    PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "https://pces.example.com")
+
+    # Bluehost SMTP dedicated to PCES Admin onboarding notifications.
+    # Kept separate from SMTP_* used by Entra account-link verification.
+    PCES_SMTP_HOST: str | None = os.getenv("PCES_SMTP_HOST")
+    PCES_SMTP_PORT: int = int(os.getenv("PCES_SMTP_PORT", "465"))
+    PCES_SMTP_USERNAME: str | None = os.getenv("PCES_SMTP_USERNAME")
+    PCES_SMTP_PASSWORD: str | None = os.getenv("PCES_SMTP_PASSWORD")
+    PCES_SMTP_TIMEOUT: int = int(os.getenv("PCES_SMTP_TIMEOUT", "30"))
+
+    # SMTP used for one-time PCES account-link verification codes.
+    SMTP_HOST: str | None = os.getenv("SMTP_HOST")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_FROM_EMAIL: str | None = os.getenv("SMTP_FROM_EMAIL")
+    SMTP_USERNAME: str | None = os.getenv("SMTP_USERNAME")
+    SMTP_PASSWORD: str | None = os.getenv("SMTP_PASSWORD")
+    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    SMTP_USE_SSL: bool = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+
+    # ------------------------------------------------------------------
     # LLM & Embeddings
     # ------------------------------------------------------------------
     OPENAI_API_KEY: str | None = os.getenv("openai_api_key")

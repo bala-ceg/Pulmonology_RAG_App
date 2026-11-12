@@ -24,6 +24,8 @@ def register_blueprints(app: Flask) -> None:
     from routes.doctors import doctors_bp
     from routes.pinecone_routes import pinecone_bp
     from routes.voice import voice_bp
+    from routes.entra_auth import entra_auth_bp
+    from routes.pces_admin import pces_admin_bp
 
     for bp in (
         audio_bp,
@@ -38,5 +40,7 @@ def register_blueprints(app: Flask) -> None:
         doctors_bp,
         pinecone_bp,
         voice_bp,
+        entra_auth_bp,
+        pces_admin_bp,
     ):
         app.register_blueprint(bp)
