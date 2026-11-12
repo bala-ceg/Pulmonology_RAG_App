@@ -15428,10 +15428,10 @@ async function loadPcesUserHospitals(searchName = '') {
     body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;">Loading hospitals...</td></tr>';
     const q = searchName ? `?name=${encodeURIComponent(searchName)}` : '';
     try {
-        const response = await fetch(`/api/pces-admin/user-management/hospitals${q}`);
+        const response = await fetch(`/api/pces-admin/hospitals${q}`);
         const rows = await response.json();
         if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
-        pcesUserHospitalCache = Array.isArray(rows) ? rows : [];
+        pcesUserHospitalCache = Array.isArray(rows.hospitals) ? rows.hospitals : [];
         renderPcesUserHospitals(pcesUserHospitalCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15487,12 +15487,12 @@ async function loadPcesUsersForHospital() {
     const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
 
     try {
-        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
-        const rows = await response.json();
-        if (!response.ok) {
-            throw new Error(rows.error || `HTTP ${response.status}`);
+        const response = await fetch(`/api/pces-admin/users?${params.toString()}`);
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `HTTP ${response.status}`);
         }
-        pcesUserCache = Array.isArray(rows) ? rows : [];
+        pcesUserCache = Array.isArray(result.users) ? result.users : [];
         renderPcesUsers(pcesUserCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15519,7 +15519,7 @@ async function searchPcesUsers() {
     body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Searching...</td></tr>';
 
     try {
-        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const response = await fetch(`/api/pces-admin/users/search?${params.toString()}`);
         const rows = await response.json();
         if (!response.ok) {
             throw new Error(rows.error || `HTTP ${response.status}`);
@@ -15620,6 +15620,7 @@ async function savePcesUser() {
         alert('Select a hospital first.');
         return;
     }
+    if (!['insert', 'update'].includes(pcesUserMode)) return;
 
     const payload = {
         tenant_id: pcesSelectedUserHospital.tenant_id,
@@ -15632,13 +15633,9 @@ async function savePcesUser() {
         username: (document.getElementById('pces-user-username')?.value || '').trim()
     };
 
-    if (pcesUserMode === 'insert' || pcesUserMode === 'update') {
-        if (!payload.first_name || !payload.last_name || !payload.party_type ||
-            !payload.pces_role || !payload.email || !payload.username) {
-            alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');
-            return;
-        }
-    } else {
+    if (!payload.first_name || !payload.last_name || !payload.party_type ||
+        !payload.pces_role || !payload.email || !payload.username) {
+        alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');
         return;
     }
 
@@ -15649,10 +15646,9 @@ async function savePcesUser() {
     }
 
     const url = isUpdate
-        ? `/api/pces-admin/user-management/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`
-        : '/api/pces-admin/user-management/users';
+        ? `/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`
+        : '/api/pces-admin/users';
     const button = document.getElementById('pces-user-save-btn');
-
     if (button) {
         button.disabled = true;
         button.textContent = 'Saving...';
@@ -15660,25 +15656,20 @@ async function savePcesUser() {
 
     try {
         const response = await fetch(url, {
-            method: isUpdate ? 'PUT' : 'POST',
+            method: isUpdate ? 'PATCH' : 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-
-        if (!response.ok) {
+        if (!response.ok || !result.success) {
             throw new Error(result.error || result.message || `HTTP ${response.status}`);
         }
 
         alert(isUpdate ? 'User updated successfully.' : 'User created successfully.');
         pcesUserMode = 'view';
+        await loadPcesUsersForHospital();
 
-        await loadPcesUsersForHospital(
-            (document.getElementById('pces-user-search-text')?.value || '').trim()
-        );
-
-        const targetId = result.party_id;
-        const index = pcesUserCache.findIndex(user => user.party_id === targetId);
+        const index = pcesUserCache.findIndex(user => user.party_id === result.party_id);
         const rows = document.querySelectorAll('#pces-user-list-body tr');
         if (index >= 0 && rows[index]) {
             selectPcesUser(pcesUserCache[index], rows[index]);
@@ -15696,7 +15687,14 @@ async function savePcesUser() {
 
 async function onboardSelectedPcesUser() {
     if(!pcesSelectedUserHospital?.tenant_id||!pcesSelectedUserRecord){alert('Select a user first.');return;}
-    if(pcesSelectedUserRecord.on_boarded||pcesSelectedUserRecord.entra_id){alert('This user is already onboarded or has an Entra ID linked.');return;}
+    if (pcesSelectedUserRecord.on_boarded === true) {
+        alert('This user is already onboarded.');
+        return;
+    }
+    if (pcesSelectedUserRecord.entra_id) {
+        alert('An Entra ID is already linked to this user, but the onboarding date/status is incomplete. Do not create another Entra account. Reconcile the existing Entra account and PCES membership first.');
+        return;
+    }
     if(!confirm('Create the Microsoft Entra account and send onboarding instructions to this user?'))return;
     const button=[...document.querySelectorAll('.pces-user-admin-actions button')].find(b=>b.textContent.trim()==='On Board');
     if(button){button.disabled=true;button.textContent='Processing...';}
