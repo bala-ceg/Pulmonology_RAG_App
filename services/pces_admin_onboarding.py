@@ -30,13 +30,24 @@ def _admin(cur, party_id):
     if not cur.fetchone(): raise OnboardingError("PCES_ADMIN access required")
 
 def list_hospitals(admin_id):
-    admin_id=_uuid(admin_id, 'PCES Admin party ID')
+    admin_id=_uuid(admin_id, "PCES Admin party ID")
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur, admin_id)
-        cur.execute("""SELECT tenant_id,tenant_name,tenant_code FROM p_tenant
-                       WHERE status='ACTIVE' AND COALESCE(is_active,TRUE)=TRUE
-                       ORDER BY tenant_name,tenant_id""")
-        return [{"tenant_id":str(r[0]),"hospital_name":r[1] or "","tenant_code":r[2] or ""} for r in cur.fetchall()]
+        # Use the canonical hospital registry relationship. A tenant alone is
+        # not necessarily a hospital; the organization party supplies the
+        # hospital identity and location shown by the existing UI.
+        cur.execute("""SELECT p.party_id,p.name,p.hospital_location,t.tenant_id,t.tenant_code
+                       FROM ehr_ccm_schema.p_party p
+                       JOIN ehr_ccm_schema.p_tenant t
+                         ON t.organization_party_id=p.party_id
+                       WHERE p.party_type='ORGANIZATION'
+                         AND COALESCE(p.is_active,TRUE)=TRUE
+                         AND COALESCE(t.is_active,TRUE)=TRUE
+                         AND t.status='ACTIVE'
+                       ORDER BY p.name ASC NULLS LAST,p.party_id""")
+        return [{"party_id":str(r[0]),"hospital_name":r[1] or "",
+                 "location_id":r[2] or "","tenant_id":str(r[3]),
+                 "tenant_code":r[4] or ""} for r in cur.fetchall()]
 
 def list_users(admin_id, tenant_id, limit=20, offset=0):
     tenant_id=_uuid(tenant_id,"hospital ID"); limit=max(1,min(int(limit),100)); offset=max(0,int(offset))
