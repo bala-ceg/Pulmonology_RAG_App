@@ -15542,7 +15542,7 @@ function renderPcesUsers(rows) {
           <td>${escapeEntityHtml(row.last_name||'—')}</td><td>${escapeEntityHtml(row.party_type||'—')}</td>
           <td>${escapeEntityHtml(row.pces_role||'—')}</td><td>${escapeEntityHtml(row.email||'—')}</td>
           <td>${escapeEntityHtml(row.username||'—')}</td><td>${escapeEntityHtml(row.entra_id||'—')}</td>
-          <td>${row.on_boarded?'Yes':'No'}</td><td>${escapeEntityHtml(onBoardDate)}</td>`;
+          <td>${row.on_boarded === true ? 'Yes' : row.on_boarded === false ? 'No' : '—'}</td><td>${escapeEntityHtml(onBoardDate)}</td>`;
         tr.addEventListener('click',()=>selectPcesUser(row,tr));body.appendChild(tr);
     });
     const first=body.querySelector('tr');if(first)selectPcesUser(rows[0],first);
