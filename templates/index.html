@@ -15428,10 +15428,11 @@ async function loadPcesUserHospitals(searchName = '') {
     body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;">Loading hospitals...</td></tr>';
     const q = searchName ? `?name=${encodeURIComponent(searchName)}` : '';
     try {
-        const response = await fetch(`/api/pces-admin/hospitals${q}`);
+        const response = await fetch(`/api/pces-admin/user-management/hospitals${q}`);
         const rows = await response.json();
         if (!response.ok) throw new Error(rows.error || `HTTP ${response.status}`);
-        pcesUserHospitalCache = Array.isArray(rows.hospitals) ? rows.hospitals : [];
+        if (!Array.isArray(rows)) throw new Error(rows.error || 'Unexpected hospital response from EHR API');
+        pcesUserHospitalCache = rows;
         renderPcesUserHospitals(pcesUserHospitalCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15487,12 +15488,13 @@ async function loadPcesUsersForHospital() {
     const params = new URLSearchParams({tenant_id: pcesSelectedUserHospital.tenant_id});
 
     try {
-        const response = await fetch(`/api/pces-admin/users?${params.toString()}`);
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || `HTTP ${response.status}`);
+        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const rows = await response.json();
+        if (!response.ok) {
+            throw new Error(rows.error || `HTTP ${response.status}`);
         }
-        pcesUserCache = Array.isArray(result.users) ? result.users : [];
+        if (!Array.isArray(rows)) throw new Error(rows.error || 'Unexpected user response from EHR API');
+        pcesUserCache = rows;
         renderPcesUsers(pcesUserCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
@@ -15519,12 +15521,13 @@ async function searchPcesUsers() {
     body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:14px;">Searching...</td></tr>';
 
     try {
-        const response = await fetch(`/api/pces-admin/users/search?${params.toString()}`);
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || `HTTP ${response.status}`);
+        const response = await fetch(`/api/pces-admin/user-management/users?${params.toString()}`);
+        const rows = await response.json();
+        if (!response.ok) {
+            throw new Error(rows.error || `HTTP ${response.status}`);
         }
-        pcesUserCache = Array.isArray(result.users) ? result.users : [];
+        if (!Array.isArray(rows)) throw new Error(rows.error || 'Unexpected user response from EHR API');
+        pcesUserCache = rows;
         renderPcesUsers(pcesUserCache);
     } catch (error) {
         body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:red;padding:14px;">${escapeEntityHtml(error.message)}</td></tr>`;
