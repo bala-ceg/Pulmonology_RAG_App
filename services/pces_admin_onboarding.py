@@ -10,13 +10,26 @@ class OnboardingError(RuntimeError):
     pass
 
 def _connect():
+    """Use the same canonical EHR connection as routes.disciplines._ehr_conn.
+
+    User creation/update/onboarding must never silently fall back to DB_*,
+    because list/search endpoints read the EHR database via PG_TOOL_*.
+    """
     cfg = Config
-    kw = {"host": cfg.PG_TOOL_HOST or cfg.DB_HOST, "port": cfg.PG_TOOL_PORT or cfg.DB_PORT or "5432",
-          "dbname": cfg.PG_TOOL_NAME or cfg.DB_NAME, "user": cfg.PG_TOOL_USER or cfg.DB_USER,
-          "password": cfg.PG_TOOL_PASSWORD or cfg.DB_PASSWORD, "connect_timeout": cfg.DB_CONNECT_TIMEOUT,
-          "options": "-c search_path=ehr_ccm_schema,public"}
-    if not all(kw.get(k) for k in ("host","dbname","user","password")):
-        raise OnboardingError("EHR database connection is not configured")
+    kw = {
+        "host": cfg.PG_TOOL_HOST,
+        "port": cfg.PG_TOOL_PORT,
+        "dbname": cfg.PG_TOOL_NAME,
+        "user": cfg.PG_TOOL_USER,
+        "password": cfg.PG_TOOL_PASSWORD,
+        "connect_timeout": 10,
+        "options": "-c search_path=ehr_ccm_schema,public",
+    }
+    if not all(kw.get(k) for k in ("host", "dbname", "user", "password")):
+        raise OnboardingError(
+            "EHR database connection is not configured: PG_TOOL_HOST, "
+            "PG_TOOL_NAME, PG_TOOL_USER and PG_TOOL_PASSWORD are required"
+        )
     return psycopg.connect(**kw)
 
 def _uuid(value, label):
