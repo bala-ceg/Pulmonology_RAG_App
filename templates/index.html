@@ -15687,10 +15687,6 @@ async function savePcesUser() {
 
 async function onboardSelectedPcesUser() {
     if(!pcesSelectedUserHospital?.tenant_id||!pcesSelectedUserRecord){alert('Select a user first.');return;}
-    if (pcesSelectedUserRecord.on_boarded === true) {
-        alert('This user is already onboarded.');
-        return;
-    }
     const hasLinkedEntraId = Boolean(pcesSelectedUserRecord.entra_id);
     const confirmMessage = hasLinkedEntraId
         ? 'An Entra ID is already linked. Reconcile the PCES onboarding status without creating another Entra account?'
