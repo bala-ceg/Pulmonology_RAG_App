@@ -5331,12 +5331,22 @@ def pces_admin_list_users():
     auth_error = _require_pces_admin()
     if auth_error:
         return auth_error
+
     tenant_id = str(request.args.get("tenant_id") or "").strip()
     query = (request.args.get("q") or "").strip()
+    last_name = (request.args.get("last_name") or "").strip()
+    party_type = (request.args.get("party_type") or "").strip().upper()
+    email = (request.args.get("email") or "").strip()
+
     try:
         tenant_uuid = uuid.UUID(tenant_id)
     except ValueError:
         return jsonify({"error": "A valid tenant_id is required"}), 400
+
+    allowed_types = {"DOCTOR", "NURSE", "OFFICE_ADMIN", "PCES_ADMIN"}
+    if party_type and party_type not in allowed_types:
+        return jsonify({"error": "Invalid Party Type filter"}), 400
+
     try:
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
@@ -5354,6 +5364,16 @@ def pces_admin_list_users():
                       AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
                 """
                 params = [tenant_uuid]
+
+                if last_name:
+                    sql += " AND COALESCE(p.last_name, '') ILIKE %s"
+                    params.append(f"%{last_name}%")
+                if party_type:
+                    sql += " AND p.party_type = %s"
+                    params.append(party_type)
+                if email:
+                    sql += " AND COALESCE(p.email, '') ILIKE %s"
+                    params.append(f"%{email}%")
                 if query:
                     like = f"%{query}%"
                     sql += """
@@ -5366,16 +5386,27 @@ def pces_admin_list_users():
                       )
                     """
                     params.extend([like, like, like, like, like])
-                sql += " ORDER BY p.created_at DESC NULLS LAST, p.last_name, p.first_name LIMIT 20"
+
+                sql += " ORDER BY p.created_at DESC NULLS LAST, p.last_name, p.first_name LIMIT 100"
                 cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
+
         return jsonify([
             {
-                "party_id": str(r[0]), "first_name": r[1] or "", "middle_name": r[2] or "",
-                "last_name": r[3] or "", "party_type": r[4] or "", "pces_role": r[5] or "",
-                "email": r[6] or "", "username": r[7] or "", "entra_object_id": r[8] or "",
-                "created_at": r[9].isoformat(timespec="seconds") if r[9] else "",
-            } for r in rows
+                "party_id": str(row[0]),
+                "first_name": row[1] or "",
+                "middle_name": row[2] or "",
+                "last_name": row[3] or "",
+                "party_type": row[4] or "",
+                "pces_role": row[5] or "",
+                "email": row[6] or "",
+                "username": row[7] or "",
+                "entra_id": str(row[8] or ""),
+                "on_boarded": bool(row[8]),
+                "on_board_date": "",
+                "created_at": row[9].isoformat(timespec="seconds") if row[9] else "",
+            }
+            for row in rows
         ])
     except Exception as exc:
         logger.exception("Unable to load users for tenant %s: %s", tenant_id, exc)
