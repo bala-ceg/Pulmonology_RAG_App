@@ -185,7 +185,7 @@ def _temp_password():
         value="".join(secrets.choice(alphabet) for _ in range(16))
         if any(c.isupper() for c in value) and any(c.islower() for c in value) and any(c.isdigit() for c in value): return value
 
-def provision_entra_user(user):
+def _graph_headers():
     cfg=Config
     if not all((cfg.PCES_PROVISIONING_CLIENT_ID,cfg.PCES_PROVISIONING_CLIENT_SECRET,cfg.PCES_DIRECTORY_TENANT_ID,cfg.PCES_DIRECTORY_DOMAIN)):
         raise OnboardingError("Microsoft Graph provisioning configuration is incomplete")
@@ -195,6 +195,21 @@ def provision_entra_user(user):
     token=app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
     access=token.get("access_token")
     if not access: raise OnboardingError("Unable to obtain Microsoft Graph provisioning token")
+    return {"Authorization":"Bearer "+access,"Content-Type":"application/json"}
+
+def _graph_error(response, action):
+    if response.status_code == 403:
+        return OnboardingError(
+            action + " was denied by Microsoft Graph. Check the provisioning application's "
+            "permissions and admin consent in the External ID directory"
+        )
+    if response.status_code == 404:
+        return OnboardingError("The linked Entra account was not found in the configured directory")
+    return OnboardingError(action + " failed: HTTP " + str(response.status_code))
+
+def provision_entra_user(user):
+    cfg=Config
+    headers=_graph_headers()
     password=_temp_password(); email=user["email"]
     payload={"accountEnabled":True,"displayName":" ".join(x for x in (user["first_name"],user.get("middle_name"),user["last_name"]) if x),
       "givenName":user["first_name"],"surname":user["last_name"],"mail":email,
@@ -202,14 +217,40 @@ def provision_entra_user(user):
       "passwordProfile":{"password":password,"forceChangePasswordNextSignIn":True},
       "passwordPolicies":"DisablePasswordExpiration"}
     response=requests.post("https://graph.microsoft.com/v1.0/users",
-      headers={"Authorization":"Bearer "+access,"Content-Type":"application/json"},json=payload,timeout=30)
-    if response.status_code!=201: raise OnboardingError("Microsoft Entra provisioning failed: HTTP "+str(response.status_code))
+      headers=headers,json=payload,timeout=30)
+    if response.status_code!=201: raise _graph_error(response,"Microsoft Entra provisioning")
     oid=response.json().get("id")
     if not oid: raise OnboardingError("Microsoft Entra did not return an object ID")
     return str(UUID(oid)),password
 
-def _send_email(email, username, password):
-    """Send PCES onboarding instructions through the configured Bluehost mailbox."""
+def reset_entra_password(object_id, email):
+    headers = _graph_headers()
+    url = "https://graph.microsoft.com/v1.0/users/" + _uuid(object_id, "Entra object ID")
+    response = requests.get(url, headers=headers, params={"$select":"id,identities"}, timeout=30)
+    if response.status_code != 200:
+        raise _graph_error(response, "Microsoft Entra account lookup")
+    identities = response.json().get("identities") or []
+    if not any(
+        identity.get("signInType") == "emailAddress"
+        and str(identity.get("issuer") or "").lower() == Config.PCES_DIRECTORY_DOMAIN.lower()
+        and str(identity.get("issuerAssignedId") or "").lower() == email.lower()
+        for identity in identities
+    ):
+        raise OnboardingError(
+            "The linked account is not an email/password customer account for this email "
+            "in the configured directory. Verify its Microsoft sign-in identity before resetting"
+        )
+    password = _temp_password()
+    response = requests.patch(
+        url, headers=headers,
+        json={"passwordProfile":{"password":password,"forceChangePasswordNextSignIn":True}},
+        timeout=30,
+    )
+    if response.status_code != 204:
+        raise _graph_error(response, "Microsoft Entra password reset")
+    return password
+
+def _email_settings():
     cfg = Config
     host = (getattr(cfg, "PCES_SMTP_HOST", None) or "").strip()
     username_smtp = (getattr(cfg, "PCES_SMTP_USERNAME", None) or "").strip()
@@ -222,6 +263,14 @@ def _send_email(email, username, password):
             "Bluehost SMTP configuration is incomplete; set PCES_SMTP_HOST, "
             "PCES_SMTP_USERNAME, and PCES_SMTP_PASSWORD"
         )
+    if not Config.PCES_SIGNIN_URL or Config.PCES_SIGNIN_URL == "https://pces.example.com":
+        raise OnboardingError("Set PCES_SIGNIN_URL to the actual PCES sign-in URL before onboarding")
+    return host, username_smtp, password_smtp, port, timeout
+
+def _send_email(email, username, password):
+    """Send PCES onboarding instructions through the configured Bluehost mailbox."""
+    cfg = Config
+    host, username_smtp, password_smtp, port, timeout = _email_settings()
     if not email or not username or not password:
         raise OnboardingError("Recipient email and onboarding credentials are required")
 
@@ -231,10 +280,12 @@ def _send_email(email, username, password):
     message["Subject"] = "Your PCES account is ready"
     message.set_content(
         "Your PCES account has been created.\n\n"
-        "Username: " + username + "\n"
+        "Microsoft sign-in email: " + email + "\n"
+        "PCES username: " + username + "\n"
         "Temporary password: " + password + "\n"
         "Sign-in URL: " + cfg.PCES_SIGNIN_URL + "\n\n"
-        "Sign in and change your temporary password when prompted."
+        "Choose Microsoft sign-in in PCES and use the Microsoft sign-in email above, "
+        "not your PCES username. Change your temporary password when prompted."
     )
 
     try:
@@ -254,7 +305,7 @@ def _send_email(email, username, password):
         # Do not include credentials, message bodies, or SMTP authentication data.
         raise OnboardingError("Unable to send PCES onboarding email through Bluehost SMTP") from exc
 
-def onboard_user(admin_id,party_id,tenant_id):
+def onboard_user(admin_id,party_id,tenant_id,reset_password=False):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
@@ -267,39 +318,59 @@ def onboard_user(admin_id,party_id,tenant_id):
         if not row: raise OnboardingError("Doctor/Nurse record was not found")
         first,middle,last,email,username,oid,kind,party_tenant_id=row
         if not email or not username: raise OnboardingError("Email and username are required before onboarding")
-        if oid:
-            # The Entra account already exists. Repair only the PCES membership
-            # onboarding flag; never provision a duplicate Entra identity.
-            with _connect() as repair_conn, repair_conn.cursor() as repair_cur:
-                _admin(repair_cur,admin_id)
-                repair_cur.execute("""UPDATE p_party_tenant
-                                      SET on_board=TRUE,updated_at=NOW(),updated_by=%s,
-                                          version_no=COALESCE(version_no,1)+1
-                                      WHERE party_tenant_id=%s
-                                      RETURNING on_board""",(admin_id,party_tenant_id))
-                if not repair_cur.fetchone():
-                    raise OnboardingError("Entra ID is linked, but the hospital membership could not be reconciled")
+        if oid and not reset_password:
+            cur.execute("""UPDATE p_party_tenant
+                           SET on_board=TRUE,updated_at=NOW(),updated_by=%s,
+                               version_no=COALESCE(version_no,1)+1
+                           WHERE party_tenant_id=%s
+                           RETURNING on_board_date""",(admin_id,party_tenant_id))
+            repaired=cur.fetchone()
+            if not repaired:
+                raise OnboardingError("Entra ID is linked, but the hospital membership could not be reconciled")
             return {"party_id":party_id,"party_tenant_id":str(party_tenant_id),
                     "tenant_id":tenant_id,"entra_object_id":str(oid),
-                    "on_boarded":True,"on_board_date":None,"email_sent":None,
-                    "message":"Existing Entra account linked; PCES onboarding status reconciled. Original onboarding date is unavailable."}
-    oid,password=provision_entra_user({"first_name":first,"middle_name":middle,"last_name":last,"email":email})
-    with _connect() as conn, conn.cursor() as cur:
-        _admin(cur,admin_id)
-        cur.execute("""UPDATE p_party SET entra_object_id=%s,updated_at=NOW(),updated_by=%s,
-                       version_no=COALESCE(version_no,1)+1
-                       WHERE party_id=%s AND entra_object_id IS NULL RETURNING party_id""",(oid,admin_id,party_id))
-        if not cur.fetchone(): raise OnboardingError("Entra account created but PCES mapping save failed; reconcile before retrying")
-        cur.execute("""UPDATE p_party_tenant SET on_board=TRUE,on_board_date=CURRENT_DATE,
-                       updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1
-                       WHERE party_tenant_id=%s""",(admin_id,party_tenant_id))
+                    "on_boarded":True,"on_board_date":repaired[0].isoformat() if repaired[0] else None,"email_sent":None,
+                    "message":"Existing Entra account linked; PCES onboarding status reconciled. No password was reset or emailed."}
+        _email_settings()
+        existing_account=bool(oid)
+        # Keep the row lock until the mapping is saved so concurrent clicks cannot
+        # create multiple Microsoft accounts for the same PCES user.
+        if existing_account:
+            password=reset_entra_password(oid,email)
+        else:
+            oid,password=provision_entra_user({"first_name":first,"middle_name":middle,"last_name":last,"email":email})
+        try:
+            if not existing_account:
+                cur.execute("""UPDATE p_party SET entra_object_id=%s,updated_at=NOW(),updated_by=%s,
+                               version_no=COALESCE(version_no,1)+1
+                               WHERE party_id=%s AND entra_object_id IS NULL RETURNING party_id""",(oid,admin_id,party_id))
+                if not cur.fetchone(): raise OnboardingError("Entra account created but PCES mapping save failed; reconcile before retrying")
+            cur.execute("""UPDATE p_party_tenant SET on_board=TRUE,on_board_date=COALESCE(on_board_date,CURRENT_DATE),
+                           updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1
+                           WHERE party_tenant_id=%s RETURNING on_board_date""",(admin_id,party_tenant_id))
+            membership=cur.fetchone()
+            if not membership:
+                raise OnboardingError("Entra credentials changed but PCES membership save failed; reconcile before retrying")
+            conn.commit()
+        except psycopg.Error as exc:
+            raise OnboardingError(
+                "Microsoft credentials were created or reset, but the PCES database save failed. "
+                "Reconcile the Microsoft account before retrying"
+            ) from exc
+    email_error=None
     try:
         _send_email(email,username,password)
         email_sent=True
-    except Exception:
-        # Provisioning is complete even if notification delivery needs a retry.
+    except OnboardingError as exc:
         email_sent=False
+        email_error=str(exc)
+    except Exception:
+        email_sent=False
+        email_error="Unable to deliver the onboarding email"
+    action="Existing Entra account password reset" if existing_account else "Entra account provisioned"
     return {"party_id":party_id,"party_tenant_id":str(party_tenant_id),"tenant_id":tenant_id,"entra_object_id":oid,"on_boarded":True,
-            "email_sent":email_sent,
-            "message":"Entra account provisioned; onboarding email sent" if email_sent
-                      else "Entra account provisioned; onboarding email delivery needs retry"}
+            "on_board_date":membership[0].isoformat() if membership[0] else None,
+            "email_sent":email_sent,"email_error":email_error,
+            "message":action+"; temporary-password email sent" if email_sent else
+                      action+"; "+email_error+". After correcting email delivery, use On Board again "
+                      "to reset the password and send a new temporary password. The old password will be invalidated."}

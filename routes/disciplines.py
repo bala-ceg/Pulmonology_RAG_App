@@ -5354,7 +5354,7 @@ def pces_admin_list_users():
                     SELECT
                         p.party_id, p.first_name, p.middle_name, p.last_name,
                         p.party_type, p.pces_role, p.email, p.username,
-                        p.entra_object_id, p.created_at
+                        p.entra_object_id, p.created_at, pt.on_board, pt.on_board_date
                     FROM ehr_ccm_schema.p_party_tenant pt
                     JOIN ehr_ccm_schema.p_party p ON p.party_id = pt.party_id
                     WHERE pt.tenant_id = %s
@@ -5402,8 +5402,8 @@ def pces_admin_list_users():
                 "email": row[6] or "",
                 "username": row[7] or "",
                 "entra_id": str(row[8] or ""),
-                "on_boarded": None,
-                "on_board_date": "",
+                "on_boarded": bool(row[10]),
+                "on_board_date": row[11].isoformat() if row[11] else "",
                 "created_at": row[9].isoformat(timespec="seconds") if row[9] else "",
             }
             for row in rows
@@ -5570,4 +5570,3 @@ def pces_admin_update_user(party_id: str):
     except Exception as exc:
         logger.exception("Unable to update PCES managed user %s: %s", party_id, exc)
         return jsonify({"error": "Unable to update user"}), 500
-

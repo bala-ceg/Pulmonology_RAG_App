@@ -15408,7 +15408,7 @@ async function loadPcesUserRoles() {
     try {
         const response = await fetch('/api/pces-admin/user-management/roles');
         const rows = await response.json();
-        if (!response.ok || !rows.success) throw new Error(rows.error || `HTTP ${response.status}`);
+        if (!response.ok || !Array.isArray(rows)) throw new Error(rows.error || `HTTP ${response.status}`);
         select.innerHTML = '<option value="">Select Role</option>';
         rows.forEach(role => {
             const opt = document.createElement('option');
@@ -15552,10 +15552,18 @@ function renderPcesUsers(rows) {
 }
 function selectPcesUser(row,tr) {
     document.querySelectorAll('#pces-user-list-body tr').forEach(r=>r.classList.remove('selected'));
-    tr?.classList.add('selected');pcesSelectedUserRecord=row;pcesUserMode='view';
-    populatePcesUserForm(row);setPcesUserFormMode('view');
+    tr?.classList.add('selected');pcesSelectedUserRecord=row;
+    pcesUserMode = ['DOCTOR', 'NURSE'].includes(row.party_type) ? 'update' : 'view';
+    populatePcesUserForm(row);setPcesUserFormMode(pcesUserMode);
 }
 function populatePcesUserForm(row) {
+    const roleSelect = document.getElementById('pces-user-pces-role');
+    if (roleSelect && row.pces_role && ![...roleSelect.options].some(option => option.value === row.pces_role)) {
+        const option = document.createElement('option');
+        option.value = row.pces_role;
+        option.textContent = row.pces_role;
+        roleSelect.appendChild(option);
+    }
     const map={'pces-user-party-id':row.party_id,'pces-user-first-name':row.first_name,
       'pces-user-middle-name':row.middle_name,'pces-user-last-name':row.last_name,
       'pces-user-party-type':row.party_type,'pces-user-pces-role':row.pces_role,
@@ -15610,6 +15618,10 @@ function startPcesUserInsert() {
 function startPcesUserUpdate() {
     if (!pcesSelectedUserRecord) {
         alert('Select a user first.');
+        return;
+    }
+    if (!['DOCTOR', 'NURSE'].includes(pcesSelectedUserRecord.party_type)) {
+        alert('Only Doctor and Nurse records can be edited here.');
         return;
     }
     pcesUserMode = 'update';
@@ -15690,18 +15702,36 @@ async function savePcesUser() {
 
 async function onboardSelectedPcesUser() {
     if(!pcesSelectedUserHospital?.tenant_id||!pcesSelectedUserRecord){alert('Select a user first.');return;}
+    const user = pcesSelectedUserRecord;
+    const tenantId = pcesSelectedUserHospital.tenant_id;
+    const formValues = {
+        first_name: document.getElementById('pces-user-first-name')?.value,
+        middle_name: document.getElementById('pces-user-middle-name')?.value,
+        last_name: document.getElementById('pces-user-last-name')?.value,
+        party_type: document.getElementById('pces-user-party-type')?.value,
+        pces_role: document.getElementById('pces-user-pces-role')?.value,
+        email: document.getElementById('pces-user-email')?.value,
+        username: document.getElementById('pces-user-username')?.value
+    };
+    if (pcesUserMode === 'update' && Object.entries(formValues).some(([key, value]) => (value || '').trim() !== (user[key] || '').trim())) {
+        alert('Save your user details before onboarding.');
+        return;
+    }
     const hasLinkedEntraId = Boolean(pcesSelectedUserRecord.entra_id);
     const confirmMessage = hasLinkedEntraId
-        ? 'An Entra ID is already linked. Reconcile the PCES onboarding status without creating another Entra account?'
-        : 'Create the Microsoft Entra account and send onboarding instructions to this user?';
+        ? `Reset this user's Microsoft password and email a new temporary password to ${user.email}? The old Microsoft password will stop working.`
+        : `Create the Microsoft Entra account and email a temporary password to ${user.email}?`;
     if (!confirm(confirmMessage)) return;
     const button=[...document.querySelectorAll('.pces-user-admin-actions button')].find(b=>b.textContent.trim()==='On Board');
     if(button){button.disabled=true;button.textContent='Processing...';}
     try{
-      const response=await fetch(`/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}/onboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant_id:pcesSelectedUserHospital.tenant_id})});
+      const response=await fetch(`/api/pces-admin/users/${encodeURIComponent(user.party_id)}/onboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant_id:tenantId,reset_password:hasLinkedEntraId})});
       const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||`HTTP ${response.status}`);
       alert(result.message || (result.email_sent ? 'User onboarded and email sent.' : 'User onboarded, but email delivery needs retry.'));
       await loadPcesUsersForHospital();
+      const index = pcesUserCache.findIndex(row => row.party_id === user.party_id);
+      const rows = document.querySelectorAll('#pces-user-list-body tr');
+      if (index >= 0 && rows[index]) selectPcesUser(pcesUserCache[index], rows[index]);
     }catch(error){alert(`Unable to onboard user: ${error.message}`);}
     finally{if(button){button.disabled=false;button.textContent='On Board';}}
 }

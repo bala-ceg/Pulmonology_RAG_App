@@ -17,8 +17,28 @@ This API implements the PCES Admin onboarding workflow in the approved onboardin
 | GET | /api/pces-admin/users?tenant_id=<uuid> | List users; default page size 20 |
 | GET | /api/pces-admin/users/search?tenant_id=<uuid>&last_name=&party_type=&email= | Search hospital users |
 | POST | /api/pces-admin/users | Insert Doctor/Nurse and hospital membership |
-| PATCH | /api/pces-admin/users/<party_id> | Update only email and/or username |
-| POST | /api/pces-admin/users/<party_id>/onboard | Provision Entra identity for the selected hospital, save OID, mark that hospital membership onboarded, email instructions |
+| PATCH | /api/pces-admin/users/<party_id> | Update Doctor/Nurse details for the selected hospital |
+| POST | /api/pces-admin/users/<party_id>/onboard | Provision Entra identity, or explicitly reset an existing customer account password; mark the selected hospital membership onboarded and email credentials |
+
+Selecting a Doctor/Nurse row enables editing. Party ID and Entra ID remain read-only.
+Click Save before On Board to persist changed details. The update request includes
+`tenant_id`, `first_name`, `middle_name`, `last_name`, `party_type`, `pces_role`,
+`email`, and `username`.
+
+For an existing Entra account, the UI explicitly warns that On Board will reset
+the Microsoft password and invalidate the previous password, then sends:
+
+~~~json
+{
+  "tenant_id": "hospital-uuid",
+  "reset_password": true
+}
+~~~
+
+Without `reset_password: true`, existing accounts are only reconciled; no password
+is reset or emailed. Password reset requires a matching email/password customer
+identity in the configured External ID directory. Federated or personal Microsoft
+identities cannot have their upstream password reset by this application.
 
 ## Create user request
 
@@ -53,6 +73,13 @@ Configure these server-side environment variables; never commit secrets:
 
 The provisioning application needs Microsoft Graph application permissions and admin consent to create External ID customer users. Validate the identities issuer/domain against the actual External ID directory configuration.
 
+Resetting an existing customer's password also requires the Graph application
+permission `User-PasswordProfile.ReadWrite.All` (or a supported higher privilege)
+with admin consent. In app-only scenarios, Microsoft also requires an appropriate
+directory role for the provisioning service principal, at least User Administrator
+for non-administrator targets. The account lookup requires permission to read the
+user's identities. See [Microsoft Graph user-update permissions](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0).
+
 ## Bluehost SMTP onboarding email
 
 Microsoft Entra External ID remains responsible for customer-user creation and sign-in. Flask sends onboarding notifications through the Bluehost mailbox `noreply@pcesglobal.ai`; Microsoft Graph `Mail.Send` is not used and is not required for this mailbox.
@@ -70,7 +97,19 @@ The SMTP sender address is the configured `PCES_SMTP_USERNAME`. These `PCES_SMTP
 
 The standalone VM smoke test may additionally use `PCES_TEST_RECIPIENT`; this variable is not needed by the Flask application. Run the test from the Azure VM, then confirm that the message arrives in the recipient inbox or spam folder. An SMTP success response means the server accepted the message; it does not by itself prove inbox delivery.
 
-The onboarding sequence remains: create the Entra user, persist its Entra Object ID in `p_party`, mark the selected `p_party_tenant` membership onboarded, and then attempt SMTP delivery. Email delivery failure is non-fatal: the API reports `email_sent=false` while retaining the successful Entra and database provisioning. The temporary password is generated during provisioning and is not persisted for a later resend, so an email failure requires an administrative recovery/reset process rather than blindly repeating user creation.
+Onboarding validates SMTP settings and the actual `PCES_SIGNIN_URL` before changing
+Microsoft credentials. It then creates the Entra user (or resets the existing local
+customer password), saves the mapping and selected hospital onboarding status in
+one locked database transaction, commits, and attempts SMTP delivery. Existing
+onboarding dates are preserved.
+
+Email delivery failure is non-fatal: the API reports `email_sent=false` with an
+`email_error` while retaining the successful Entra and database provisioning. The
+temporary password is never persisted or returned in the API. Correct the delivery
+problem and explicitly use On Board again to reset the existing password and email
+a new one; this invalidates the previous password and does not create a duplicate
+Microsoft account. The email identifies the Microsoft sign-in email separately
+from the PCES username.
 
 The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password or SMTP credentials.
 
