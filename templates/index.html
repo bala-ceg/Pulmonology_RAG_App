@@ -15648,15 +15648,31 @@ async function savePcesUser() {
         username: (document.getElementById('pces-user-username')?.value || '').trim()
     };
 
-    if (!payload.first_name || !payload.last_name || !payload.party_type ||
-        !payload.pces_role || !payload.email || !payload.username) {
-        alert('First Name, Last Name, Party Type, PCES Role, Email and User Name are required.');
-        return;
-    }
-
     const isUpdate = pcesUserMode === 'update';
     if (isUpdate && !pcesSelectedUserRecord?.party_id) {
         alert('Select a user before updating.');
+        return;
+    }
+    if (isUpdate) {
+        Object.keys(payload).forEach(key => {
+            if (key !== 'tenant_id' && payload[key] === (pcesSelectedUserRecord[key] || '').trim()) {
+                delete payload[key];
+            }
+        });
+        if (Object.keys(payload).length === 1) {
+            alert('No user details have changed.');
+            return;
+        }
+    }
+    const requiredFields = {
+        first_name: 'First Name', last_name: 'Last Name', party_type: 'Party Type',
+        pces_role: 'PCES Role', email: 'Email', username: 'User Name'
+    };
+    const missing = Object.entries(requiredFields)
+        .filter(([key]) => (!isUpdate || key in payload) && !payload[key])
+        .map(([, label]) => label);
+    if (missing.length) {
+        alert(`${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required.`);
         return;
     }
 

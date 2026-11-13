@@ -22,8 +22,9 @@ This API implements the PCES Admin onboarding workflow in the approved onboardin
 
 Selecting a Doctor/Nurse row enables editing. Party ID and Entra ID remain read-only.
 Click Save before On Board to persist changed details. The update request includes
-`tenant_id`, `first_name`, `middle_name`, `last_name`, `party_type`, `pces_role`,
-`email`, and `username`.
+`tenant_id` and only changed fields from `first_name`, `middle_name`, `last_name`,
+`party_type`, `pces_role`, `email`, and `username`. Existing blank fields do not
+block unrelated edits; explicitly clearing a required field is rejected.
 
 For an existing Entra account, the UI explicitly warns that On Board will reset
 the Microsoft password and invalidate the previous password, then sends:

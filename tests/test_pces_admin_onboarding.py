@@ -225,6 +225,39 @@ def onboarding_database(monkeypatch):
     return conn, cur, connect
 
 
+def test_username_only_update_preserves_other_fields(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    party_id = "00000000-0000-0000-0000-000000000002"
+    cur.fetchone.side_effect = [(1,), (1,), None, (party_id,)]
+    result = onboarding.update_user(ADMIN["party_id"], party_id, party_id, {"username": "Dr.New"})
+    assert result["updated_fields"] == ["username"]
+    sql, params = cur.execute.call_args.args
+    assert "SET username=%s," in sql
+    assert "pces_role=" not in sql and "email=" not in sql
+    assert params == ("Dr.New", ADMIN["party_id"], party_id)
+    assert not any("LOWER(email)" in call.args[0] for call in cur.execute.call_args_list)
+
+
+@pytest.mark.parametrize("data", [{"username": " "}, {"pces_role": ""}, {"entra_object_id": "other"}])
+def test_partial_update_rejects_invalid_changes(onboarding_database, data):
+    from services import pces_admin_onboarding as onboarding
+    _, _, connect = onboarding_database
+    party_id = "00000000-0000-0000-0000-000000000002"
+    with pytest.raises(onboarding.OnboardingError):
+        onboarding.update_user(ADMIN["party_id"], party_id, party_id, data)
+    connect.assert_not_called()
+
+
+def test_partial_username_update_checks_uniqueness(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    cur.fetchone.side_effect = [(1,), (1,), (1,)]
+    party_id = "00000000-0000-0000-0000-000000000002"
+    with pytest.raises(onboarding.OnboardingError, match="User Name already exists"):
+        onboarding.update_user(ADMIN["party_id"], party_id, party_id, {"username": "duplicate"})
+
+
 @pytest.mark.parametrize("existing", [False, True])
 @pytest.mark.parametrize("email_failure", [False, True])
 def test_onboard_creates_or_resets_then_commits_and_emails(monkeypatch, onboarding_database, existing, email_failure):
@@ -438,6 +471,7 @@ let fetch = async () => ({ok:true,json:async()=>['CARDIOLOGY','NURSE']});
     await savePcesUser();
     assert.equal(requests[0].method,'PATCH');
     assert.equal(JSON.parse(requests[0].body).first_name,'Edited');
+    assert.deepEqual(JSON.parse(requests[0].body),{tenant_id:'tenant-1',first_name:'Edited'});
     selectPcesUser(user);
     await onboardSelectedPcesUser();
     assert.ok(confirmation.includes('old Microsoft password will stop working'));
@@ -445,6 +479,15 @@ let fetch = async () => ({ok:true,json:async()=>['CARDIOLOGY','NURSE']});
     selectPcesUser({...user,entra_id:''});
     await onboardSelectedPcesUser();
     assert.deepEqual(JSON.parse(requests[2].body),{tenant_id:'tenant-1',reset_password:false});
+    selectPcesUser({...user,pces_role:'',email:'',first_name:''});
+    elements['pces-user-username'].value='Dr.New';
+    await savePcesUser();
+    assert.deepEqual(JSON.parse(requests[3].body),{tenant_id:'tenant-1',username:'Dr.New'});
+    selectPcesUser(user);
+    elements['pces-user-username'].value='';
+    await savePcesUser();
+    assert.equal(requests.length,4);
+    assert.equal(alerts.at(-1),'User Name is required.');
     assert.equal(button.disabled,false);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """

@@ -138,9 +138,9 @@ def update_user(admin_id,party_id,tenant_id,data):
         if key in data:
             values[key]=str(data[key] or "").strip()
     for key in ("first_name","last_name","party_type","pces_role","email","username"):
-        if key not in values or not values[key]:
+        if key in values and not values[key]:
             raise OnboardingError(key.replace("_"," ").title()+" is required")
-    if values["party_type"] not in {"DOCTOR","NURSE"}:
+    if "party_type" in values and values["party_type"] not in {"DOCTOR","NURSE"}:
         raise OnboardingError("Only DOCTOR and NURSE users can be updated")
 
     columns={"first_name":"first_name","middle_name":"middle_name","last_name":"last_name",
@@ -160,16 +160,12 @@ def update_user(admin_id,party_id,tenant_id,data):
         if not cur.fetchone():
             raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
 
-        cur.execute("""SELECT 1 FROM p_party
-                       WHERE party_id<>%s AND LOWER(username)=LOWER(%s) LIMIT 1""",
-                    (party_id,values["username"]))
-        if cur.fetchone():
-            raise OnboardingError("User Name already exists")
-        cur.execute("""SELECT 1 FROM p_party
-                       WHERE party_id<>%s AND LOWER(email)=LOWER(%s) LIMIT 1""",
-                    (party_id,values["email"]))
-        if cur.fetchone():
-            raise OnboardingError("Email already exists")
+        for field, label in (("username", "User Name"), ("email", "Email")):
+            if field in values:
+                cur.execute("SELECT 1 FROM p_party WHERE party_id<>%s AND LOWER("+
+                            field+")=LOWER(%s) LIMIT 1",(party_id,values[field]))
+                if cur.fetchone():
+                    raise OnboardingError(label+" already exists")
 
         cur.execute("UPDATE p_party SET "+",".join(sets)+
                     ",updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1 "+
