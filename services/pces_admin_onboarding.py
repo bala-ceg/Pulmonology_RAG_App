@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets, string, smtplib, ssl
 from email.message import EmailMessage
 from uuid import UUID, uuid4
+from urllib.parse import urlsplit, urlunsplit
 import msal, psycopg, requests
 from config import Config
 
@@ -246,6 +247,26 @@ def reset_entra_password(object_id, email):
         raise _graph_error(response, "Microsoft Entra password reset")
     return password
 
+def _signin_url():
+    configured = (Config.PCES_SIGNIN_URL or "").strip()
+    if configured and configured.rstrip("/") != "https://pces.example.com":
+        parsed = urlsplit(configured)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise OnboardingError("PCES_SIGNIN_URL must be an absolute HTTP or HTTPS application URL")
+        return configured
+    # Use the registered callback, not a request Host header, for the email origin.
+    callback = urlsplit((Config.ENTRA_REDIRECT_URI or "").strip())
+    suffix = "/auth/entra/callback"
+    if (callback.scheme in {"http", "https"} and callback.hostname
+            and not callback.username and not callback.password
+            and callback.path.endswith(suffix)):
+        path = callback.path[:-len(suffix)] + "/auth/entra/login"
+        return urlunsplit((callback.scheme, callback.netloc, path, "prompt=login", ""))
+    raise OnboardingError(
+        "Set ENTRA_REDIRECT_URI to the application's /auth/entra/callback URL "
+        "or set PCES_SIGNIN_URL to its sign-in URL"
+    )
+
 def _email_settings():
     cfg = Config
     host = (getattr(cfg, "PCES_SMTP_HOST", None) or "").strip()
@@ -259,13 +280,11 @@ def _email_settings():
             "Bluehost SMTP configuration is incomplete; set PCES_SMTP_HOST, "
             "PCES_SMTP_USERNAME, and PCES_SMTP_PASSWORD"
         )
-    if not Config.PCES_SIGNIN_URL or Config.PCES_SIGNIN_URL == "https://pces.example.com":
-        raise OnboardingError("Set PCES_SIGNIN_URL to the actual PCES sign-in URL before onboarding")
+    _signin_url()
     return host, username_smtp, password_smtp, port, timeout
 
 def _send_email(email, username, password):
     """Send PCES onboarding instructions through the configured Bluehost mailbox."""
-    cfg = Config
     host, username_smtp, password_smtp, port, timeout = _email_settings()
     if not email or not username or not password:
         raise OnboardingError("Recipient email and onboarding credentials are required")
@@ -279,7 +298,7 @@ def _send_email(email, username, password):
         "Microsoft sign-in email: " + email + "\n"
         "PCES username: " + username + "\n"
         "Temporary password: " + password + "\n"
-        "Sign-in URL: " + cfg.PCES_SIGNIN_URL + "\n\n"
+        "Sign-in URL: " + _signin_url() + "\n\n"
         "Choose Microsoft sign-in in PCES and use the Microsoft sign-in email above, "
         "not your PCES username. Change your temporary password when prompted."
     )

@@ -64,7 +64,7 @@ class Config:
     PCES_PROVISIONING_CLIENT_SECRET: str | None = os.getenv("PCES_PROVISIONING_CLIENT_SECRET")
     PCES_DIRECTORY_TENANT_ID: str | None = os.getenv("PCES_DIRECTORY_TENANT_ID")
     PCES_DIRECTORY_DOMAIN: str | None = os.getenv("PCES_DIRECTORY_DOMAIN")
-    PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "https://pces.example.com")
+    PCES_SIGNIN_URL: str = os.getenv("PCES_SIGNIN_URL", "")
 
     # Bluehost SMTP dedicated to PCES Admin onboarding notifications.
     # Kept separate from SMTP_* used by Entra account-link verification.

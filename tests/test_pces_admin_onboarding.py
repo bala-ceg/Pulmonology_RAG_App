@@ -81,7 +81,8 @@ def test_onboard_is_admin_only():
     assert client().post("/api/pces-admin/users/00000000-0000-0000-0000-000000000001/onboard").status_code==403
 
 
-def test_send_email_uses_bluehost_smtp(monkeypatch):
+@pytest.mark.parametrize("explicit_url", [True, False])
+def test_send_email_uses_bluehost_smtp(monkeypatch, explicit_url):
     from email.message import EmailMessage
     from services import pces_admin_onboarding as onboarding
 
@@ -108,7 +109,8 @@ def test_send_email_uses_bluehost_smtp(monkeypatch):
     monkeypatch.setattr(onboarding.Config, "PCES_SMTP_USERNAME", "noreply@pcesglobal.ai", raising=False)
     monkeypatch.setattr(onboarding.Config, "PCES_SMTP_PASSWORD", "test-secret", raising=False)
     monkeypatch.setattr(onboarding.Config, "PCES_SMTP_TIMEOUT", 30, raising=False)
-    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", "https://pces.example.test", raising=False)
+    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", "https://pces.example.test" if explicit_url else "")
+    monkeypatch.setattr(onboarding.Config, "ENTRA_REDIRECT_URI", "https://pces.example.test/auth/entra/callback")
     monkeypatch.setattr(onboarding.smtplib, "SMTP_SSL", FakeSMTP)
 
     onboarding._send_email("doctor@example.test", "Dr.Test", "TempPass123")
@@ -125,6 +127,32 @@ def test_send_email_uses_bluehost_smtp(monkeypatch):
     assert "https://pces.example.test" in message.get_content()
     assert "Microsoft sign-in email: doctor@example.test" in message.get_content()
     assert "PCES username: Dr.Test" in message.get_content()
+    if not explicit_url:
+        assert "https://pces.example.test/auth/entra/login?prompt=login" in message.get_content()
+
+
+@pytest.mark.parametrize("configured", ["", None, "https://pces.example.com", "https://pces.example.com/"])
+def test_signin_url_falls_back_to_trusted_callback(monkeypatch, configured):
+    from services import pces_admin_onboarding as onboarding
+    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", configured)
+    monkeypatch.setattr(onboarding.Config, "ENTRA_REDIRECT_URI", "https://app.example.test/pces/auth/entra/callback")
+    assert onboarding._signin_url() == "https://app.example.test/pces/auth/entra/login?prompt=login"
+
+
+def test_signin_url_override_takes_precedence(monkeypatch):
+    from services import pces_admin_onboarding as onboarding
+    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", "https://app.example.test/login")
+    monkeypatch.setattr(onboarding.Config, "ENTRA_REDIRECT_URI", None)
+    assert onboarding._signin_url() == "https://app.example.test/login"
+
+
+@pytest.mark.parametrize("callback", [None, "", "https://app.example.test/wrong", "javascript:alert(1)"])
+def test_signin_url_requires_valid_server_configuration(monkeypatch, callback):
+    from services import pces_admin_onboarding as onboarding
+    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", "")
+    monkeypatch.setattr(onboarding.Config, "ENTRA_REDIRECT_URI", callback)
+    with pytest.raises(onboarding.OnboardingError, match="ENTRA_REDIRECT_URI"):
+        onboarding._signin_url()
 
 
 def test_send_email_requires_bluehost_configuration(monkeypatch):

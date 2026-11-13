@@ -92,13 +92,18 @@ Configure these server-side environment variables on the Azure VM running Flask.
 - `PCES_SMTP_USERNAME=noreply@pcesglobal.ai`
 - `PCES_SMTP_PASSWORD` (Bluehost mailbox password)
 - `PCES_SMTP_TIMEOUT=30` (optional; defaults to 30 seconds)
-- `PCES_SIGNIN_URL` (the actual PCES sign-in URL)
+- `PCES_SIGNIN_URL` (optional override for the actual PCES sign-in URL)
+
+If `PCES_SIGNIN_URL` is unset or still uses the legacy example URL, onboarding
+derives `/auth/entra/login?prompt=login` from the configured `ENTRA_REDIRECT_URI`
+callback URL, preserving any application path prefix. The email URL uses this
+server-side configuration, not the incoming request's Host header.
 
 The SMTP sender address is the configured `PCES_SMTP_USERNAME`. These `PCES_SMTP_*` settings are deliberately separate from the existing `SMTP_*` settings used by Entra account-link verification.
 
 The standalone VM smoke test may additionally use `PCES_TEST_RECIPIENT`; this variable is not needed by the Flask application. Run the test from the Azure VM, then confirm that the message arrives in the recipient inbox or spam folder. An SMTP success response means the server accepted the message; it does not by itself prove inbox delivery.
 
-Onboarding validates SMTP settings and the actual `PCES_SIGNIN_URL` before changing
+Onboarding validates SMTP settings and the resolved sign-in URL before changing
 Microsoft credentials. It then creates the Entra user (or resets the existing local
 customer password), saves the mapping and selected hospital onboarding status in
 one locked database transaction, commits, and attempts SMTP delivery. Existing
