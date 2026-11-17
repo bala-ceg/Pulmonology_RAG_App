@@ -280,10 +280,51 @@ def test_partial_update_rejects_invalid_changes(onboarding_database, data):
 def test_partial_username_update_checks_uniqueness(onboarding_database):
     from services import pces_admin_onboarding as onboarding
     _, cur, _ = onboarding_database
-    cur.fetchone.side_effect = [(1,), (1,), (1,)]
+    cur.fetchone.side_effect = [(1,), (1,), (1,), ("John", "Doe", "DOCTOR")] + [None] * 20
     party_id = "00000000-0000-0000-0000-000000000002"
-    with pytest.raises(onboarding.OnboardingError, match="User Name already exists"):
+    with pytest.raises(onboarding.UsernameConflict, match="already exists in this hospital"):
         onboarding.update_user(ADMIN["party_id"], party_id, party_id, {"username": "duplicate"})
+
+
+def test_username_conflict_is_scoped_to_hospital_and_suggests_variants(onboarding_database, monkeypatch):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    tenant = "00000000-0000-0000-0000-000000000001"
+    taken = {"dr.john.doe", "dr.john.doe2"}
+    state = {}
+    def execute(sql, params=None):
+        state["last"] = (sql, params)
+    cur.execute.side_effect = execute
+    cur.fetchone.side_effect = lambda: (1,) if (
+        "pt.tenant_id=%s" in state["last"][0] and state["last"][1][1].lower() in taken) else (
+        (1,) if "FROM p_tenant" in state["last"][0] or "PCES_ADMIN" in state["last"][0] else None)
+    with pytest.raises(onboarding.UsernameConflict) as exc:
+        onboarding.create_user(ADMIN["party_id"], tenant, {
+            "first_name": "John", "last_name": "Doe", "party_type": "DOCTOR",
+            "pces_role": ["ANESTHESIOLOGIST", "sme", "SME"], "email": "john@gmail.com",
+            "username": "dr.john.doe"})
+    assert "dr.john.doe3" in exc.value.suggestions and "dr.jdoe" in exc.value.suggestions
+    assert "dr.john.doe" not in exc.value.suggestions
+    assert all("pt.tenant_id=%s" in c.args[0] for c in cur.execute.call_args_list if "LOWER(p.username)" in c.args[0])
+
+
+def test_roles_are_normalized_and_gmail_is_accepted():
+    from services import pces_admin_onboarding as onboarding
+    assert onboarding.normalize_roles(["A", " b ", "a", ""]) == "A, b"
+    assert onboarding.normalize_roles("X,  Y ,x") == "X, Y"
+    assert onboarding._valid_email("tester@gmail.com")
+    assert not onboarding._valid_email("not-an-email")
+
+
+def test_username_conflict_route_returns_suggestions(monkeypatch):
+    from routes import pces_admin
+    from services.pces_admin_onboarding import UsernameConflict
+    def conflict(*args):
+        raise UsernameConflict("dr.x", ["dr.x2"])
+    monkeypatch.setattr(pces_admin, "update_user", conflict)
+    response = client(ADMIN).patch("/api/pces-admin/users/00000000-0000-0000-0000-000000000002",
+                                   json={"tenant_id": "t", "username": "dr.x"})
+    assert response.status_code == 409 and response.get_json()["suggestions"] == ["dr.x2"]
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -461,12 +502,13 @@ for (const name of fieldIds) {
     const element = {value:'',readOnly:['party-id','entra-id'].includes(name),disabled:false,style:{},options:[],
         appendChild(option){this.options.push(option);},focus(){}};
     Object.defineProperty(element,'innerHTML',{set(){this.options=[];}});
+    Object.defineProperty(element,'selectedOptions',{get(){return this.options.filter(o=>o.selected);}});
     elements['pces-user-'+name] = element;
 }
 const button = {textContent:'On Board',disabled:false};
 const document = {
     getElementById(id){return elements[id] || null;},
-    createElement(){return {};},
+    createElement(){return {selected:false};},
     querySelectorAll(selector){return selector === '.pces-user-admin-actions button' ? [button] : [];}
 };
 let alerts=[], requests=[], confirmation='';
@@ -485,8 +527,8 @@ let fetch = async () => ({ok:true,json:async()=>['CARDIOLOGY','NURSE']});
         assert.equal(elements['pces-user-'+name].readOnly,false,name);
     assert.equal(elements['pces-user-party-type'].disabled,false);
     assert.equal(elements['pces-user-pces-role'].disabled,false);
-    assert.equal(elements['pces-user-pces-role'].value,'CARDIOLOGY, SME');
-    assert.ok(elements['pces-user-pces-role'].options.some(o=>o.value==='CARDIOLOGY, SME'));
+    assert.equal(getPcesRoleValue(),'CARDIOLOGY, SME');
+    assert.deepEqual(elements['pces-user-pces-role'].options.filter(o=>o.selected).map(o=>o.value),['CARDIOLOGY','SME']);
     assert.equal(elements['pces-user-party-id'].readOnly,true);
     assert.equal(elements['pces-user-entra-id'].readOnly,true);
     pcesSelectedUserHospital={tenant_id:'tenant-1'};
@@ -512,9 +554,13 @@ let fetch = async () => ({ok:true,json:async()=>['CARDIOLOGY','NURSE']});
     await savePcesUser();
     assert.deepEqual(JSON.parse(requests[3].body),{tenant_id:'tenant-1',username:'Dr.New'});
     selectPcesUser(user);
+    setPcesRoleValue('NURSE, CARDIOLOGY');
+    await savePcesUser();
+    assert.deepEqual(JSON.parse(requests[4].body),{tenant_id:'tenant-1',pces_role:'CARDIOLOGY, NURSE'});
+    selectPcesUser(user);
     elements['pces-user-username'].value='';
     await savePcesUser();
-    assert.equal(requests.length,4);
+    assert.equal(requests.length,5);
     assert.equal(alerts.at(-1),'User Name is required.');
     assert.equal(button.disabled,false);
 })().catch(error=>{console.error(error);process.exitCode=1;});

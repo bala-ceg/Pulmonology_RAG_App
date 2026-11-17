@@ -1,6 +1,6 @@
 """PCES Admin onboarding: hospital users, Microsoft Graph provisioning and notification."""
 from __future__ import annotations
-import secrets, string, smtplib, ssl
+import re, secrets, string, smtplib, ssl
 from email.message import EmailMessage
 from uuid import UUID, uuid4
 from urllib.parse import urlsplit, urlunsplit
@@ -102,19 +102,81 @@ def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
              "email":r[6] or "","username":r[7] or "","entra_id":r[8] or "",
              "on_boarded":bool(r[9]),"on_board_date":r[10].isoformat() if r[10] else None} for r in rows]
 
+class UsernameConflict(OnboardingError):
+    def __init__(self, username, suggestions):
+        super().__init__("User Name '" + username + "' already exists in this hospital")
+        self.suggestions = suggestions
+
+def normalize_roles(value):
+    """Return a comma-joined, de-duplicated role string from a list or comma string."""
+    tokens = value if isinstance(value, (list, tuple)) else str(value or "").split(",")
+    seen, roles = set(), []
+    for token in tokens:
+        role = str(token or "").strip()
+        if role and role.upper() not in seen:
+            seen.add(role.upper()); roles.append(role)
+    return ", ".join(roles)
+
+def _valid_email(email):
+    return bool(re.fullmatch(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+", email or ""))
+
+def _username_taken(cur, tenant_id, username, exclude_party_id=None):
+    cur.execute("""SELECT 1 FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
+                   WHERE pt.tenant_id=%s AND pt.status='ACTIVE' AND COALESCE(pt.is_active,TRUE)=TRUE
+                     AND p.deleted_at IS NULL AND LOWER(p.username)=LOWER(%s)
+                     AND (%s::uuid IS NULL OR p.party_id<>%s::uuid) LIMIT 1""",
+                (tenant_id,username,exclude_party_id,exclude_party_id))
+    return cur.fetchone() is not None
+
+def _suggest_usernames(cur, tenant_id, username, first="", last="", kind="", exclude_party_id=None):
+    """Up to 3 numbered and 3 name-based available variants for this hospital."""
+    clean=lambda s: re.sub(r"[^a-z0-9]","",str(s or "").lower())
+    f,l=clean(first),clean(last)
+    prefix={"DOCTOR":"dr.","NURSE":"nurse_"}.get(str(kind).upper(),"")
+    named=[]
+    if f and l:
+        named=[prefix+f+"."+l, prefix+f[0]+l, prefix+l+"."+f[0], prefix+f+"_"+l]
+    elif l or f:
+        named=[prefix+(l or f)]
+    def pick(candidates, limit=3):
+        out=[]
+        for c in candidates:
+            if c.lower()!=username.lower() and c not in out and not _username_taken(cur,tenant_id,c,exclude_party_id):
+                out.append(c)
+                if len(out)==limit: break
+        return out
+    return pick([username+str(n) for n in range(2,12)])+pick(named)
+
+def check_username(admin_id, tenant_id, username, party_id=None, first_name="", last_name="", party_type=""):
+    tenant_id=_uuid(tenant_id,"hospital ID"); username=str(username or "").strip()
+    party_id=_uuid(party_id,"party ID") if party_id else None
+    if not username: raise OnboardingError("User Name is required")
+    with _connect() as conn, conn.cursor() as cur:
+        _admin(cur,_uuid(admin_id,"PCES Admin party ID"))
+        if not _username_taken(cur,tenant_id,username,party_id):
+            return {"available":True,"suggestions":[]}
+        if party_id and not (first_name and last_name):
+            cur.execute("SELECT first_name,last_name,party_type FROM p_party WHERE party_id=%s",(party_id,))
+            row=cur.fetchone()
+            if row: first_name,last_name,party_type=first_name or row[0],last_name or row[1],party_type or row[2]
+        return {"available":False,"suggestions":_suggest_usernames(cur,tenant_id,username,first_name,last_name,party_type,party_id)}
+
 def create_user(admin_id,tenant_id,data):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
     first=str(data.get("first_name") or "").strip(); middle=str(data.get("middle_name") or "").strip()
-    last=str(data.get("last_name") or "").strip(); role=str(data.get("pces_role") or "").strip()
+    last=str(data.get("last_name") or "").strip(); role=normalize_roles(data.get("pces_role"))
     email=str(data.get("email") or "").strip(); username=str(data.get("username") or "").strip()
     kind=str(data.get("party_type") or "").strip().upper()
     if not all((first,last,role,email,username)): raise OnboardingError("First name, last name, PCES role, email and username are required")
+    if not _valid_email(email): raise OnboardingError("Email is not a valid email address")
     if kind not in {"DOCTOR","NURSE"}: raise OnboardingError("Only DOCTOR and NURSE users can be onboarded")
     party_id=str(uuid4()); membership_id=str(uuid4())
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
         cur.execute("SELECT 1 FROM p_tenant WHERE tenant_id=%s AND status='ACTIVE' AND COALESCE(is_active,TRUE)=TRUE",(tenant_id,))
         if not cur.fetchone(): raise OnboardingError("Selected hospital is not active")
+        if _username_taken(cur,tenant_id,username):
+            raise UsernameConflict(username,_suggest_usernames(cur,tenant_id,username,first,last,kind))
         cur.execute("""INSERT INTO p_party
           (party_id,party_type,name,first_name,middle_name,last_name,email,username,pces_role,
            is_active,created_at,created_by,version_no)
@@ -137,7 +199,9 @@ def update_user(admin_id,party_id,tenant_id,data):
     values={}
     for key in allowed:
         if key in data:
-            values[key]=str(data[key] or "").strip()
+            values[key]=normalize_roles(data[key]) if key=="pces_role" else str(data[key] or "").strip()
+    if "email" in values and not _valid_email(values["email"]):
+        raise OnboardingError("Email is not a valid email address")
     for key in ("first_name","last_name","party_type","pces_role","email","username"):
         if key in values and not values[key]:
             raise OnboardingError(key.replace("_"," ").title()+" is required")
@@ -161,12 +225,17 @@ def update_user(admin_id,party_id,tenant_id,data):
         if not cur.fetchone():
             raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
 
-        for field, label in (("username", "User Name"), ("email", "Email")):
-            if field in values:
-                cur.execute("SELECT 1 FROM p_party WHERE party_id<>%s AND LOWER("+
-                            field+")=LOWER(%s) LIMIT 1",(party_id,values[field]))
-                if cur.fetchone():
-                    raise OnboardingError(label+" already exists")
+        if "username" in values and _username_taken(cur,tenant_id,values["username"],party_id):
+            cur.execute("SELECT first_name,last_name,party_type FROM p_party WHERE party_id=%s",(party_id,))
+            row=cur.fetchone() or ("","","")
+            raise UsernameConflict(values["username"],_suggest_usernames(
+                cur,tenant_id,values["username"],values.get("first_name") or row[0],
+                values.get("last_name") or row[1],values.get("party_type") or row[2],party_id))
+        if "email" in values:
+            cur.execute("SELECT 1 FROM p_party WHERE party_id<>%s AND LOWER(email)=LOWER(%s) LIMIT 1",
+                        (party_id,values["email"]))
+            if cur.fetchone():
+                raise OnboardingError("Email already exists")
 
         cur.execute("UPDATE p_party SET "+",".join(sets)+
                     ",updated_at=NOW(),updated_by=%s,version_no=COALESCE(version_no,1)+1 "+

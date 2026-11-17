@@ -4428,7 +4428,10 @@
         .pces-user-field label { display:flex; align-items:center; font-size:12px; font-weight:700; padding:5px 7px; border-right:1px solid #333; background:#f7f7f7; }
         .pces-user-field input, .pces-user-field select { width:100%; border:0; padding:5px 7px; min-width:0; font-size:12px; }
         .pces-user-field input[readonly], .pces-user-field select:disabled { background:#f1f3f5; }
-        .pces-user-save-row { display:flex; justify-content:flex-end; margin-top:10px; }
+        .pces-user-save-row { display:flex; justify-content:flex-end; margin-top:10px; position:sticky; bottom:0; background:#fff; padding:6px 0; }
+        #pces-user-pces-role { height:66px; }
+        .pces-user-suggestions { margin-top:8px; font-size:12px; color:#8a1f11; }
+        .pces-user-suggestions button { margin:0 6px 4px 0; padding:2px 8px; border:1px solid #1a3a5c; background:#eef4fb; cursor:pointer; border-radius:10px; }
         #pces-user-hospital-body tr, #pces-user-list-body tr { cursor:pointer; }
         #pces-user-hospital-body tr.selected, #pces-user-list-body tr.selected { background:#dbe9f8; }
         @media (max-width:1100px){ .pces-user-detail-grid{grid-template-columns:repeat(2,minmax(220px,1fr));} }
@@ -5712,11 +5715,12 @@
                     <option value="PCES_ADMIN">PCES_ADMIN</option>
                 </select>
             </div>
-            <div class="pces-user-field"><label>PCES Role</label><select id="pces-user-pces-role"></select></div>
+            <div class="pces-user-field"><label>PCES Role</label><select id="pces-user-pces-role" multiple size="3" title="Ctrl/Cmd-click to select multiple roles"></select></div>
             <div class="pces-user-field"><label>Email</label><input id="pces-user-email" type="email" maxlength="255"></div>
-            <div class="pces-user-field"><label>User Name</label><input id="pces-user-username" type="text" maxlength="255"></div>
+            <div class="pces-user-field"><label>User Name</label><input id="pces-user-username" type="text" maxlength="255" onblur="checkPcesUsername()" oninput="clearPcesUsernameSuggestions()"></div>
             <div class="pces-user-field"><label>Entra ID</label><input id="pces-user-entra-id" type="text" readonly></div>
         </div>
+        <div id="pces-user-username-suggestions" class="pces-user-suggestions" style="display:none;"></div>
         <div class="pces-user-save-row">
             <button id="pces-user-save-btn" type="button" class="scheduling-select-btn" onclick="savePcesUser()">Save</button>
         </div>
@@ -15401,22 +15405,86 @@ async function loadPcesAdminUserOnboarding() {
     await loadPcesUserHospitals('');
 }
 
+function getPcesRoleValue() {
+    const select = document.getElementById('pces-user-pces-role');
+    return select ? [...select.selectedOptions].map(o => o.value).filter(Boolean).join(', ') : '';
+}
+function setPcesRoleValue(value) {
+    const select = document.getElementById('pces-user-pces-role');
+    if (!select) return;
+    const wanted = String(value || '').split(',').map(t => t.trim()).filter(Boolean);
+    wanted.forEach(role => {
+        if (![...select.options].some(o => o.value === role)) {
+            const option = document.createElement('option');
+            option.value = role;
+            option.textContent = role;
+            select.appendChild(option);
+        }
+    });
+    [...select.options].forEach(o => { o.selected = wanted.includes(o.value); });
+}
+function normalizePcesRoles(value) {
+    return String(value || '').split(',').map(t => t.trim()).filter(Boolean).join(', ');
+}
+function clearPcesUsernameSuggestions() {
+    const box = document.getElementById('pces-user-username-suggestions');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+function showPcesUsernameSuggestions(message, suggestions) {
+    const box = document.getElementById('pces-user-username-suggestions');
+    if (!box) return;
+    box.innerHTML = '';
+    box.appendChild(document.createTextNode(message + ' '));
+    (suggestions || []).forEach(name => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = name;
+        btn.onclick = () => {
+            document.getElementById('pces-user-username').value = name;
+            clearPcesUsernameSuggestions();
+        };
+        box.appendChild(btn);
+    });
+    box.style.display = '';
+}
+async function checkPcesUsername() {
+    const input = document.getElementById('pces-user-username');
+    const username = (input?.value || '').trim();
+    if (!username || !pcesSelectedUserHospital?.tenant_id || !['insert', 'update'].includes(pcesUserMode)) return;
+    if (pcesUserMode === 'update' && username === (pcesSelectedUserRecord?.username || '').trim()) return;
+    const params = new URLSearchParams({
+        tenant_id: pcesSelectedUserHospital.tenant_id, username,
+        first_name: document.getElementById('pces-user-first-name')?.value || '',
+        last_name: document.getElementById('pces-user-last-name')?.value || '',
+        party_type: document.getElementById('pces-user-party-type')?.value || ''
+    });
+    if (pcesUserMode === 'update' && pcesSelectedUserRecord?.party_id) params.set('party_id', pcesSelectedUserRecord.party_id);
+    try {
+        const response = await fetch('/api/pces-admin/users/check-username?' + params);
+        const result = await response.json();
+        if (!response.ok || !result.success) return;
+        if (!result.available) showPcesUsernameSuggestions('User Name is taken in this hospital. Try:', result.suggestions);
+    } catch (error) {
+        console.error('[PCES User Admin] Username check failed:', error);
+    }
+}
+
 async function loadPcesUserRoles() {
     const select = document.getElementById('pces-user-pces-role');
     if (!select) return;
-    const current = select.value;
+    const current = getPcesRoleValue();
     try {
         const response = await fetch('/api/pces-admin/user-management/roles');
         const rows = await response.json();
         if (!response.ok || !Array.isArray(rows)) throw new Error(rows.error || `HTTP ${response.status}`);
-        select.innerHTML = '<option value="">Select Role</option>';
+        select.innerHTML = '';
         rows.forEach(role => {
             const opt = document.createElement('option');
             opt.value = role;
             opt.textContent = role;
             select.appendChild(opt);
         });
-        if (current) select.value = current;
+        setPcesRoleValue(current);
     } catch (error) {
         console.error('[PCES User Admin] Role load failed:', error);
     }
@@ -15557,23 +15625,19 @@ function selectPcesUser(row,tr) {
     populatePcesUserForm(row);setPcesUserFormMode(pcesUserMode);
 }
 function populatePcesUserForm(row) {
-    const roleSelect = document.getElementById('pces-user-pces-role');
-    if (roleSelect && row.pces_role && ![...roleSelect.options].some(option => option.value === row.pces_role)) {
-        const option = document.createElement('option');
-        option.value = row.pces_role;
-        option.textContent = row.pces_role;
-        roleSelect.appendChild(option);
-    }
+    clearPcesUsernameSuggestions();
+    setPcesRoleValue(row.pces_role);
     const map={'pces-user-party-id':row.party_id,'pces-user-first-name':row.first_name,
       'pces-user-middle-name':row.middle_name,'pces-user-last-name':row.last_name,
-      'pces-user-party-type':row.party_type,'pces-user-pces-role':row.pces_role,
+      'pces-user-party-type':row.party_type,
       'pces-user-email':row.email,'pces-user-username':row.username,'pces-user-entra-id':row.entra_id};
     Object.entries(map).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val||'';});
 }
 function clearPcesUserForm() {
+    clearPcesUsernameSuggestions();
     ['pces-user-party-id','pces-user-first-name','pces-user-middle-name','pces-user-last-name','pces-user-email','pces-user-username','pces-user-entra-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const pt=document.getElementById('pces-user-party-type');if(pt)pt.value='DOCTOR';
-    const pr=document.getElementById('pces-user-pces-role');if(pr)pr.value='';
+    setPcesRoleValue('');
     setPcesUserFormMode('view');
 }
 function setPcesUserFormMode(mode) {
@@ -15643,7 +15707,7 @@ async function savePcesUser() {
         middle_name: (document.getElementById('pces-user-middle-name')?.value || '').trim(),
         last_name: (document.getElementById('pces-user-last-name')?.value || '').trim(),
         party_type: document.getElementById('pces-user-party-type')?.value || '',
-        pces_role: document.getElementById('pces-user-pces-role')?.value || '',
+        pces_role: getPcesRoleValue(),
         email: (document.getElementById('pces-user-email')?.value || '').trim(),
         username: (document.getElementById('pces-user-username')?.value || '').trim()
     };
@@ -15655,7 +15719,10 @@ async function savePcesUser() {
     }
     if (isUpdate) {
         Object.keys(payload).forEach(key => {
-            if (key !== 'tenant_id' && payload[key] === (pcesSelectedUserRecord[key] || '').trim()) {
+            const original = key === 'pces_role'
+                ? normalizePcesRoles(pcesSelectedUserRecord[key])
+                : (pcesSelectedUserRecord[key] || '').trim();
+            if (key !== 'tenant_id' && payload[key] === original) {
                 delete payload[key];
             }
         });
@@ -15692,6 +15759,9 @@ async function savePcesUser() {
             body: JSON.stringify(payload)
         });
         const result = await response.json();
+        if (response.status === 409 && result.suggestions) {
+            showPcesUsernameSuggestions('User Name is taken in this hospital. Try:', result.suggestions);
+        }
         if (!response.ok || !result.success) {
             throw new Error(result.error || result.message || `HTTP ${response.status}`);
         }
@@ -15725,11 +15795,13 @@ async function onboardSelectedPcesUser() {
         middle_name: document.getElementById('pces-user-middle-name')?.value,
         last_name: document.getElementById('pces-user-last-name')?.value,
         party_type: document.getElementById('pces-user-party-type')?.value,
-        pces_role: document.getElementById('pces-user-pces-role')?.value,
+        pces_role: getPcesRoleValue(),
         email: document.getElementById('pces-user-email')?.value,
         username: document.getElementById('pces-user-username')?.value
     };
-    if (pcesUserMode === 'update' && Object.entries(formValues).some(([key, value]) => (value || '').trim() !== (user[key] || '').trim())) {
+    if (pcesUserMode === 'update' && Object.entries(formValues).some(([key, value]) => key === 'pces_role'
+        ? normalizePcesRoles(value) !== normalizePcesRoles(user[key])
+        : (value || '').trim() !== (user[key] || '').trim())) {
         alert('Save your user details before onboarding.');
         return;
     }

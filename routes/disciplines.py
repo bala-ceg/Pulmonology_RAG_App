@@ -5312,11 +5312,12 @@ def pces_admin_user_roles():
         with _ehr_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT DISTINCT pces_role
-                    FROM ehr_ccm_schema.p_party
+                    SELECT DISTINCT role
+                    FROM ehr_ccm_schema.p_party,
+                         LATERAL regexp_split_to_table(pces_role, '\\s*,\\s*') AS role
                     WHERE pces_role IS NOT NULL
-                      AND BTRIM(pces_role) <> ''
-                    ORDER BY pces_role
+                      AND BTRIM(role) <> ''
+                    ORDER BY role
                 """)
                 rows = cursor.fetchall()
         return jsonify([row[0] for row in rows if row and row[0]])

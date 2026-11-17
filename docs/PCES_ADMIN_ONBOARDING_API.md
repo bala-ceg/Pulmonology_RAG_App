@@ -134,3 +134,10 @@ Route tests mock service boundaries and do not create Microsoft accounts. A sepa
 Entra user creation and PostgreSQL updates cannot be one distributed transaction. If Graph creates the user but saving the returned OID fails, reconcile the Entra object manually before retrying; do not blindly retry or create a duplicate. The current service reports this partial-failure state. Graph is used for Entra user provisioning only; onboarding email delivery uses Bluehost SMTP.
 
 The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password, Graph access token, or full Graph request payload.
+
+## Usernames, multiple roles and test emails
+
+- **Per-hospital usernames:** a username must be unique (case-insensitive) among the active users of the selected hospital (`tenant_id`). Create and update return `409` with `{"error", "suggestions"}`; `suggestions` has up to 3 numbered variants (`name2`) and up to 3 name-based variants (`dr.john.doe`, `dr.jdoe`) that are free in that hospital.
+- **Live check:** `GET /api/pces-admin/users/check-username?tenant_id=&username=[&party_id=&first_name=&last_name=&party_type=]` returns `{"available", "suggestions"}`.
+- **Multiple PCES roles:** `pces_role` accepts a list or a comma-separated string, is de-duplicated, and is stored comma-joined (for example `ANESTHESIOLOGIST, SME`). The roles endpoint returns individual roles.
+- **Gmail testing:** any valid email domain (including `gmail.com`) can be onboarded. The Microsoft identity is `emailAddress` under `PCES_DIRECTORY_DOMAIN`, and the temporary password is sent through the configured SMTP account.
