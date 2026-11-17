@@ -4800,7 +4800,7 @@
                     class="section-btn"
                     style="display:block; margin:0 auto 6px;"
                     onclick="requireAuth(() => { loadPcesAdminUserOnboarding(); syncEhrAiToggleLabel(); })">
-                    User Onboarding
+                    Add Client Users
                 </button>
             </div>
 
@@ -5670,6 +5670,7 @@
             <div class="entity-list-title" style="margin:0; flex:1;">List of Users</div>
             <div class="pces-user-admin-actions">
                 <button type="button" class="entity-action-btn" onclick="startPcesUserInsert()">Insert</button>
+                <button type="button" class="entity-action-btn" onclick="deleteSelectedPcesUser()">Delete</button>
                 <button type="button" class="entity-action-btn" onclick="startPcesUserUpdate()">Update</button>
                 <button type="button" class="entity-action-btn" onclick="searchPcesUsers()">Search</button>
                 <button type="button" class="entity-action-btn" onclick="onboardSelectedPcesUser()">On Board</button>
@@ -5717,7 +5718,7 @@
             </div>
             <div class="pces-user-field"><label>PCES Role</label><select id="pces-user-pces-role" multiple size="3" title="Ctrl/Cmd-click to select multiple roles"></select></div>
             <div class="pces-user-field"><label>Email</label><input id="pces-user-email" type="email" maxlength="255"></div>
-            <div class="pces-user-field"><label>User Name</label><input id="pces-user-username" type="text" maxlength="255" onblur="checkPcesUsername()" oninput="clearPcesUsernameSuggestions()"></div>
+            <div class="pces-user-field"><label>User Name</label><input id="pces-user-username" type="text" maxlength="255" placeholder="As provided by the client" onblur="checkPcesUsername()" oninput="clearPcesUsernameSuggestions()"></div>
             <div class="pces-user-field"><label>Entra ID</label><input id="pces-user-entra-id" type="text" readonly></div>
         </div>
         <div id="pces-user-username-suggestions" class="pces-user-suggestions" style="display:none;"></div>
@@ -14904,7 +14905,7 @@ function hideClinicalPanelsForPcesAdmin() {
     const chatAiRow = document.querySelector('.chat-ai-row');
     if (chatAiRow) chatAiRow.style.display = 'none';
 
-    // Hospital and User Onboarding are administrative screens.
+    // Hospital and Add Client Users are administrative screens.
     // Always hide the shared Clinical AI / Medical History / Patient Problem
     // footer, including when these screens are opened immediately after reload.
     hideSharedClinicalFooterForDataApplets();
@@ -15423,6 +15424,13 @@ function setPcesRoleValue(value) {
     });
     [...select.options].forEach(o => { o.selected = wanted.includes(o.value); });
 }
+function pcesRoleRuleError(roles, partyType) {
+    const tokens = String(roles || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+    if (!tokens.includes('SME')) return '';
+    if (tokens.length === 1) return 'SME cannot be the only role; combine it with another role.';
+    if (String(partyType || '').toUpperCase() !== 'DOCTOR') return 'SME can only be assigned to a DOCTOR.';
+    return '';
+}
 function normalizePcesRoles(value) {
     return String(value || '').split(',').map(t => t.trim()).filter(Boolean).join(', ');
 }
@@ -15743,6 +15751,13 @@ async function savePcesUser() {
         return;
     }
 
+    const effectiveRole = 'pces_role' in payload ? payload.pces_role : pcesSelectedUserRecord?.pces_role;
+    const effectiveType = 'party_type' in payload ? payload.party_type : pcesSelectedUserRecord?.party_type;
+    if (!isUpdate || 'pces_role' in payload || 'party_type' in payload) {
+        const roleError = pcesRoleRuleError(effectiveRole, effectiveType);
+        if (roleError) { alert(roleError); return; }
+    }
+
     const url = isUpdate
         ? `/api/pces-admin/users/${encodeURIComponent(pcesSelectedUserRecord.party_id)}`
         : '/api/pces-admin/users';
@@ -15766,7 +15781,13 @@ async function savePcesUser() {
             throw new Error(result.error || result.message || `HTTP ${response.status}`);
         }
 
-        alert(isUpdate ? 'User updated successfully.' : 'User created successfully.');
+        if (result.partial && result.username_conflict) {
+            showPcesUsernameSuggestions(`User Name '${result.username_conflict.username}' is taken in this hospital. Other changes were saved. Try:`,
+                result.username_conflict.suggestions);
+            alert(`Saved: ${result.updated_fields.join(', ')}. User Name was not changed because it is already used in this hospital.`);
+        } else {
+            alert(isUpdate ? 'User updated successfully.' : 'User created successfully.');
+        }
         pcesUserMode = 'view';
         await loadPcesUsersForHospital();
 
@@ -15783,6 +15804,23 @@ async function savePcesUser() {
             button.disabled = false;
             button.textContent = 'Save';
         }
+    }
+}
+
+async function deleteSelectedPcesUser() {
+    if (!pcesSelectedUserHospital?.tenant_id || !pcesSelectedUserRecord?.party_id) { alert('Select a user first.'); return; }
+    const user = pcesSelectedUserRecord;
+    if (!['DOCTOR', 'NURSE'].includes(user.party_type)) { alert('Only Doctor and Nurse records can be deleted here.'); return; }
+    if (!confirm(`Remove ${user.first_name} ${user.last_name} from ${pcesSelectedUserHospital.hospital_name || 'this hospital'}? Their Microsoft account is not deleted.`)) return;
+    try {
+        const response = await fetch(`/api/pces-admin/users/${encodeURIComponent(user.party_id)}?tenant_id=${encodeURIComponent(pcesSelectedUserHospital.tenant_id)}`, {method: 'DELETE'});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || `HTTP ${response.status}`);
+        pcesSelectedUserRecord = null;
+        await loadPcesUsersForHospital();
+        alert('User removed from the hospital.');
+    } catch (error) {
+        alert(`Unable to delete user: ${error.message}`);
     }
 }
 

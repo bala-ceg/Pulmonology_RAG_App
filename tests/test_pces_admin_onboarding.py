@@ -308,6 +308,61 @@ def test_username_conflict_is_scoped_to_hospital_and_suggests_variants(onboardin
     assert all("pt.tenant_id=%s" in c.args[0] for c in cur.execute.call_args_list if "LOWER(p.username)" in c.args[0])
 
 
+@pytest.mark.parametrize("roles,kind,ok", [
+    ("SME", "DOCTOR", False), ("CARDIOLOGY, SME", "DOCTOR", True),
+    ("NURSE, SME", "NURSE", False), ("CARDIOLOGY, SME", "OFFICE_ADMIN", False),
+    ("NURSE", "NURSE", True)])
+def test_sme_role_rules(roles, kind, ok):
+    from services import pces_admin_onboarding as onboarding
+    if ok:
+        onboarding.check_role_rules(roles, kind)
+    else:
+        with pytest.raises(onboarding.OnboardingError):
+            onboarding.check_role_rules(roles, kind)
+
+
+def test_update_with_username_conflict_is_partial_success(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    party_id = "00000000-0000-0000-0000-000000000002"
+    # admin, membership, current role row, username taken, names row, update ok; later lookups free
+    cur.fetchone.side_effect = [(1,), (1,), ("DOCTOR", "CARDIOLOGY"), (1,), ("John", "Doe", "DOCTOR")] + [None] * 6 + [(party_id,)]
+    result = onboarding.update_user(ADMIN["party_id"], party_id, party_id,
+                                    {"pces_role": "CARDIOLOGY, SME", "username": "taken"})
+    assert result["partial"] is True and result["updated_fields"] == ["pces_role"]
+    assert result["username_conflict"]["username"] == "taken"
+    sql = cur.execute.call_args.args[0]
+    assert "pces_role=%s" in sql and "username=%s" not in sql
+
+
+def test_update_rejects_sme_for_nurse(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    party_id = "00000000-0000-0000-0000-000000000002"
+    cur.fetchone.side_effect = [(1,), (1,), ("NURSE", "NURSE")]
+    with pytest.raises(onboarding.OnboardingError, match="SME"):
+        onboarding.update_user(ADMIN["party_id"], party_id, party_id, {"pces_role": "NURSE, SME"})
+
+
+def test_delete_route_deactivates_membership(monkeypatch):
+    from routes import pces_admin
+    seen = {}
+    monkeypatch.setattr(pces_admin, "delete_user", lambda a, p, t: seen.update(p=p, t=t) or {"deleted": True})
+    assert client().delete("/api/pces-admin/users/p1?tenant_id=t1").status_code == 403
+    response = client(ADMIN).delete("/api/pces-admin/users/p1?tenant_id=t1")
+    assert response.status_code == 200 and seen == {"p": "p1", "t": "t1"}
+
+
+def test_delete_user_only_deactivates_membership(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    pid = "00000000-0000-0000-0000-000000000002"
+    cur.fetchone.side_effect = [(1,), (pid,)]
+    assert onboarding.delete_user(ADMIN["party_id"], pid, pid)["deleted"] is True
+    sql = cur.execute.call_args.args[0]
+    assert "UPDATE p_party_tenant" in sql and "is_active=FALSE" in sql and "DELETE" not in sql
+
+
 def test_roles_are_normalized_and_gmail_is_accepted():
     from services import pces_admin_onboarding as onboarding
     assert onboarding.normalize_roles(["A", " b ", "a", ""]) == "A, b"

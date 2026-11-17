@@ -1,7 +1,7 @@
 """PCES Admin-only onboarding API."""
 from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, session
-from services.pces_admin_onboarding import OnboardingError, UsernameConflict, check_username, create_user, list_hospitals, list_users, onboard_user, search_users, update_user
+from services.pces_admin_onboarding import OnboardingError, UsernameConflict, check_username, create_user, delete_user, list_hospitals, list_users, onboard_user, search_users, update_user
 
 pces_admin_bp=Blueprint("pces_admin_bp",__name__,url_prefix="/api/pces-admin")
 
@@ -91,3 +91,13 @@ def users_onboard(party_id):
     except Exception:
         current_app.logger.exception("Unable to onboard user")
         return jsonify({"success":False,"error":"Unable to complete onboarding"}),503
+
+@pces_admin_bp.delete("/users/<party_id>")
+def users_delete(party_id):
+    if not _admin_id(): return _denied()
+    tenant_id=request.args.get("tenant_id") or (request.get_json(silent=True) or {}).get("tenant_id","")
+    try: return jsonify({"success":True,**delete_user(_admin_id(),party_id,tenant_id)})
+    except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
+    except Exception:
+        current_app.logger.exception("Unable to delete user")
+        return jsonify({"success":False,"error":"Unable to delete user"}),503

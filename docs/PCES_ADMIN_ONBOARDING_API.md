@@ -141,3 +141,10 @@ The current development flow emails a temporary password. This is security-sensi
 - **Live check:** `GET /api/pces-admin/users/check-username?tenant_id=&username=[&party_id=&first_name=&last_name=&party_type=]` returns `{"available", "suggestions"}`.
 - **Multiple PCES roles:** `pces_role` accepts a list or a comma-separated string, is de-duplicated, and is stored comma-joined (for example `ANESTHESIOLOGIST, SME`). The roles endpoint returns individual roles.
 - **Gmail testing:** any valid email domain (including `gmail.com`) can be onboarded. The Microsoft identity is `emailAddress` under `PCES_DIRECTORY_DOMAIN`, and the temporary password is sent through the configured SMTP account.
+
+## Add Client Users (formerly User Onboarding)
+
+- **SME rule:** `SME` can never be the only role and is only valid for `DOCTOR` users (not NURSE, OFFICE_ADMIN, etc.). Create and update return `400` when violated.
+- **Usernames** are supplied by the client and typed in by the PCES employee; the app only suggests alternatives on conflict.
+- **Partial update:** if a `PATCH` contains a username that is already used in the hospital, the other valid changes are saved and the response is `200` with `partial: true`, `rejected_fields: ["username"]` and `username_conflict: {username, error, suggestions}`. If the username was the only change, the request returns `409`.
+- **Delete:** `DELETE /api/pces-admin/users/<party_id>?tenant_id=<id>` deactivates the user's membership in that hospital only (`p_party_tenant.is_active=FALSE`), which frees the username there. The party record and Microsoft Entra account are not deleted.

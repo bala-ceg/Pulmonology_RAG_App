@@ -105,6 +105,7 @@ def search_users(admin_id,tenant_id,last_name="",party_type="",email=""):
 class UsernameConflict(OnboardingError):
     def __init__(self, username, suggestions):
         super().__init__("User Name '" + username + "' already exists in this hospital")
+        self.username = username
         self.suggestions = suggestions
 
 def normalize_roles(value):
@@ -116,6 +117,15 @@ def normalize_roles(value):
         if role and role.upper() not in seen:
             seen.add(role.upper()); roles.append(role)
     return ", ".join(roles)
+
+def check_role_rules(roles, party_type):
+    """SME is never a sole role and is only valid for DOCTOR users."""
+    tokens=[t.strip().upper() for t in str(roles or "").split(",") if t.strip()]
+    if "SME" not in tokens: return
+    if len(tokens)==1:
+        raise OnboardingError("SME cannot be the only role; combine it with another role")
+    if str(party_type or "").upper()!="DOCTOR":
+        raise OnboardingError("SME can only be assigned to a DOCTOR, not a "+(str(party_type or "").upper() or "non-doctor"))
 
 def _valid_email(email):
     return bool(re.fullmatch(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+", email or ""))
@@ -170,6 +180,7 @@ def create_user(admin_id,tenant_id,data):
     if not all((first,last,role,email,username)): raise OnboardingError("First name, last name, PCES role, email and username are required")
     if not _valid_email(email): raise OnboardingError("Email is not a valid email address")
     if kind not in {"DOCTOR","NURSE"}: raise OnboardingError("Only DOCTOR and NURSE users can be onboarded")
+    check_role_rules(role,kind)
     party_id=str(uuid4()); membership_id=str(uuid4())
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
@@ -225,12 +236,22 @@ def update_user(admin_id,party_id,tenant_id,data):
         if not cur.fetchone():
             raise OnboardingError("Doctor/Nurse is not a member of the selected hospital")
 
+        if "party_type" in values or "pces_role" in values:
+            cur.execute("SELECT party_type,pces_role FROM p_party WHERE party_id=%s",(party_id,))
+            current=cur.fetchone() or ("","")
+            check_role_rules(values.get("pces_role",current[1]),values.get("party_type",current[0]))
+        conflict=None
         if "username" in values and _username_taken(cur,tenant_id,values["username"],party_id):
             cur.execute("SELECT first_name,last_name,party_type FROM p_party WHERE party_id=%s",(party_id,))
             row=cur.fetchone() or ("","","")
-            raise UsernameConflict(values["username"],_suggest_usernames(
+            conflict=UsernameConflict(values["username"],_suggest_usernames(
                 cur,tenant_id,values["username"],values.get("first_name") or row[0],
                 values.get("last_name") or row[1],values.get("party_type") or row[2],party_id))
+            # Accept the other valid changes; only the conflicting username is rejected.
+            del values["username"]
+            if not values: raise conflict
+            sets=[columns[k]+"=%s" for k in columns if k in values]
+            vals=[values[k] or None for k in columns if k in values]
         if "email" in values:
             cur.execute("SELECT 1 FROM p_party WHERE party_id<>%s AND LOWER(email)=LOWER(%s) LIMIT 1",
                         (party_id,values["email"]))
@@ -243,7 +264,28 @@ def update_user(admin_id,party_id,tenant_id,data):
                     tuple(vals+[admin_id,party_id]))
         if not cur.fetchone():
             raise OnboardingError("Doctor/Nurse record was not found")
-    return {"party_id":party_id,"updated_fields":sorted(values)}
+    result={"party_id":party_id,"updated_fields":sorted(values)}
+    if conflict:
+        result.update(partial=True,rejected_fields=["username"],
+                      username_conflict={"username":conflict.username,"error":str(conflict),
+                                         "suggestions":conflict.suggestions})
+    return result
+
+def delete_user(admin_id,party_id,tenant_id):
+    """Remove a DOCTOR/NURSE from one hospital by deactivating the membership only."""
+    admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
+    with _connect() as conn, conn.cursor() as cur:
+        _admin(cur,admin_id)
+        cur.execute("""UPDATE p_party_tenant pt SET is_active=FALSE,updated_at=NOW(),updated_by=%s,
+                       version_no=COALESCE(pt.version_no,1)+1
+                       FROM p_party p
+                       WHERE p.party_id=pt.party_id AND pt.party_id=%s AND pt.tenant_id=%s
+                         AND pt.status='ACTIVE' AND COALESCE(pt.is_active,TRUE)=TRUE
+                         AND p.party_type IN ('DOCTOR','NURSE')
+                       RETURNING pt.party_id""",(admin_id,party_id,tenant_id))
+        if not cur.fetchone():
+            raise OnboardingError("Doctor/Nurse is not an active member of the selected hospital")
+    return {"party_id":party_id,"tenant_id":tenant_id,"deleted":True}
 
 def _temp_password():
     alphabet=string.ascii_letters+string.digits
