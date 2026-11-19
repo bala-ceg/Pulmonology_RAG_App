@@ -1,7 +1,7 @@
 """PCES Admin-only onboarding API."""
 from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request, session
-from services.pces_admin_onboarding import OnboardingError, UsernameConflict, check_username, create_user, delete_user, list_hospitals, list_users, onboard_user, search_users, update_user
+from services.pces_admin_onboarding import OnboardingError, UsernameConflict, check_username, create_user, delete_user, list_hospitals, list_users, onboard_user, pending_onboarding_users, search_users, update_user
 
 pces_admin_bp=Blueprint("pces_admin_bp",__name__,url_prefix="/api/pces-admin")
 
@@ -86,11 +86,28 @@ def users_onboard(party_id):
     reset_password=data.get("reset_password",False)
     if not isinstance(reset_password,bool):
         return jsonify({"success":False,"error":"reset_password must be a boolean"}),400
-    try: return jsonify({"success":True,**onboard_user(_admin_id(),party_id,tenant_id,reset_password=reset_password)})
+    only_pending=data.get("only_pending",False)
+    if not isinstance(only_pending,bool):
+        return jsonify({"success":False,"error":"only_pending must be a boolean"}),400
+    try:
+        options={"reset_password":reset_password}
+        if only_pending: options["only_pending"]=True
+        return jsonify({"success":True,**onboard_user(_admin_id(),party_id,tenant_id,**options)})
     except OnboardingError as exc: return jsonify({"success":False,"error":str(exc)}),400
     except Exception:
         current_app.logger.exception("Unable to onboard user")
         return jsonify({"success":False,"error":"Unable to complete onboarding"}),503
+
+@pces_admin_bp.get("/users/pending-onboarding")
+def users_pending_onboarding():
+    if not _admin_id(): return _denied()
+    try:
+        return jsonify({"success":True,"users":pending_onboarding_users(_admin_id(),request.args.get("tenant_id",""))})
+    except OnboardingError as exc:
+        return jsonify({"success":False,"error":str(exc)}),400
+    except Exception:
+        current_app.logger.exception("Unable to load pending onboarding users")
+        return jsonify({"success":False,"error":"Unable to load pending users"}),503
 
 @pces_admin_bp.delete("/users/<party_id>")
 def users_delete(party_id):

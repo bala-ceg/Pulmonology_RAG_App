@@ -4421,7 +4421,10 @@
         .pces-user-admin-search-row, .pces-user-admin-actions, .pces-user-search-toolbar { display:flex; align-items:center; gap:8px; }
         .pces-user-admin-search-row input, .pces-user-search-toolbar input { min-width:220px; padding:6px 8px; border:1px solid #aaa; }
         .pces-user-search-toolbar { margin:0 0 10px; font-size:12px; }
-        #pces-user-selected-hospital-label { margin-left:auto; font-weight:700; color:#1a3a5c; }
+        .pces-user-search-toolbar label { display:flex; align-items:center; gap:8px; white-space:nowrap; margin:0; }
+        .pces-user-search-toolbar input, .pces-user-search-toolbar select { box-sizing:border-box; height:32px; padding:6px 8px; border:1px solid #aaa; font-size:12px; }
+        .pces-user-search-toolbar select { min-width:140px; }
+        .pces-user-admin-actions { flex-wrap:wrap; }
         .pces-user-detail-title { text-align:center; font-weight:700; margin:12px 0 8px; }
         .pces-user-detail-grid { display:grid; grid-template-columns:repeat(3,minmax(220px,1fr)); gap:8px 12px; }
         .pces-user-field { display:grid; grid-template-columns:105px minmax(0,1fr); border:1px solid #333; min-height:31px; }
@@ -5674,22 +5677,23 @@
                 <button type="button" class="entity-action-btn" onclick="startPcesUserUpdate()">Update</button>
                 <button type="button" class="entity-action-btn" onclick="searchPcesUsers()">Search</button>
                 <button type="button" class="entity-action-btn" onclick="onboardSelectedPcesUser()">On Board</button>
+                <button id="pces-user-batch-btn" type="button" class="entity-action-btn" onclick="onboardPendingPcesUsers()">On Board All Pending</button>
             </div>
         </div>
 
         <div class="pces-user-search-toolbar" style="flex-wrap:wrap;">
-            <label for="pces-user-search-last-name">Last Name</label>
+            <label for="pces-user-search-last-name">Last Name
             <input id="pces-user-search-last-name" type="text" maxlength="100" placeholder="Last Name"
-                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}">
-            <label for="pces-user-search-party-type">Party Type</label>
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}"></label>
+            <label for="pces-user-search-party-type">Party Type
             <select id="pces-user-search-party-type">
                 <option value="">All</option><option value="DOCTOR">DOCTOR</option><option value="NURSE">NURSE</option>
-            </select>
-            <label for="pces-user-search-email">Email</label>
+            </select></label>
+            <label for="pces-user-search-email">Email
             <input id="pces-user-search-email" type="email" maxlength="255" placeholder="Email"
-                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}">
-            <span id="pces-user-selected-hospital-label"></span>
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchPcesUsers();}"></label>
         </div>
+        <div id="pces-user-batch-results" role="status" aria-live="polite" style="white-space:pre-wrap; margin-bottom:10px;"></div>
 
         <div class="entity-table-wrapper" style="max-height:260px;">
             <table class="entity-table">
@@ -15381,6 +15385,7 @@ let pcesUserCache = [];
 let pcesSelectedUserHospital = null;
 let pcesSelectedUserRecord = null;
 let pcesUserMode = 'view';
+let pcesBatchOnboarding = false;
 
 function _isPcesAdminUser() {
     const partyType = (sessionStorage.getItem('pces_party_type') || '').trim().toUpperCase();
@@ -15545,13 +15550,12 @@ function renderPcesUserHospitals(rows) {
 }
 
 function selectPcesUserHospital(row,tr) {
+    if (pcesBatchOnboarding) return;
     document.querySelectorAll('#pces-user-hospital-body tr').forEach(r => r.classList.remove('selected'));
     tr?.classList.add('selected');
     pcesSelectedUserHospital = row;
     pcesSelectedUserRecord = null;
     pcesUserMode = 'view';
-    const label = document.getElementById('pces-user-selected-hospital-label');
-    if (label) label.textContent = row.hospital_name ? `Hospital: ${row.hospital_name}` : '';
     clearPcesUserForm();
     loadPcesUsersForHospital();
 }
@@ -15627,6 +15631,7 @@ function renderPcesUsers(rows) {
     const first=body.querySelector('tr');if(first)selectPcesUser(rows[0],first);
 }
 function selectPcesUser(row,tr) {
+    if (pcesBatchOnboarding) return;
     document.querySelectorAll('#pces-user-list-body tr').forEach(r=>r.classList.remove('selected'));
     tr?.classList.add('selected');pcesSelectedUserRecord=row;
     pcesUserMode = ['DOCTOR', 'NURSE'].includes(row.party_type) ? 'update' : 'view';
@@ -15821,6 +15826,51 @@ async function deleteSelectedPcesUser() {
         alert('User removed from the hospital.');
     } catch (error) {
         alert(`Unable to delete user: ${error.message}`);
+    }
+}
+
+async function onboardPendingPcesUsers() {
+    if (pcesBatchOnboarding) return;
+    if (!pcesSelectedUserHospital?.tenant_id) { alert('Select a hospital first.'); return; }
+    const tenantId = pcesSelectedUserHospital.tenant_id;
+    if (!confirm('Onboard all pending users in this hospital, including users outside the current search? Unsaved edits are not included. Existing linked accounts will only have their hospital status reconciled; passwords will not be reset.')) return;
+    const output = document.getElementById('pces-user-batch-results');
+    const button = document.getElementById('pces-user-batch-btn');
+    const controls = [...document.querySelectorAll('#pces-admin-user-onboarding-panel button, #pces-admin-user-onboarding-panel input, #pces-admin-user-onboarding-panel select')];
+    const previous = controls.map(control => control.disabled);
+    pcesBatchOnboarding = true;
+    controls.forEach(control => { control.disabled = true; });
+    const lines = [];
+    try {
+        output.textContent = 'Loading pending users...';
+        const response = await fetch(`/api/pces-admin/users/pending-onboarding?tenant_id=${encodeURIComponent(tenantId)}`);
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || `HTTP ${response.status}`);
+        for (const [index, user] of data.users.entries()) {
+            if (button) button.textContent = `Processing ${index + 1}/${data.users.length}`;
+            const name = user.username || `${user.first_name} ${user.last_name}`.trim() || user.party_id;
+            try {
+                const resultResponse = await fetch(`/api/pces-admin/users/${encodeURIComponent(user.party_id)}/onboard`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({tenant_id: tenantId, only_pending: true})
+                });
+                const result = await resultResponse.json();
+                if (!resultResponse.ok || !result.success) throw new Error(result.error || `HTTP ${resultResponse.status}`);
+                const status = result.skipped ? 'Skipped' : result.email_sent === false ? 'Email delivery failed' : result.email_sent === true ? 'Onboarded, email sent' : 'Linked account reconciled (no email)';
+                lines.push(`${name}: ${status}. ${result.message || ''}`);
+            } catch (error) {
+                lines.push(`${name}: Failed. ${error.message}`);
+            }
+            output.textContent = lines.join('\n');
+        }
+        output.textContent = lines.length ? `Batch complete (${lines.length} users).\n${lines.join('\n')}` : 'No pending users in this hospital.';
+    } catch (error) {
+        output.textContent = `Unable to run batch onboarding: ${error.message}`;
+    } finally {
+        pcesBatchOnboarding = false;
+        controls.forEach((control, index) => { control.disabled = previous[index]; });
+        if (button) button.textContent = 'On Board All Pending';
+        await loadPcesUsersForHospital();
     }
 }
 

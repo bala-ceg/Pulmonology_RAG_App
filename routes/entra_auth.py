@@ -111,9 +111,13 @@ def entra_login():
         # Password-reset entry point forces an interactive credential screen.
         # Keep the default account-picker behavior for ordinary sign-in.
         prompt = "login" if requested_prompt == "login" else "select_account"
+        login_hint = (request.args.get("login_hint") or "").strip()
+        options = {}
+        if login_hint and len(login_hint) <= 254 and not any(c in login_hint for c in "\r\n"):
+            options["login_hint"] = login_hint
         auth_url = _client().get_authorization_request_url(
             scopes=["email"], state=state, redirect_uri=Config.ENTRA_REDIRECT_URI,
-            prompt=prompt,
+            prompt=prompt, **options,
         )
     except Exception:
         current_app.logger.exception("Unable to start Entra authorization flow")

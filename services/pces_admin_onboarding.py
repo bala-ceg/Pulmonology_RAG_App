@@ -3,7 +3,7 @@ from __future__ import annotations
 import re, secrets, string, smtplib, ssl
 from email.message import EmailMessage
 from uuid import UUID, uuid4
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import msal, psycopg, requests
 from config import Config
 
@@ -394,6 +394,13 @@ def _email_settings():
     _signin_url()
     return host, username_smtp, password_smtp, port, timeout
 
+def _email_signin_url(email):
+    parts = urlsplit(_signin_url())
+    query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+             if key not in {"login_hint", "prompt"}]
+    query.extend([("prompt", "login"), ("login_hint", email)])
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
 def _send_email(email, username, password):
     """Send PCES onboarding instructions through the configured Bluehost mailbox."""
     host, username_smtp, password_smtp, port, timeout = _email_settings()
@@ -409,7 +416,8 @@ def _send_email(email, username, password):
         "Microsoft sign-in email: " + email + "\n"
         "PCES username: " + username + "\n"
         "Temporary password: " + password + "\n"
-        "Sign-in URL: " + _signin_url() + "\n\n"
+        "Sign-in URL: " + _email_signin_url(email) + "\n\n"
+        "The link prefills your email. Enter the temporary password above to sign in.\n"
         "Choose Microsoft sign-in in PCES and use the Microsoft sign-in email above, "
         "not your PCES username. Change your temporary password when prompted."
     )
@@ -431,7 +439,21 @@ def _send_email(email, username, password):
         # Do not include credentials, message bodies, or SMTP authentication data.
         raise OnboardingError("Unable to send PCES onboarding email through Bluehost SMTP") from exc
 
-def onboard_user(admin_id,party_id,tenant_id,reset_password=False):
+def pending_onboarding_users(admin_id, tenant_id):
+    tenant_id = _uuid(tenant_id, "hospital ID")
+    with _connect() as conn, conn.cursor() as cur:
+        _admin(cur, _uuid(admin_id, "PCES Admin party ID"))
+        cur.execute("""SELECT DISTINCT p.party_id,p.first_name,p.last_name,p.username
+                       FROM p_party p JOIN p_party_tenant pt ON pt.party_id=p.party_id
+                       WHERE pt.tenant_id=%s AND pt.status='ACTIVE'
+                         AND COALESCE(pt.is_active,TRUE)=TRUE AND pt.on_board IS NOT TRUE
+                         AND COALESCE(p.is_active,TRUE)=TRUE AND p.deleted_at IS NULL
+                         AND p.party_type IN ('DOCTOR','NURSE','OFFICE_ADMIN','PCES_ADMIN')
+                       ORDER BY p.last_name,p.first_name,p.party_id""", (tenant_id,))
+        return [{"party_id": str(r[0]), "first_name": r[1] or "", "last_name": r[2] or "",
+                 "username": r[3] or ""} for r in cur.fetchall()]
+
+def onboard_user(admin_id,party_id,tenant_id,reset_password=False,only_pending=False):
     admin_id=_uuid(admin_id,"PCES Admin party ID"); party_id=_uuid(party_id,"party ID"); tenant_id=_uuid(tenant_id,"hospital ID")
     with _connect() as conn, conn.cursor() as cur:
         _admin(cur,admin_id)
@@ -443,6 +465,13 @@ def onboard_user(admin_id,party_id,tenant_id,reset_password=False):
         row=cur.fetchone()
         if not row: raise OnboardingError("Doctor/Nurse record was not found")
         first,middle,last,email,username,oid,kind,party_tenant_id=row
+        if only_pending:
+            cur.execute("SELECT on_board FROM p_party_tenant WHERE party_tenant_id=%s", (party_tenant_id,))
+            status = cur.fetchone()
+            if status and status[0] is True:
+                return {"party_id": party_id, "skipped": True, "message": "Already onboarded; skipped"}
+            # Batch onboarding must not reset an existing Microsoft password.
+            reset_password = False
         if not email or not username: raise OnboardingError("Email and username are required before onboarding")
         if oid and not reset_password:
             cur.execute("""UPDATE p_party_tenant

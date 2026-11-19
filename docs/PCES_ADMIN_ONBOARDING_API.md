@@ -144,6 +144,9 @@ The current development flow emails a temporary password. This is security-sensi
 
 ## Add Client Users (formerly User Onboarding)
 
+- **On Board All Pending:** loads every active, not-yet-onboarded user for the selected hospital, independent of list pagination/search. After confirmation, the browser processes users sequentially and continues on errors, showing each result inline. Keep the page open until completion. Each request sends `only_pending: true`; the service rechecks status under the membership lock and skips users already onboarded. Existing linked Microsoft accounts are reconciled without resetting passwords or sending email; use individual **On Board** when a password reset/email is needed. Email-delivery failures are reported separately and need individual retry.
+- **Email sign-in link:** includes an URL-encoded `login_hint` email and `prompt=login`. The login route passes the hint to Microsoft; the user must still enter their temporary password and complete any required authentication. No password is added to the URL, and the hint is not used as proof of identity. For custom `PCES_SIGNIN_URL` overrides, point to the PCES `/auth/entra/login` endpoint to support forwarding the hint.
+
 - **SME rule:** `SME` can never be the only role and is only valid for `DOCTOR` users (not NURSE, OFFICE_ADMIN, etc.). Create and update return `400` when violated.
 - **Usernames** are supplied by the client and typed in by the PCES employee; the app only suggests alternatives on conflict.
 - **Partial update:** if a `PATCH` contains a username that is already used in the hospital, the other valid changes are saved and the response is `200` with `partial: true`, `rejected_fields: ["username"]` and `username_conflict: {username, error, suggestions}`. If the username was the only change, the request returns `409`.

@@ -98,9 +98,10 @@ def test_password_reset_login_forces_interactive_prompt(monkeypatch):
 
     monkeypatch.setattr(entra_auth, "_configured", lambda: True)
     monkeypatch.setattr(entra_auth, "_client", lambda: FakeClient())
-    response = _client().get("/auth/entra/login?prompt=login")
+    response = _client().get("/auth/entra/login?prompt=login&login_hint=first%2Btest%40gmail.com")
     assert response.status_code == 302
     assert captured["prompt"] == "login"
+    assert captured["login_hint"] == "first+test@gmail.com"
 
 
 def test_normal_login_keeps_account_picker_prompt(monkeypatch):
@@ -116,3 +117,4 @@ def test_normal_login_keeps_account_picker_prompt(monkeypatch):
     response = _client().get("/auth/entra/login")
     assert response.status_code == 302
     assert captured["prompt"] == "select_account"
+    assert "login_hint" not in captured

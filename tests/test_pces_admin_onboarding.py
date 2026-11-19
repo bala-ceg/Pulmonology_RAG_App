@@ -441,6 +441,68 @@ def test_existing_account_reconciles_using_locked_connection(monkeypatch, onboar
     send.assert_not_called()
     assert result["on_board_date"] == "2026-10-01"
 
+def test_batch_candidates_include_all_pending_users_in_hospital(onboarding_database):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    tenant = "00000000-0000-0000-0000-000000000001"
+    cur.fetchone.return_value = (1,)
+    cur.fetchall.return_value = [(str(uuid.uuid4()), "Test", "Doctor", "dr.test")] * 101
+    result = onboarding.pending_onboarding_users(ADMIN["party_id"], tenant)
+    assert len(result) == 101
+    sql, params = cur.execute.call_args.args
+    assert params == (tenant,)
+    assert "pt.on_board IS NOT TRUE" in sql and "LIMIT" not in sql
+    assert "p.deleted_at IS NULL" in sql
+
+
+def test_batch_route_requires_admin_and_passes_hospital(monkeypatch):
+    from routes import pces_admin
+    pending = MagicMock(return_value=[{"party_id": "test"}])
+    monkeypatch.setattr(pces_admin, "pending_onboarding_users", pending)
+    assert client().get("/api/pces-admin/users/pending-onboarding?tenant_id=t").status_code == 403
+    response = client(ADMIN).get("/api/pces-admin/users/pending-onboarding?tenant_id=t")
+    assert response.get_json()["users"] == [{"party_id": "test"}]
+    pending.assert_called_once_with(ADMIN["party_id"], "t")
+
+
+@pytest.mark.parametrize("already_onboarded", [True, False])
+def test_batch_rechecks_status_and_never_resets_existing_password(monkeypatch, onboarding_database, already_onboarded):
+    from services import pces_admin_onboarding as onboarding
+    _, cur, _ = onboarding_database
+    pid = "00000000-0000-0000-0000-000000000002"
+    cur.fetchone.side_effect = [
+        (1,), ("Test", "", "Doctor", "doctor@example.test", "Dr.Test", pid, "DOCTOR", pid),
+        (already_onboarded,), (date(2026, 11, 13),),
+    ]
+    reset = MagicMock()
+    send = MagicMock()
+    monkeypatch.setattr(onboarding, "reset_entra_password", reset)
+    monkeypatch.setattr(onboarding, "_send_email", send)
+    result = onboarding.onboard_user(ADMIN["party_id"], pid, pid, reset_password=True, only_pending=True)
+    reset.assert_not_called()
+    send.assert_not_called()
+    assert result.get("skipped", False) is already_onboarded
+
+
+def test_batch_flag_route_validation_and_forwarding(monkeypatch):
+    from routes import pces_admin
+    onboard = MagicMock(return_value={})
+    monkeypatch.setattr(pces_admin, "onboard_user", onboard)
+    c = client(ADMIN)
+    assert c.post("/api/pces-admin/users/test/onboard", json={"only_pending": "true"}).status_code == 400
+    onboard.assert_not_called()
+    assert c.post("/api/pces-admin/users/test/onboard", json={"tenant_id": "t", "only_pending": True}).status_code == 200
+    onboard.assert_called_once_with(ADMIN["party_id"], "test", "t", reset_password=False, only_pending=True)
+
+
+def test_email_link_prefills_email_and_preserves_noncredential_parameters(monkeypatch):
+    from services import pces_admin_onboarding as onboarding
+    from urllib.parse import parse_qs, urlsplit
+    monkeypatch.setattr(onboarding.Config, "PCES_SIGNIN_URL", "https://app.example.test/auth/entra/login?x=1&login_hint=old&prompt=select_account")
+    link = onboarding._email_signin_url("first+test@gmail.com")
+    assert parse_qs(urlsplit(link).query) == {"x": ["1"], "prompt": ["login"], "login_hint": ["first+test@gmail.com"]}
+    assert "password" not in link
+
 
 def test_missing_email_config_does_not_change_microsoft_credentials(monkeypatch, onboarding_database):
     from services import pces_admin_onboarding as onboarding
@@ -618,6 +680,25 @@ let fetch = async () => ({ok:true,json:async()=>['CARDIOLOGY','NURSE']});
     assert.equal(requests.length,5);
     assert.equal(alerts.at(-1),'User Name is required.');
     assert.equal(button.disabled,false);
+    elements['pces-user-batch-results'] = {textContent:''};
+    elements['pces-user-batch-btn'] = {textContent:'On Board All Pending'};
+    const batchRequests = [];
+    fetch = async (url, options) => {
+        batchRequests.push({url, ...options});
+        if (!options) return {ok:true,json:async()=>({success:true,users:[
+            {party_id:'p1',username:'first'}, {party_id:'p2',username:'second'}, {party_id:'p3',username:'third'}
+        ]})};
+        if (url.includes('/p1/')) throw new Error('test failure');
+        return {ok:true,json:async()=>({success:true,email_sent:!url.includes('/p2/'),message:'test result'})};
+    };
+    await onboardPendingPcesUsers();
+    assert.equal(batchRequests.length,4);
+    assert.deepEqual(JSON.parse(batchRequests[3].body),{tenant_id:'tenant-1',only_pending:true});
+    const summary = elements['pces-user-batch-results'].textContent;
+    assert.ok(summary.includes('first: Failed. test failure'));
+    assert.ok(summary.includes('second: Email delivery failed'));
+    assert.ok(summary.includes('third: Onboarded, email sent'));
+    assert.equal(pcesBatchOnboarding,false);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     result = subprocess.run([node, "-e", script], capture_output=True, text=True)
