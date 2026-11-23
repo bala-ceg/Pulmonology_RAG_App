@@ -126,7 +126,7 @@ def _extract_token_usage(
 def create_interaction_log(
     *,
     session_id: str = "",
-    tenant_id: str = "",
+    tenant_id: str | None = None,
     doctor_id: str = "",
     patient_id: str | None = None,
     department: str = "",
@@ -156,11 +156,11 @@ def create_interaction_log(
     # Step 3 — Identifiers
     try:
         from config import Config as _Cfg
-        _tenant = tenant_id or _Cfg.TENANT_ID or "default"
+        _tenant = tenant_id if tenant_id is not None else (_Cfg.TENANT_ID or "default")
         _model = _Cfg.LLM_MODEL_NAME or "unknown"
         _env = getattr(_Cfg, "FLASK_ENV", None) or __import__("os").getenv("FLASK_ENV", "production")
     except Exception:
-        _tenant = tenant_id or "default"
+        _tenant = tenant_id if tenant_id is not None else "default"
         _model = "unknown"
         _env = "production"
 
