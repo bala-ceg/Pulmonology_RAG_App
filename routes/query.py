@@ -34,7 +34,7 @@ import time as _time
 import traceback
 from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, jsonify, make_response, request
+from flask import Blueprint, current_app, jsonify, make_response, request, session
 from langchain_chroma import Chroma
 from langchain_classic.chains import RetrievalQA
 from langchain_core.documents import Document
@@ -784,6 +784,13 @@ def handle_query():
     # ── Extract adhoc context from request and inject into AdHocRAG_Search ──
     _doctor_id: str = (request.json.get("doctor_id") or "").strip()
     _patient_id: str | None = (request.json.get("patient_id") or "").strip() or None
+    # The authenticated PCES membership identifies the selected hospital.
+    _pces_identity = session.get("pces_identity") or {}
+    _hospital_tenant_id = str(_pces_identity.get("tenant_id") or "").strip()
+    if not _hospital_tenant_id:
+        logger.warning(
+            "[INTERACTION_LOG] Authenticated PCES session has no hospital tenant_id"
+        )
     try:
         from tools import _set_adhoc_context as _sac
         from services.context_service import context_service as _ctx_svc
@@ -1204,7 +1211,7 @@ def handle_query():
                 _latency_ms = int((_t_mod.time() - _req_start) * 1000)
                 _ilog = _create_interaction_log(
                     session_id=session_id,
-                    tenant_id="",
+                    tenant_id=_hospital_tenant_id,
                     doctor_id=_doctor_id,
                     patient_id=_patient_id,
                     department=doctor_department or active_dept or "",
@@ -1429,7 +1436,7 @@ def handle_query():
                 _latency_ms_rag = int((_t_mod_rag.time() - _req_start) * 1000)
                 _ilog_rag = _create_interaction_log(
                     session_id=session_id,
-                    tenant_id="",
+                    tenant_id=_hospital_tenant_id,
                     doctor_id=_doctor_id,
                     patient_id=_patient_id,
                     department=doctor_department or active_dept or "",
