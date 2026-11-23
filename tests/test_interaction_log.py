@@ -198,6 +198,10 @@ class TestCreateInteractionLog(unittest.TestCase):
         self.assertIsInstance(log["tenant_id"], str)
         self.assertGreater(len(log["tenant_id"]), 0)
 
+    def test_explicit_empty_tenant_id_is_not_replaced_by_config(self):
+        log = self._build(tenant_id="")
+        self.assertEqual(log["tenant_id"], "")
+
     def test_model_name_from_config(self):
         log = self._build()
         # model_name should be populated from Config (exact value depends on .env)
