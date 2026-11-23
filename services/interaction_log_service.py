@@ -34,7 +34,8 @@ import json
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from utils.error_handlers import get_logger
@@ -222,6 +223,48 @@ def create_interaction_log(
 
 _table_ensured = threading.Event()
 
+# Plain-text interaction archive. Each request appends one readable record.
+_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "logs" / "llm_interactions.log"
+_FILE_LOG_LOCK = threading.Lock()
+
+
+def _write_interaction_log_file(log_dict: dict) -> None:
+    """Append one PII-masked interaction record without depending on PostgreSQL."""
+    try:
+        timestamp = log_dict.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        end_dt = datetime.fromisoformat(timestamp)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+        latency_ms = max(0, int(log_dict.get("latency_ms") or 0))
+        start_dt = end_dt - timedelta(milliseconds=latency_ms)
+
+        lines = [
+            "=" * 60,
+            f"TENANT_ID: {log_dict.get('tenant_id', '')}",
+            f"DOCTOR_ID: {log_dict.get('doctor_id', '')}",
+            f"PATIENT_ID: {log_dict.get('patient_id', '')}",
+            f"START_TIME: {start_dt.strftime('%m%d%Y%H%M%S')}",
+            f"END_TIME:   {end_dt.strftime('%m%d%Y%H%M%S')}",
+            f"TOKEN_USAGE: {log_dict.get('tokens_total', 0)}",
+            f"STATUS: {'FAILED' if log_dict.get('error_flag') else 'SUCCESS'}",
+            "",
+            "PROMPT:",
+            log_dict.get("prompt", ""),
+            "",
+            "RESPONSE:",
+            log_dict.get("final_response", ""),
+            "=" * 60,
+            "",
+        ]
+
+        _LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _FILE_LOG_LOCK:
+            with _LOG_FILE_PATH.open("a", encoding="utf-8") as log_file:
+                log_file.write("\n".join(str(line) for line in lines) + "\n")
+    except Exception as exc:
+        logger.warning("[INTERACTION_LOG] File write failed (non-critical): %s", exc)
+
+
 
 def _ensure_interaction_table() -> None:
     """Create interaction_log table if it does not exist yet.
@@ -277,7 +320,7 @@ def _ensure_interaction_table() -> None:
 
 
 def log_interaction(log_dict: dict) -> None:
-    """Persist an interaction log record to PostgreSQL in a background daemon thread.
+    """Append a text record and persist to PostgreSQL in a background daemon thread.
 
     Silently no-ops when PostgreSQL is unavailable — logging is non-critical
     and must never block or error the main request path.
@@ -287,6 +330,8 @@ def log_interaction(log_dict: dict) -> None:
     """
 
     def _insert() -> None:
+        # File archive is independent of DB health and runs off the request thread.
+        _write_interaction_log_file(log_dict)
         if not _table_ensured.is_set():
             _ensure_interaction_table()
         if not _table_ensured.is_set():
