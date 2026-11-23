@@ -1,0 +1,153 @@
+# PCES Admin onboarding API
+
+This API implements the PCES Admin onboarding workflow in the approved onboarding specification.
+
+## Authentication and authorization
+
+- Sign in through the existing /api/login endpoint using the centrally provisioned PCES Admin username and password.
+- A PCES_ADMIN account is global and does not require a hospital membership at login.
+- Every onboarding operation checks the PCES Admin role in the signed Flask session and revalidates the active PCES Admin record in p_party.
+- The development administrator record supplied for testing is PCES_ADMIN_001. Do not place its password or hash in source control or tests.
+
+## API endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | /api/pces-admin/hospitals | List active hospitals; read-only |
+| GET | /api/pces-admin/users?tenant_id=<uuid> | List users; default page size 20 |
+| GET | /api/pces-admin/users/search?tenant_id=<uuid>&last_name=&party_type=&email= | Search hospital users |
+| POST | /api/pces-admin/users | Insert Doctor/Nurse and hospital membership |
+| PATCH | /api/pces-admin/users/<party_id> | Update Doctor/Nurse details for the selected hospital |
+| POST | /api/pces-admin/users/<party_id>/onboard | Provision Entra identity, or explicitly reset an existing customer account password; mark the selected hospital membership onboarded and email credentials |
+
+Selecting a Doctor/Nurse row enables editing. Party ID and Entra ID remain read-only.
+Click Save before On Board to persist changed details. The update request includes
+`tenant_id` and only changed fields from `first_name`, `middle_name`, `last_name`,
+`party_type`, `pces_role`, `email`, and `username`. Existing blank fields do not
+block unrelated edits; explicitly clearing a required field is rejected.
+
+For an existing Entra account, the UI explicitly warns that On Board will reset
+the Microsoft password and invalidate the previous password, then sends:
+
+~~~json
+{
+  "tenant_id": "hospital-uuid",
+  "reset_password": true
+}
+~~~
+
+Without `reset_password: true`, existing accounts are only reconciled; no password
+is reset or emailed. Password reset requires a matching email/password customer
+identity in the configured External ID directory. Federated or personal Microsoft
+identities cannot have their upstream password reset by this application.
+
+## Create user request
+
+~~~json
+{
+  "tenant_id": "hospital-uuid",
+  "first_name": "Cody",
+  "middle_name": "Gerry",
+  "last_name": "Pearson",
+  "party_type": "DOCTOR",
+  "pces_role": "Cardiology",
+  "email": "cody@example.org",
+  "username": "Dr.Cody.Cardio"
+}
+~~~
+
+The create operation inserts p_party and p_party_tenant in one database transaction. New hospital membership rows have p_party_tenant.on_board=false until Entra provisioning completes. The onboarding endpoint requires tenant_id in its JSON body (or query string) so the correct hospital membership is updated.
+
+## Database migration
+
+The database administrator has added p_party_tenant.on_board (BOOLEAN, default FALSE) and p_party_tenant.on_board_date (DATE). The service reads and updates these membership-level fields; no p_party onboarding columns are required.
+
+## Microsoft Graph configuration
+
+Configure these server-side environment variables; never commit secrets:
+
+- PCES_PROVISIONING_CLIENT_ID
+- PCES_PROVISIONING_CLIENT_SECRET
+- PCES_DIRECTORY_TENANT_ID
+- PCES_DIRECTORY_DOMAIN
+- PCES_SIGNIN_URL
+
+The provisioning application needs Microsoft Graph application permissions and admin consent to create External ID customer users. Validate the identities issuer/domain against the actual External ID directory configuration.
+
+Resetting an existing customer's password also requires the Graph application
+permission `User-PasswordProfile.ReadWrite.All` (or a supported higher privilege)
+with admin consent. In app-only scenarios, Microsoft also requires an appropriate
+directory role for the provisioning service principal, at least User Administrator
+for non-administrator targets. The account lookup requires permission to read the
+user's identities. See [Microsoft Graph user-update permissions](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0).
+
+## Bluehost SMTP onboarding email
+
+Microsoft Entra External ID remains responsible for customer-user creation and sign-in. Flask sends onboarding notifications through the Bluehost mailbox `noreply@pcesglobal.ai`; Microsoft Graph `Mail.Send` is not used and is not required for this mailbox.
+
+Configure these server-side environment variables on the Azure VM running Flask. Never commit secrets:
+
+- `PCES_SMTP_HOST=pcesglobal.ai`
+- `PCES_SMTP_PORT=465` (implicit TLS / SMTP_SSL)
+- `PCES_SMTP_USERNAME=noreply@pcesglobal.ai`
+- `PCES_SMTP_PASSWORD` (Bluehost mailbox password)
+- `PCES_SMTP_TIMEOUT=30` (optional; defaults to 30 seconds)
+- `PCES_SIGNIN_URL` (optional override for the actual PCES sign-in URL)
+
+If `PCES_SIGNIN_URL` is unset or still uses the legacy example URL, onboarding
+derives `/auth/entra/login?prompt=login` from the configured `ENTRA_REDIRECT_URI`
+callback URL, preserving any application path prefix. The email URL uses this
+server-side configuration, not the incoming request's Host header.
+
+The SMTP sender address is the configured `PCES_SMTP_USERNAME`. These `PCES_SMTP_*` settings are deliberately separate from the existing `SMTP_*` settings used by Entra account-link verification.
+
+The standalone VM smoke test may additionally use `PCES_TEST_RECIPIENT`; this variable is not needed by the Flask application. Run the test from the Azure VM, then confirm that the message arrives in the recipient inbox or spam folder. An SMTP success response means the server accepted the message; it does not by itself prove inbox delivery.
+
+Onboarding validates SMTP settings and the resolved sign-in URL before changing
+Microsoft credentials. It then creates the Entra user (or resets the existing local
+customer password), saves the mapping and selected hospital onboarding status in
+one locked database transaction, commits, and attempts SMTP delivery. Existing
+onboarding dates are preserved.
+
+Email delivery failure is non-fatal: the API reports `email_sent=false` with an
+`email_error` while retaining the successful Entra and database provisioning. The
+temporary password is never persisted or returned in the API. Correct the delivery
+problem and explicitly use On Board again to reset the existing password and email
+a new one; this invalidates the previous password and does not create a duplicate
+Microsoft account. The email identifies the Microsoft sign-in email separately
+from the PCES username.
+
+The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password or SMTP credentials.
+
+## Tests
+
+Run the focused tests in the project environment:
+
+~~~bash
+pytest -q tests/test_pces_admin_onboarding.py
+~~~
+
+Route tests mock service boundaries and do not create Microsoft accounts. A separate development-tenant integration test is still required to validate Graph permissions for External ID customer creation, first sign-in, forced password change, and actual Bluehost SMTP delivery from the Azure VM.
+
+## Operational caveat
+
+Entra user creation and PostgreSQL updates cannot be one distributed transaction. If Graph creates the user but saving the returned OID fails, reconcile the Entra object manually before retrying; do not blindly retry or create a duplicate. The current service reports this partial-failure state. Graph is used for Entra user provisioning only; onboarding email delivery uses Bluehost SMTP.
+
+The current development flow emails a temporary password. This is security-sensitive and must not be used in production; replace it with a one-time activation/password-reset link before release. Never log the password, Graph access token, or full Graph request payload.
+
+## Usernames, multiple roles and test emails
+
+- **Per-hospital usernames:** a username must be unique (case-insensitive) among the active users of the selected hospital (`tenant_id`). Create and update return `409` with `{"error", "suggestions"}`; `suggestions` has up to 3 numbered variants (`name2`) and up to 3 name-based variants (`dr.john.doe`, `dr.jdoe`) that are free in that hospital.
+- **Live check:** `GET /api/pces-admin/users/check-username?tenant_id=&username=[&party_id=&first_name=&last_name=&party_type=]` returns `{"available", "suggestions"}`.
+- **Multiple PCES roles:** `pces_role` accepts a list or a comma-separated string, is de-duplicated, and is stored comma-joined (for example `ANESTHESIOLOGIST, SME`). The roles endpoint returns individual roles.
+- **Gmail testing:** any valid email domain (including `gmail.com`) can be onboarded. The Microsoft identity is `emailAddress` under `PCES_DIRECTORY_DOMAIN`, and the temporary password is sent through the configured SMTP account.
+
+## Add Client Users (formerly User Onboarding)
+
+- **On Board All Pending:** loads every active, not-yet-onboarded user for the selected hospital, independent of list pagination/search. After confirmation, the browser processes users sequentially and continues on errors, showing each result inline. Keep the page open until completion. Each request sends `only_pending: true`; the service rechecks status under the membership lock and skips users already onboarded. Existing linked Microsoft accounts are reconciled without resetting passwords or sending email; use individual **On Board** when a password reset/email is needed. Email-delivery failures are reported separately and need individual retry.
+- **Email sign-in link:** includes an URL-encoded `login_hint` email and `prompt=login`. The login route passes the hint to Microsoft; the user must still enter their temporary password and complete any required authentication. No password is added to the URL, and the hint is not used as proof of identity. For custom `PCES_SIGNIN_URL` overrides, point to the PCES `/auth/entra/login` endpoint to support forwarding the hint.
+
+- **SME rule:** `SME` can never be the only role and is only valid for `DOCTOR` users (not NURSE, OFFICE_ADMIN, etc.). Create and update return `400` when violated.
+- **Usernames** are supplied by the client and typed in by the PCES employee; the app only suggests alternatives on conflict.
+- **Partial update:** if a `PATCH` contains a username that is already used in the hospital, the other valid changes are saved and the response is `200` with `partial: true`, `rejected_fields: ["username"]` and `username_conflict: {username, error, suggestions}`. If the username was the only change, the request returns `409`.
+- **Delete:** `DELETE /api/pces-admin/users/<party_id>?tenant_id=<id>` deactivates the user's membership in that hospital only (`p_party_tenant.is_active=FALSE`), which frees the username there. The party record and Microsoft Entra account are not deleted.

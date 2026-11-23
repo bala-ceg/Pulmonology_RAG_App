@@ -1,6 +1,9 @@
 # Flask web server
 flask
 
+# Microsoft Entra ID / OAuth 2.0 client
+msal
+
 # LangChain core
 langchain
 langchain-openai
