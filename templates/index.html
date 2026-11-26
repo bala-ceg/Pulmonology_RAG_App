@@ -4781,13 +4781,11 @@
                 </button>
             </div>
 
-            <!-- PCES Admin Services
-                 Phase 1: intentionally visible to all authenticated roles.
-                 Later this can be gated by pces_role == PCES_ADMIN. -->
+            <!-- PCES Admin Services: shown only to authenticated PCES_ADMIN users. -->
             <div
                 id="pces-admin-services-box"
                 class="sidebar-section-box"
-                style="display:block; margin-top: 8px;">
+                style="display:none; margin-top: 8px;">
                 <div class="sidebar-section-label">PCES Admin Services</div>
 
                 <button
@@ -15920,8 +15918,11 @@ async function onboardSelectedPcesUser() {
                     .toUpperCase();
             const isNurse = _hasRole(roles, 'NURSE') || partyType === 'NURSE';
             const isAdmin = _hasRole(roles, 'OFFICE_ADMIN') || partyType === 'OFFICE_ADMIN';
+            // Match the server-side PCES Admin authorization rule: both identity fields must agree.
+            const isPcesAdmin = _hasRole(roles, 'PCES_ADMIN') && partyType === 'PCES_ADMIN';
 
-            console.log('[PCES][Role] Parsed roles:', roles, '| OFFICE_ADMIN:', isAdmin);
+            console.log('[PCES][Role] Parsed roles:', roles,
+                '| OFFICE_ADMIN:', isAdmin, '| PCES_ADMIN:', isPcesAdmin);
 
             const hide = el => { if (el) el.style.display = 'none'; };
             const show = el => { if (el) el.style.display = '';     };
@@ -15936,13 +15937,13 @@ async function onboardSelectedPcesUser() {
             const pcesUserOnboardingTab = document.getElementById('pces-admin-user-onboarding-tab');
             const schedulingTab = document.getElementById('patient-scheduling-tab');
 
-            // Phase 1 requirement: PCES Admin Services is visible to every authenticated role.
-            // Later replace this with a PCES_ADMIN role gate.
+            // PCES Admin Services is restricted to users whose server-issued role and party type
+            // are both PCES_ADMIN. The containing box gates Hospital and Add Client Users together.
             if (pcesAdminServicesBox) {
-                pcesAdminServicesBox.style.display = 'block';
+                pcesAdminServicesBox.style.display = isPcesAdmin ? 'block' : 'none';
             }
             if (pcesUserOnboardingTab) {
-                pcesUserOnboardingTab.style.display = 'block';
+                pcesUserOnboardingTab.style.display = isPcesAdmin ? 'block' : 'none';
             }
 
             // Scheduling is visible only to OFFICE_ADMIN users.
